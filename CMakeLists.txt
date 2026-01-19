@@ -14,7 +14,11 @@ else()
     add_compile_options(-Wall -Wextra -Wpedantic) # High warning level on Mac/Linux
 endif()
 
-# We will populate these in the next steps
+# Core Components
 add_subdirectory(common)
 # add_subdirectory(server)
 # add_subdirectory(client)
+
+# Testing
+enable_testing()
+add_subdirectory(tests)
