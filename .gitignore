@@ -1,0 +1,28 @@
+# Prerequisites
+*.d
+*.o
+*.obj
+*.lib
+*.a
+*.dylib
+*.dll
+*.so
+
+# CMake Build Artifacts
+build/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+*.cbp
+
+# IDE Settings
+.vscode/
+.idea/
+*.user
+*.swp
+.DS_Store
+
+# Documentation & Rules (Local only)
+WizzMania.md
+rules.md

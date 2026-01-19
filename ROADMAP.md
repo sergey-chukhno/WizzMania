@@ -1,7 +1,6 @@
 # Wizz Mania — Project Roadmap & Feature Specification
 
 > **Status:** Draft for Approval
-> **Mentor:** Antigravity
 > **Objective:** Production-grade C++ TCP/IP Chat Application with Qt GUI.
 
 ---
