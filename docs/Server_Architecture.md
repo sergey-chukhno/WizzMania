@@ -60,7 +60,30 @@ To establish a listening server, the OS requires a specific sequence of System C
 3.  **`listen()`**
     *   *Analogy:* Plugging the phone into the wall and turning on the ringer.
     *   *Action:* Marks the socket as "Passive" (ready to accept incoming calls).
-4.  **`accept()`**
-    *   *Analogy:* Picking up the handset when it rings.
-    *   *Action:* Blocks until a client connects, then returns a **new, separate socket** dedicated to that specific conversation.
+
+## 6. Data Processing: "The Pump"
+To handle TCP fragmentation (partial packets), we implement a buffering strategy in `ClientSession`:
+
+1.  **Accumulate:** Append all incoming bytes (`recv`) to a persistent `std::vector` buffer.
+2.  **Pump Loop:**
+    *   **Check 1:** Is buffer size >= Header Size (12 bytes)? If no, wait.
+    *   **Peek:** Read the `BodyLength` from the header.
+    *   **Check 2:** Is buffer size >= Header + BodyLength? If no, wait.
+    *   **Extract:** Copy the full packet data, create a `Packet` object.
+    *   **Consume:** Remove the processed bytes from the buffer (O(N) shift, but acceptable for <10KB packets).
+    *   **Repeat:** Continue loop until buffer is empty or partial.
+
+## 8. Messaging Architecture (The Hub Pattern)
+To enable 1-to-1 messaging (User A -> User B), we treat the Server as the **Central Hub**.
+*   **Problem:** `ClientSession A` is isolated. It has no pointer to `ClientSession B`.
+*   **Naive Solution:** Give A a pointer to B.
+    *   *Risk:* If B disconnects, A holds a **Dangling Pointer**. Crash.
+*   **The Hub Solution:**
+    1.  **Registry:** The Server maintains a Global Map: `std::unordered_map<std::string, ClientSession*> online_users`.
+    2.  **Routing:**
+        *   A sends `[Target="B", Msg="Hi"]` to Server.
+        *   Server looks up "B" in `online_users`.
+        *   If found: Server calls `B->send()`.
+        *   If not found: Server stores message in DB (Offline).
+*   **Source of Truth:** The Server is the *only* entity that knows who is online. Sessions are stateless regarding neighbors.
 

@@ -4,8 +4,9 @@ add_executable(stress_test
     stress_test.cpp
 )
 
-# No dependency on `wizz_common` needed yet for simple connection test, 
-# but good to link if we add Packet logic later.
+# Link against common to use Packet class
+target_link_libraries(stress_test PRIVATE wizz_common)
+
 if(WIN32)
-    target_link_libraries(stress_test ws2_32)
+    target_link_libraries(stress_test PRIVATE ws2_32)
 endif()
