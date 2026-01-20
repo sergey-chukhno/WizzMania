@@ -77,7 +77,23 @@ The Reader methods throw standard C++ exceptions:
 
 ---
 
-## 5. Verification (Unit Tests)
+## 5. Stream Handling & Security
+
+### 5.1 The Fragmentation Problem (Buffering)
+TCP is a stream protocol. A single connection may receive a partial packet (e.g., only the first 4 bytes of a header).
+*   **Strategy:** Each `ClientSession` maintains a persistent `std::vector<uint8_t> m_buffer`.
+*   **Algorithm:** Append data -> Loop -> Check for Full Packet -> Process -> Shift Remaining Data.
+*   **Data Structure:** We use `std::vector`. While `erase(begin)` is O(N), for typical chat packets (< 4KB), the `memmove` cost is negligible compared to the cache benefits of contiguous memory.
+
+### 5.2 DoS Protection (Max Packet Size)
+A malicious client could send a valid header claiming a body length of 4GB.
+*   **Risk:** The server attempts to allocate 4GB, potentially crashing (OOM).
+*   **Defense:** We enforce a strict **MAX_PACKET_SIZE** (e.g., 10MB).
+*   **Logic:** `if (header.length > MAX_PACKET_SIZE) drop_connection();`
+
+---
+
+## 6. Verification (Unit Tests)
 The file `tests/common/test_packet.cpp` confirms correctness.
 
 **Test Case 1: Serialization**

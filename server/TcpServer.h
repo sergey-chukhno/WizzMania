@@ -4,19 +4,10 @@
 #include <string>
 #include <vector>
 
-// Platform Specifics
-#ifdef _WIN32
-#include <winsock2.h>
-typedef SOCKET SocketType;
-#define INVALID_SOCKET_VAL INVALID_SOCKET
-#else
-#include <netinet/in.h>
-#include <sys/socket.h>
-#include <sys/types.h>
-#include <unistd.h>
-typedef int SocketType;
-#define INVALID_SOCKET_VAL -1
-#endif
+#include "../common/Types.h"
+
+#include "ClientSession.h"
+#include <unordered_map>
 
 namespace wizz {
 
@@ -42,6 +33,10 @@ private:
   int m_port;
   SocketType m_serverSocket;
   bool m_isRunning;
+
+  // Day 3: Session Management
+  // Key: Socket Descriptor (int), Value: Session Object
+  std::unordered_map<SocketType, ClientSession> m_sessions;
 
   // Helpers
   void initSocket();   // Step 1: Create
