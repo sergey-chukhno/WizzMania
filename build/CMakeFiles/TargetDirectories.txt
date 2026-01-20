@@ -1,0 +1,3 @@
+C:/Users/elodi/OneDrive/Desktop/Projets_plateforme/LOGICIEL/B2/C++/WIZZMANIA/WizzMania/build/CMakeFiles/WizzMania.dir
+C:/Users/elodi/OneDrive/Desktop/Projets_plateforme/LOGICIEL/B2/C++/WIZZMANIA/WizzMania/build/CMakeFiles/edit_cache.dir
+C:/Users/elodi/OneDrive/Desktop/Projets_plateforme/LOGICIEL/B2/C++/WIZZMANIA/WizzMania/build/CMakeFiles/rebuild_cache.dir

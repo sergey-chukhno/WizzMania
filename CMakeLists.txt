@@ -1,20 +1,21 @@
 cmake_minimum_required(VERSION 3.16)
+project(WizzMania LANGUAGES CXX)
 
-# Project Metadata
-project(WizzMania VERSION 0.1.0 LANGUAGES CXX)
-
-# Standard C++17 (Required for modern features like std::optional, std::variant)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# Global Compiler Warnings (High Quality Code)
-if(MSVC)
-    add_compile_options(/W4) # High warning level on Windows
-else()
-    add_compile_options(-Wall -Wextra -Wpedantic) # High warning level on Mac/Linux
-endif()
+add_executable(WizzMania main.cpp)
 
-# We will populate these in the next steps
-add_subdirectory(common)
-# add_subdirectory(server)
-# add_subdirectory(client)
+target_include_directories(WizzMania PRIVATE
+    ${CMAKE_SOURCE_DIR}/Crow/include
+    ${CMAKE_SOURCE_DIR}/third_party/asio/include
+)
+
+target_compile_definitions(WizzMania PRIVATE 
+    ASIO_STANDALONE
+    ASIO_DISABLE_IOCP
+    _WIN32_WINNT=0x0601
+)
+if (WIN32)
+    target_link_libraries(WizzMania ws2_32)
+endif()
