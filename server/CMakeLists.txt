@@ -3,6 +3,7 @@ project(WizzManiaServer)
 add_executable(wizz_server
     main.cpp
     TcpServer.cpp
+    ClientSession.cpp
 )
 
 # Link against the common library
