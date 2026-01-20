@@ -6,7 +6,9 @@
 namespace wizz {
 
 TcpServer::TcpServer(int port)
-    : m_port(port), m_serverSocket(INVALID_SOCKET_VAL), m_isRunning(false) {
+    : m_port(port), m_serverSocket(INVALID_SOCKET_VAL), m_isRunning(false),
+      m_db("wizzmania.db") // Default DB file
+{
 // Windows Sockets Initialization (One-time)
 #ifdef _WIN32
   WSADATA wsaData;
@@ -25,6 +27,11 @@ TcpServer::~TcpServer() {
 
 void TcpServer::start() {
   try {
+    // 1. Initialize Database
+    if (!m_db.init()) {
+      throw std::runtime_error("Failed to initialize Database!");
+    }
+
     initSocket();
     bindSocket();
     listenSocket();
@@ -133,8 +140,8 @@ void TcpServer::run() {
       if (clientSocket != INVALID_SOCKET_VAL) {
         std::cout << "[Server] New Connection: " << clientSocket << std::endl;
         // Create Session and Move into Map
-        // Note: emplace constructs the object in-place (efficient)
-        m_sessions.emplace(clientSocket, ClientSession(clientSocket));
+        // Pass m_db reference to the session
+        m_sessions.emplace(clientSocket, ClientSession(clientSocket, m_db));
       }
     }
 
@@ -145,7 +152,6 @@ void TcpServer::run() {
       if (FD_ISSET(sock, &readfds)) {
         char recvBuf[1024];
         int bytesReceived = recv(sock, recvBuf, sizeof(recvBuf), 0);
-
         if (bytesReceived <= 0) {
           // Disconnected or Error
           std::cout << "[Server] Client Disconnected: " << sock << std::endl;
@@ -153,11 +159,17 @@ void TcpServer::run() {
           // automatically!
           it = m_sessions.erase(it); // Remove from map
         } else {
-          // Valid Data Received
-          std::string msg(recvBuf, bytesReceived);
-          std::cout << "[Server] Received from " << sock << ": " << msg
-                    << std::endl;
-          ++it;
+          // Valid Data Received -> Pass to Session
+          ClientSession &session = it->second;
+          bool keepAlive = session.onDataReceived(recvBuf, bytesReceived);
+
+          if (!keepAlive) {
+            std::cout << "[Server] Kicking Client (Protocol Error): " << sock
+                      << std::endl;
+            it = m_sessions.erase(it);
+          } else {
+            ++it;
+          }
         }
       } else {
         ++it;

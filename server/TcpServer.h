@@ -6,8 +6,12 @@
 
 #include "../common/Types.h"
 
-#include "ClientSession.h"
+#include <string>
 #include <unordered_map>
+
+#include "../common/Types.h"
+#include "ClientSession.h"
+#include "DatabaseManager.h"
 
 namespace wizz {
 
@@ -33,6 +37,9 @@ private:
   int m_port;
   SocketType m_serverSocket;
   bool m_isRunning;
+
+  // Database (The Single Source of Truth)
+  DatabaseManager m_db;
 
   // Day 3: Session Management
   // Key: Socket Descriptor (int), Value: Session Object
