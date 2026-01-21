@@ -144,14 +144,37 @@ void TcpServer::run() {
         // Pass m_db reference AND the Login Callback
         m_sessions.emplace(
             clientSocket,
-            ClientSession(clientSocket, m_db, [this](ClientSession *session) {
-              // This code runs when the session calls m_onLogin(this)
-              std::string username = session->getUsername();
-              std::cout << "[Server] User Online: " << username << std::endl;
+            ClientSession(
+                clientSocket, m_db,
+                // 1. OnLogin
+                [this](ClientSession *session) {
+                  std::string username = session->getUsername();
+                  std::cout << "[Server] User Online: " << username
+                            << std::endl;
+                  m_onlineUsers[username] = session;
+                },
+                // 2. OnMessage (Routing)
+                [this](ClientSession *sender, const std::string &target,
+                       const std::string &msg) {
+                  auto it = m_onlineUsers.find(target);
+                  if (it != m_onlineUsers.end()) {
+                    ClientSession *targetSession = it->second;
 
-              // Add to Registry
-              m_onlineUsers[username] = session;
-            }));
+                    // Forward Message
+                    Packet outPacket(PacketType::DirectMessage);
+                    outPacket.writeString(sender->getUsername());
+                    outPacket.writeString(msg);
+
+                    targetSession->sendPacket(outPacket);
+                    std::cout << "[Router] Routed msg from "
+                              << sender->getUsername() << " to " << target
+                              << std::endl;
+                  } else {
+                    std::cout << "[Router] User " << target
+                              << " not found (Offline)." << std::endl;
+                    // TODO: Store in DB for offline delivery
+                  }
+                }));
       }
     }
 
