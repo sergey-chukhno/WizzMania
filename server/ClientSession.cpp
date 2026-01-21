@@ -16,8 +16,10 @@
 namespace wizz {
 
 ClientSession::ClientSession(SocketType socket, DatabaseManager &db,
-                             OnLoginCallback onLogin)
-    : m_socket(socket), m_isLoggedIn(false), m_db(&db), m_onLogin(onLogin) {}
+                             OnLoginCallback onLogin,
+                             OnMessageCallback onMessage)
+    : m_socket(socket), m_isLoggedIn(false), m_db(&db), m_onLogin(onLogin),
+      m_onMessage(onMessage) {}
 
 ClientSession::~ClientSession() {
   if (m_socket != INVALID_SOCKET_VAL) {
@@ -29,6 +31,7 @@ ClientSession::ClientSession(ClientSession &&other) noexcept
     : m_socket(other.m_socket), m_username(std::move(other.m_username)),
       m_isLoggedIn(other.m_isLoggedIn), m_db(other.m_db),
       m_onLogin(std::move(other.m_onLogin)),
+      m_onMessage(std::move(other.m_onMessage)),
       m_buffer(std::move(other.m_buffer)) {
   other.m_socket = INVALID_SOCKET_VAL;
 }
@@ -45,6 +48,7 @@ ClientSession &ClientSession::operator=(ClientSession &&other) noexcept {
     m_buffer = std::move(other.m_buffer);
     m_db = other.m_db; // Copy Pointer
     m_onLogin = std::move(other.m_onLogin);
+    m_onMessage = std::move(other.m_onMessage);
 
     other.m_socket = INVALID_SOCKET_VAL;
   }
@@ -115,10 +119,43 @@ void ClientSession::processPacket(Packet &packet) {
     handleRegister(packet);
     break;
 
+  case PacketType::DirectMessage:
+    handleDirectMessage(packet);
+    break;
+
   default:
     std::cout << "[Session] Unknown Packet Type: "
               << static_cast<int>(packet.type()) << std::endl;
     break;
+  }
+}
+
+void ClientSession::sendPacket(const Packet &packet) {
+  std::vector<uint8_t> buffer = packet.serialize();
+  send(m_socket, reinterpret_cast<const char *>(buffer.data()), buffer.size(),
+       0);
+}
+
+void ClientSession::handleDirectMessage(Packet &packet) {
+  if (!m_isLoggedIn)
+    return; // Ignore if not logged in
+
+  std::string targetUser;
+  std::string messageBody;
+  try {
+    targetUser = packet.readString();
+    messageBody = packet.readString();
+  } catch (const std::exception &e) {
+    std::cerr << "[Session] Message Protocol Error: " << e.what() << std::endl;
+    return;
+  }
+
+  std::cout << "[Session] Logic: " << m_username << " -> " << targetUser << ": "
+            << messageBody << std::endl;
+
+  // Trigger Callback to Router
+  if (m_onMessage) {
+    m_onMessage(this, targetUser, messageBody);
   }
 }
 

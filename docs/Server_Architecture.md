@@ -97,3 +97,19 @@ To implement the "Hub Pattern" without tight coupling or circular dependencies, 
     *   `TcpServer` receives the signal and updates the Registry.
 This ensures `ClientSession` does not need to know about `TcpServer`, preserving the hierarchy.
 
+## 10. Message Routing Logic
+Messages (PacketType::DirectMessage) are routed using a similar callback pattern:
+1.  User A sends `[Target="B", Msg="Hi"]`.
+2.  `ClientSession` A reads the target and invokes `m_onMessage(this, "B", "Hi")`.
+3.  `TcpServer` (the Router) looks up "B" in the `OnlineMap`.
+4.  If B is found: Server constructs a packet `[Sender="A", Msg="Hi"]` and calls `B->sendPacket()`.
+5.  If B is not found: The message must be stored for later delivery (See Section 11).
+
+## 11. Offline Messaging (Future Work)
+If the target user is not online, the message cannot be delivered immediately.
+*   **Requirement:** Persistent storage of undelivered messages.
+*   **Mechanism:**
+    *   Server inserts message into a `messages` table in SQLite: `(sender, recipient, body, timestamp, delivered=0)`.
+    *   When User B logs in, the Server queries this table for any pending messages.
+    *   Server flushes pending messages to B and marks them as `delivered=1`.
+
