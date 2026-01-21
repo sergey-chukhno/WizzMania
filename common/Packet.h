@@ -17,6 +17,7 @@ enum class PacketType : uint32_t {
   Register = 101,
   LoginSuccess = 102,
   LoginFailed = 103,
+  RegisterFailed = 104,
 
   // Contacts
   AddContact = 200,

@@ -152,10 +152,29 @@ void TcpServer::run() {
                   std::cout << "[Server] User Online: " << username
                             << std::endl;
                   m_onlineUsers[username] = session;
+
+                  // Check for Offline Messages
+                  auto pending = m_db.fetchPendingMessages(username);
+                  if (!pending.empty()) {
+                    std::cout << "[Server] Flushing " << pending.size()
+                              << " offline messages to " << username
+                              << std::endl;
+                    for (const auto &msg : pending) {
+                      Packet outPacket(PacketType::DirectMessage);
+                      outPacket.writeString(msg.sender);
+                      outPacket.writeString(msg.body);
+                      session->sendPacket(outPacket);
+
+                      // Mark as Delivered
+                      m_db.markAsDelivered(msg.id);
+                    }
+                  }
                 },
                 // 2. OnMessage (Routing)
                 [this](ClientSession *sender, const std::string &target,
                        const std::string &msg) {
+                  bool delivered = false;
+
                   auto it = m_onlineUsers.find(target);
                   if (it != m_onlineUsers.end()) {
                     ClientSession *targetSession = it->second;
@@ -166,14 +185,19 @@ void TcpServer::run() {
                     outPacket.writeString(msg);
 
                     targetSession->sendPacket(outPacket);
+                    delivered = true;
+
                     std::cout << "[Router] Routed msg from "
                               << sender->getUsername() << " to " << target
                               << std::endl;
                   } else {
                     std::cout << "[Router] User " << target
-                              << " not found (Offline)." << std::endl;
-                    // TODO: Store in DB for offline delivery
+                              << " not found (Offline). Storing." << std::endl;
                   }
+
+                  // Store in DB (History + Offline)
+                  m_db.storeMessage(sender->getUsername(), target, msg,
+                                    delivered);
                 }));
       }
     }
