@@ -123,6 +123,14 @@ void ClientSession::processPacket(Packet &packet) {
     handleDirectMessage(packet);
     break;
 
+  case PacketType::AddContact:
+    handleAddContact(packet);
+    break;
+
+  case PacketType::RemoveContact:
+    handleRemoveContact(packet);
+    break;
+
   default:
     std::cout << "[Session] Unknown Packet Type: "
               << static_cast<int>(packet.type()) << std::endl;
@@ -233,7 +241,18 @@ void ClientSession::handleLogin(Packet &packet) {
     send(m_socket, reinterpret_cast<const char *>(buffer.data()), buffer.size(),
          0);
 
-    // 4. Notify Server Registry (Triggers Offline Msg Flush)
+    // 4. Send Contact List (Sync)
+    std::vector<std::string> friends = m_db->getFriends(username);
+    if (!friends.empty()) {
+      Packet contactList(PacketType::ContactList);
+      contactList.writeInt(static_cast<uint32_t>(friends.size()));
+      for (const auto &name : friends) {
+        contactList.writeString(name);
+      }
+      sendPacket(contactList);
+    }
+
+    // 5. Notify Server Registry (Triggers Offline Msg Flush)
     if (m_onLogin) {
       m_onLogin(this);
     }
@@ -248,6 +267,63 @@ void ClientSession::handleLogin(Packet &packet) {
     std::vector<uint8_t> buffer = resp.serialize();
     send(m_socket, reinterpret_cast<const char *>(buffer.data()), buffer.size(),
          0);
+  }
+}
+
+void ClientSession::handleAddContact(Packet &packet) {
+  if (!m_isLoggedIn)
+    return;
+
+  std::string targetUser;
+  try {
+    targetUser = packet.readString();
+  } catch (...) {
+    return;
+  }
+
+  std::cout << "[Session] Add Contact: " << m_username << " -> " << targetUser
+            << std::endl;
+
+  if (m_db && m_db->addFriend(m_username, targetUser)) {
+    // Success: Send Updated List (Sync)
+    std::vector<std::string> friends = m_db->getFriends(m_username);
+    Packet resp(PacketType::ContactList);
+    resp.writeInt(static_cast<uint32_t>(friends.size()));
+    for (const auto &name : friends) {
+      resp.writeString(name);
+    }
+    sendPacket(resp);
+  } else {
+    // Fail: User not found
+    Packet err(PacketType::Error);
+    err.writeString("Failed to add contact: User not found.");
+    sendPacket(err);
+  }
+}
+
+void ClientSession::handleRemoveContact(Packet &packet) {
+  if (!m_isLoggedIn)
+    return;
+
+  std::string targetUser;
+  try {
+    targetUser = packet.readString();
+  } catch (...) {
+    return;
+  }
+
+  std::cout << "[Session] Remove Contact: " << m_username << " -> "
+            << targetUser << std::endl;
+
+  if (m_db && m_db->removeFriend(m_username, targetUser)) {
+    // Send Updated List
+    std::vector<std::string> friends = m_db->getFriends(m_username);
+    Packet resp(PacketType::ContactList);
+    resp.writeInt(static_cast<uint32_t>(friends.size()));
+    for (const auto &name : friends) {
+      resp.writeString(name);
+    }
+    sendPacket(resp);
   }
 }
 

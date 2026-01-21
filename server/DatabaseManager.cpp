@@ -58,7 +58,141 @@ bool DatabaseManager::init() {
   // Seed Default User (Dev Mode)
   createUser("Sergey", "Password123!");
 
+  // 4. Create Friends Table (Day 6)
+  const char *sqlFriends = "CREATE TABLE IF NOT EXISTS friends ("
+                           "user_id INTEGER NOT NULL,"
+                           "friend_id INTEGER NOT NULL,"
+                           "PRIMARY KEY (user_id, friend_id),"
+                           "FOREIGN KEY(user_id) REFERENCES users(ID),"
+                           "FOREIGN KEY(friend_id) REFERENCES users(ID)"
+                           ");";
+
+  if (sqlite3_exec(m_db, sqlFriends, nullptr, 0, &errMsg) != SQLITE_OK) {
+    std::cerr << "[DB] Friends Table Error: " << errMsg << std::endl;
+    sqlite3_free(errMsg);
+    return false;
+  }
+
   return true;
+}
+
+// --- Contact Management ---
+
+bool DatabaseManager::addFriend(const std::string &username,
+                                const std::string &friendName) {
+  // 1. Get IDs (Nested Select is easier but let's be explicit for safety)
+  // Actually, standard SQL INSERT INTO ... SELECT ... is best.
+  // "INSERT OR IGNORE INTO friends (user_id, friend_id)
+  //  SELECT u1.id, u2.id FROM users u1, users u2
+  //  WHERE u1.USERNAME = ? AND u2.USERNAME = ?"
+
+  const char *sql = "INSERT OR IGNORE INTO friends (user_id, friend_id) "
+                    "SELECT u1.ID, u2.ID FROM users u1, users u2 "
+                    "WHERE u1.USERNAME = ? AND u2.USERNAME = ?;";
+
+  sqlite3_stmt *stmt;
+  if (sqlite3_prepare_v2(m_db, sql, -1, &stmt, nullptr) != SQLITE_OK) {
+    std::cerr << "[DB] Prepare failed (addFriend): " << sqlite3_errmsg(m_db)
+              << std::endl;
+    return false;
+  }
+
+  sqlite3_bind_text(stmt, 1, username.c_str(), -1, SQLITE_STATIC);
+  sqlite3_bind_text(stmt, 2, friendName.c_str(), -1, SQLITE_STATIC);
+
+  bool success = false;
+  if (sqlite3_step(stmt) == SQLITE_DONE) {
+    // Check if we actually inserted anything (meaning both users exist)
+    if (sqlite3_changes(m_db) > 0) {
+      success = true;
+    } else {
+      // Either duplicate (which is fine, technically success) or user not
+      // found. To distinguish, we'd need more logic. For now, if "INSERT OR
+      // IGNORE" did nothing, it might be partial. Let's assume Success if users
+      // exist. Actually strictly: The generic requirement is "Error if user
+      // does not exist". with this query, if user doesn't exist, changes() ==
+      // 0.
+      success = false; // We will handle "User Not Found" logic higher up or
+                       // check changes.
+      // Wait, sqlite3_changes returns 0 if it was IGNORED (already friends).
+      // We need to differentiate "Already Friends" (Success) vs "User Missing"
+      // (Fail).
+
+      // Let's do a quick check for Friend Existence to be precise.
+      // OR: Just keep strict. If changes() == 0, check if already friends?
+      // Optimization: For this project, let's keep it simple.
+      // We will assume if count is 0, it failed.
+      // User requested "Error if user doesn't exist".
+    }
+  }
+
+  // Revised Logic for precision:
+  // 1. Check if friend exists.
+  // 2. Insert.
+  sqlite3_finalize(stmt);
+
+  if (success)
+    return true; // It worked directly.
+
+  // If changes == 0, it could be duplicate. Let's check if friend exists.
+  std::string checkSql = "SELECT ID FROM users WHERE USERNAME = ?;";
+  sqlite3_stmt *checkStmt;
+  sqlite3_prepare_v2(m_db, checkSql.c_str(), -1, &checkStmt, nullptr);
+  sqlite3_bind_text(checkStmt, 1, friendName.c_str(), -1, SQLITE_STATIC);
+  bool friendExists = (sqlite3_step(checkStmt) == SQLITE_ROW);
+  sqlite3_finalize(checkStmt);
+
+  if (!friendExists)
+    return false;
+
+  // If friend exists, try insert without ignore to see error, or just assume it
+  // was duplicate. If we are here, friend exists. Retry the insert? No,
+  // changes()=0 means it was ignored. So return True (Idempotent success).
+  return true;
+}
+
+bool DatabaseManager::removeFriend(const std::string &username,
+                                   const std::string &friendName) {
+  const char *sql = "DELETE FROM friends WHERE "
+                    "user_id = (SELECT ID FROM users WHERE USERNAME = ?) AND "
+                    "friend_id = (SELECT ID FROM users WHERE USERNAME = ?);";
+
+  sqlite3_stmt *stmt;
+  if (sqlite3_prepare_v2(m_db, sql, -1, &stmt, nullptr) != SQLITE_OK)
+    return false;
+
+  sqlite3_bind_text(stmt, 1, username.c_str(), -1, SQLITE_STATIC);
+  sqlite3_bind_text(stmt, 2, friendName.c_str(), -1, SQLITE_STATIC);
+
+  sqlite3_step(stmt);
+  sqlite3_finalize(stmt);
+  return true; // Always succeed
+}
+
+std::vector<std::string>
+DatabaseManager::getFriends(const std::string &username) {
+  std::vector<std::string> friends;
+  // Get Friend ID -> Join Users
+  const char *sql =
+      "SELECT u.USERNAME FROM users u "
+      "JOIN friends f ON u.ID = f.friend_id "
+      "WHERE f.user_id = (SELECT ID FROM users WHERE USERNAME = ?);";
+
+  sqlite3_stmt *stmt;
+  if (sqlite3_prepare_v2(m_db, sql, -1, &stmt, nullptr) != SQLITE_OK)
+    return friends;
+
+  sqlite3_bind_text(stmt, 1, username.c_str(), -1, SQLITE_STATIC);
+
+  while (sqlite3_step(stmt) == SQLITE_ROW) {
+    const char *name =
+        reinterpret_cast<const char *>(sqlite3_column_text(stmt, 0));
+    if (name)
+      friends.emplace_back(name);
+  }
+
+  sqlite3_finalize(stmt);
+  return friends;
 }
 
 bool DatabaseManager::storeMessage(const std::string &sender,
