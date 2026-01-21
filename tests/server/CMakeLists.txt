@@ -14,7 +14,14 @@ add_executable(messaging_test
 )
 target_link_libraries(messaging_test PRIVATE wizz_common)
 
+# Offline Messaging Test (Day 5)
+add_executable(offline_test
+    offline_test.cpp
+)
+target_link_libraries(offline_test PRIVATE wizz_common)
+
 if(WIN32)
     target_link_libraries(stress_test PRIVATE ws2_32)
     target_link_libraries(messaging_test PRIVATE ws2_32)
+    target_link_libraries(offline_test PRIVATE ws2_32)
 endif()

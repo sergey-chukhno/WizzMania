@@ -179,21 +179,22 @@ void ClientSession::handleRegister(Packet &packet) {
     m_username = username;
     m_isLoggedIn = true;
 
-    // Notify Server Registry
-    if (m_onLogin) {
-      m_onLogin(this);
-    }
-
+    // 1. Send Success Packet FIRST
     Packet resp(PacketType::LoginSuccess); // Reuse LoginSuccess for now
     resp.writeString("Registration Successful! Welcome, " + username);
 
     std::vector<uint8_t> buffer = resp.serialize();
     send(m_socket, reinterpret_cast<const char *>(buffer.data()), buffer.size(),
          0);
+
+    // 2. Notify Server Registry (which might flush Offline Msgs)
+    if (m_onLogin) {
+      m_onLogin(this);
+    }
   } else {
     std::cout << "[Session] Registration FAILED (Taken): " << username
               << std::endl;
-    Packet resp(PacketType::LoginFailed);
+    Packet resp(PacketType::RegisterFailed);
     resp.writeString("Username already taken.");
 
     std::vector<uint8_t> buffer = resp.serialize();
@@ -224,18 +225,18 @@ void ClientSession::handleLogin(Packet &packet) {
     m_username = username;
     m_isLoggedIn = true;
 
-    // Notify Server Registry
-    if (m_onLogin) {
-      m_onLogin(this);
-    }
-
-    // 3. Send Response (LoginSuccess)
+    // 3. Send Response (LoginSuccess) FIRST
     Packet resp(PacketType::LoginSuccess);
     resp.writeString("Welcome to WizzMania, " + username + "!");
 
     std::vector<uint8_t> buffer = resp.serialize();
     send(m_socket, reinterpret_cast<const char *>(buffer.data()), buffer.size(),
          0);
+
+    // 4. Notify Server Registry (Triggers Offline Msg Flush)
+    if (m_onLogin) {
+      m_onLogin(this);
+    }
 
   } else {
     std::cout << "[Session] Login FAILED for " << username << std::endl;

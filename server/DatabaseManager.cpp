@@ -14,7 +14,6 @@ DatabaseManager::~DatabaseManager() {
     std::cout << "[DB] Connection Closed." << std::endl;
   }
 }
-
 bool DatabaseManager::init() {
   // 1. Open Connection
   int rc = sqlite3_open(m_dbPath.c_str(), &m_db);
@@ -27,17 +26,31 @@ bool DatabaseManager::init() {
   std::cout << "[DB] Opened successfully: " << m_dbPath << std::endl;
 
   // 2. Create Users Table
-  const char *sql = "CREATE TABLE IF NOT EXISTS users ("
-                    "ID INTEGER PRIMARY KEY AUTOINCREMENT,"
-                    "USERNAME TEXT NOT NULL UNIQUE,"
-                    "PASSWORD_HASH TEXT NOT NULL,"
-                    "SALT TEXT NOT NULL);";
+  const char *sqlUsers = "CREATE TABLE IF NOT EXISTS users ("
+                         "ID INTEGER PRIMARY KEY AUTOINCREMENT,"
+                         "USERNAME TEXT NOT NULL UNIQUE,"
+                         "PASSWORD_HASH TEXT NOT NULL,"
+                         "SALT TEXT NOT NULL);";
 
   char *errMsg = nullptr;
-  rc = sqlite3_exec(m_db, sql, nullptr, 0, &errMsg);
+  if (sqlite3_exec(m_db, sqlUsers, nullptr, 0, &errMsg) != SQLITE_OK) {
+    std::cerr << "[DB] Users Table Error: " << errMsg << std::endl;
+    sqlite3_free(errMsg);
+    return false;
+  }
 
-  if (rc != SQLITE_OK) {
-    std::cerr << "[DB] SQL Error: " << errMsg << std::endl;
+  // 3. Create Messages Table
+  const char *sqlMsgs = "CREATE TABLE IF NOT EXISTS messages ("
+                        "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                        "sender TEXT NOT NULL,"
+                        "recipient TEXT NOT NULL,"
+                        "body TEXT NOT NULL,"
+                        "timestamp INTEGER DEFAULT (strftime('%s', 'now')),"
+                        "is_delivered INTEGER DEFAULT 0"
+                        ");";
+
+  if (sqlite3_exec(m_db, sqlMsgs, nullptr, 0, &errMsg) != SQLITE_OK) {
+    std::cerr << "[DB] Messages Table Error: " << errMsg << std::endl;
     sqlite3_free(errMsg);
     return false;
   }
@@ -46,6 +59,71 @@ bool DatabaseManager::init() {
   createUser("Sergey", "Password123!");
 
   return true;
+}
+
+bool DatabaseManager::storeMessage(const std::string &sender,
+                                   const std::string &recipient,
+                                   const std::string &body, bool isDelivered) {
+  const char *sql = "INSERT INTO messages (sender, recipient, body, "
+                    "is_delivered) VALUES (?, ?, ?, ?);";
+  sqlite3_stmt *stmt;
+
+  if (sqlite3_prepare_v2(m_db, sql, -1, &stmt, nullptr) != SQLITE_OK) {
+    std::cerr << "[DB] Prepare failed: " << sqlite3_errmsg(m_db) << std::endl;
+    return false;
+  }
+
+  sqlite3_bind_text(stmt, 1, sender.c_str(), -1, SQLITE_STATIC);
+  sqlite3_bind_text(stmt, 2, recipient.c_str(), -1, SQLITE_STATIC);
+  sqlite3_bind_text(stmt, 3, body.c_str(), -1, SQLITE_STATIC);
+  sqlite3_bind_int(stmt, 4, isDelivered ? 1 : 0);
+
+  if (sqlite3_step(stmt) != SQLITE_DONE) {
+    std::cerr << "[DB] Msg Insert failed: " << sqlite3_errmsg(m_db)
+              << std::endl;
+    sqlite3_finalize(stmt);
+    return false;
+  }
+
+  sqlite3_finalize(stmt);
+  return true;
+}
+
+std::vector<DatabaseManager::StoredMessage>
+DatabaseManager::fetchPendingMessages(const std::string &recipient) {
+  std::vector<StoredMessage> messages;
+  // LIMIT 50 to prevent freezing the server loop
+  const char *sql = "SELECT id, sender, body, timestamp FROM messages WHERE "
+                    "recipient = ? AND is_delivered = 0 LIMIT 50;";
+  sqlite3_stmt *stmt;
+
+  if (sqlite3_prepare_v2(m_db, sql, -1, &stmt, nullptr) != SQLITE_OK) {
+    return messages;
+  }
+
+  sqlite3_bind_text(stmt, 1, recipient.c_str(), -1, SQLITE_STATIC);
+
+  while (sqlite3_step(stmt) == SQLITE_ROW) {
+    StoredMessage msg;
+    msg.id = sqlite3_column_int(stmt, 0);
+    msg.sender = reinterpret_cast<const char *>(sqlite3_column_text(stmt, 1));
+    msg.body = reinterpret_cast<const char *>(sqlite3_column_text(stmt, 2));
+    messages.push_back(msg);
+  }
+
+  sqlite3_finalize(stmt);
+  return messages;
+}
+
+void DatabaseManager::markAsDelivered(int msgId) {
+  const char *sql = "UPDATE messages SET is_delivered = 1 WHERE id = ?;";
+  sqlite3_stmt *stmt;
+
+  if (sqlite3_prepare_v2(m_db, sql, -1, &stmt, nullptr) == SQLITE_OK) {
+    sqlite3_bind_int(stmt, 1, msgId);
+    sqlite3_step(stmt);
+    sqlite3_finalize(stmt);
+  }
 }
 
 bool DatabaseManager::createUser(const std::string &username,

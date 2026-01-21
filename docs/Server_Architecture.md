@@ -110,6 +110,35 @@ If the target user is not online, the message cannot be delivered immediately.
 *   **Requirement:** Persistent storage of undelivered messages.
 *   **Mechanism:**
     *   Server inserts message into a `messages` table in SQLite: `(sender, recipient, body, timestamp, delivered=0)`.
-    *   When User B logs in, the Server queries this table for any pending messages.
     *   Server flushes pending messages to B and marks them as `delivered=1`.
+
+## 12. Architectural Trade-offs & Future Scaling
+As a prototype, Wizz Mania makes certain simplifications. In a production environment (WhatsApp/Telegram scale), these would be addressed as follows:
+
+### A. Privacy (Plaintext vs. E2EE)
+*   **Current:** Messages are stored in plaintext in `wizzmania.db`. An admin can read them.
+*   **Production (E2EE):** Keys are generated on Client A and Client B. The Server only relays encrypted blobs (`0xDEADBEEF...`). The Server *cannot* read the messages even if it wanted to.
+
+### B. Scalability (Blocking I/O vs. DB Thread)
+*   **Current:** `DatabaseManager::storeMessage` runs on the Main Thread. SQLite writes are synchronous.
+    *   *Risk:* Disk I/O (10-50ms) blocks the Network Loop. If 100 users msg at once, the server lags.
+*   **Production:** A dedicated **DB Worker Thread**.
+    *   Main Thread pushes task -> `std::queue` -> Worker Thread pops & writes to DB.
+    *   Unblocks the Network Loop immediately.
+
+### C. Consistency (Push vs. Sync)
+*   **Current (Push):** Server pushes a message to the active socket. "Fire and forget."
+    *   *Risk:* Multi-device inconsistency. Dealing with packet loss is harder.
+*   **Production (Sync):** Client tracks `LastMessageID`.
+    *   On connection, Client asks: "Give me everything after ID 1005."
+    *   Server sends the "Delta". Ensures 100% consistency across all devices.
+
+### D. Flow Control (Pagination vs. Head-of-Line Blocking)
+*   **Problem:** If a user has 50,000 pending offline messages, sending them all at once inside the Login Callback would block the Main Event Loop for seconds, freezing the server for everyone else.
+*   **Current Solution (Safety Cap):** `fetchPendingMessages` forces a `LIMIT 50`. We send the oldest 50 undelivered messages.
+*   **Production (Pagination):**
+    *   Server sends a batch (e.g., 50).
+    *   Client UI shows a "Load More" button (or auto-scrolls).
+    *   Client sends `RequestHistory(Offset=50)` to fetch the next batch.
+    *   This keeps the Server responsive (Time-slicing).
 
