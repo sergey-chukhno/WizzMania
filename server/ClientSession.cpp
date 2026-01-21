@@ -15,9 +15,9 @@
 
 namespace wizz {
 
-ClientSession::ClientSession(SocketType socket, DatabaseManager &db)
-    : m_socket(socket), m_isLoggedIn(false), m_db(&db) // Store start pointer
-{}
+ClientSession::ClientSession(SocketType socket, DatabaseManager &db,
+                             OnLoginCallback onLogin)
+    : m_socket(socket), m_isLoggedIn(false), m_db(&db), m_onLogin(onLogin) {}
 
 ClientSession::~ClientSession() {
   if (m_socket != INVALID_SOCKET_VAL) {
@@ -28,6 +28,7 @@ ClientSession::~ClientSession() {
 ClientSession::ClientSession(ClientSession &&other) noexcept
     : m_socket(other.m_socket), m_username(std::move(other.m_username)),
       m_isLoggedIn(other.m_isLoggedIn), m_db(other.m_db),
+      m_onLogin(std::move(other.m_onLogin)),
       m_buffer(std::move(other.m_buffer)) {
   other.m_socket = INVALID_SOCKET_VAL;
 }
@@ -43,6 +44,7 @@ ClientSession &ClientSession::operator=(ClientSession &&other) noexcept {
     m_isLoggedIn = other.m_isLoggedIn;
     m_buffer = std::move(other.m_buffer);
     m_db = other.m_db; // Copy Pointer
+    m_onLogin = std::move(other.m_onLogin);
 
     other.m_socket = INVALID_SOCKET_VAL;
   }
@@ -140,6 +142,11 @@ void ClientSession::handleRegister(Packet &packet) {
     m_username = username;
     m_isLoggedIn = true;
 
+    // Notify Server Registry
+    if (m_onLogin) {
+      m_onLogin(this);
+    }
+
     Packet resp(PacketType::LoginSuccess); // Reuse LoginSuccess for now
     resp.writeString("Registration Successful! Welcome, " + username);
 
@@ -179,6 +186,11 @@ void ClientSession::handleLogin(Packet &packet) {
     std::cout << "[Session] Login SUCCESS for " << username << std::endl;
     m_username = username;
     m_isLoggedIn = true;
+
+    // Notify Server Registry
+    if (m_onLogin) {
+      m_onLogin(this);
+    }
 
     // 3. Send Response (LoginSuccess)
     Packet resp(PacketType::LoginSuccess);

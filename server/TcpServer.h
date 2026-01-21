@@ -45,6 +45,10 @@ private:
   // Key: Socket Descriptor (int), Value: Session Object
   std::unordered_map<SocketType, ClientSession> m_sessions;
 
+  // Day 4: Online Registry (The "Phonebook")
+  // Key: Username, Value: Pointer to Session
+  std::unordered_map<std::string, ClientSession *> m_onlineUsers;
+
   // Helpers
   void initSocket();   // Step 1: Create
   void bindSocket();   // Step 2: Bind
