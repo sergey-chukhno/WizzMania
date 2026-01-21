@@ -41,6 +41,11 @@ public:
   // Marks a list of message IDs as delivered
   void markAsDelivered(int msgId);
 
+  // Contact Management (Day 6)
+  bool addFriend(const std::string &username, const std::string &friendName);
+  bool removeFriend(const std::string &username, const std::string &friendName);
+  std::vector<std::string> getFriends(const std::string &username);
+
 private:
   std::string hashPassword(const std::string &password,
                            const std::string &salt);

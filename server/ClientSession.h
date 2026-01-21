@@ -54,6 +54,10 @@ private:
   void handleRegister(Packet &packet);
   void handleDirectMessage(Packet &packet);
 
+  // Contact Handlers
+  void handleAddContact(Packet &packet);
+  void handleRemoveContact(Packet &packet);
+
 private:
   SocketType m_socket;
   std::string m_username;

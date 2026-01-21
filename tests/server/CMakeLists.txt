@@ -20,8 +20,15 @@ add_executable(offline_test
 )
 target_link_libraries(offline_test PRIVATE wizz_common)
 
+# Contact Management Test (Day 6)
+add_executable(contact_test
+    contact_test.cpp
+)
+target_link_libraries(contact_test PRIVATE wizz_common)
+
 if(WIN32)
     target_link_libraries(stress_test PRIVATE ws2_32)
     target_link_libraries(messaging_test PRIVATE ws2_32)
     target_link_libraries(offline_test PRIVATE ws2_32)
+    target_link_libraries(contact_test PRIVATE ws2_32)
 endif()
