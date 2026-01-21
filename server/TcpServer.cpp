@@ -139,9 +139,19 @@ void TcpServer::run() {
 
       if (clientSocket != INVALID_SOCKET_VAL) {
         std::cout << "[Server] New Connection: " << clientSocket << std::endl;
+
         // Create Session and Move into Map
-        // Pass m_db reference to the session
-        m_sessions.emplace(clientSocket, ClientSession(clientSocket, m_db));
+        // Pass m_db reference AND the Login Callback
+        m_sessions.emplace(
+            clientSocket,
+            ClientSession(clientSocket, m_db, [this](ClientSession *session) {
+              // This code runs when the session calls m_onLogin(this)
+              std::string username = session->getUsername();
+              std::cout << "[Server] User Online: " << username << std::endl;
+
+              // Add to Registry
+              m_onlineUsers[username] = session;
+            }));
       }
     }
 
@@ -155,8 +165,17 @@ void TcpServer::run() {
         if (bytesReceived <= 0) {
           // Disconnected or Error
           std::cout << "[Server] Client Disconnected: " << sock << std::endl;
-          // close_socket_raw is called by ClientSession destructor
-          // automatically!
+
+          // Day 4: Remove from Registry if logged in
+          ClientSession &session = it->second;
+          // Note: We need to know if they were logged in.
+          // Ideally ClientSession had isLoggedIn() or we check username empty?
+          std::string username = session.getUsername();
+          if (!username.empty()) {
+            m_onlineUsers.erase(username);
+            std::cout << "[Server] User Offline: " << username << std::endl;
+          }
+
           it = m_sessions.erase(it); // Remove from map
         } else {
           // Valid Data Received -> Pass to Session

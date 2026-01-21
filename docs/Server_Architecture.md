@@ -87,3 +87,13 @@ To enable 1-to-1 messaging (User A -> User B), we treat the Server as the **Cent
         *   If not found: Server stores message in DB (Offline).
 *   **Source of Truth:** The Server is the *only* entity that knows who is online. Sessions are stateless regarding neighbors.
 
+## 9. Session Registry Implementation (Callbacks)
+To implement the "Hub Pattern" without tight coupling or circular dependencies, we use Modern C++ callbacks (`std::function`).
+1.  **The Registry:** `TcpServer` holds `std::unordered_map<std::string, ClientSession*> m_onlineUsers`.
+2.  **The Callback:** `ClientSession` holds a `std::function<void(ClientSession*)>` called `m_onLoginSuccess`.
+3.  **The Flow:**
+    *   `TcpServer` creates `ClientSession` and passes a lambda: `[this](ClientSession* s) { m_onlineUsers[s->getUsername()] = s; }`.
+    *   When `ClientSession` authenticates (Login/Register), it invokes `m_onLoginSuccess(this)`.
+    *   `TcpServer` receives the signal and updates the Registry.
+This ensures `ClientSession` does not need to know about `TcpServer`, preserving the hierarchy.
+
