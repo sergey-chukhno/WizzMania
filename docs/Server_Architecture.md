@@ -36,8 +36,21 @@ High-performance servers typically use **Event Loops**, but scaled across CPU co
 *   **Redis / Node.js:** Strictly Single-Threaded. (Exactly like our approach).
 *   **Envoy Proxy / Nginx:** A pool of worker threads (e.g., 8 threads for 8 CPUs). **Each worker** runs its own Single-Threaded Event Loop.
 
-### Why Wizz Mania uses Single-Threaded
+### Why Wizz Mania uses Single-Threaded (Senior Analysis)
 For a 2-week project, the Multi-Reactor (Thread Pool) adds synchronization complexity without meaningful performance gain on a laptop scale. Single-threaded is robust, simpler to debug, and fast enough for <10,000 users.
+
+#### Q1: "If 5,000 users are idle, how much CPU should they consume?"
+*   **The Answer:** **Near Zero.**
+*   **The "Thread-per-Client" Cost:** Even if a thread is sleeping, it consumes:
+    1.  **Stack Memory:** Default is 1MB-8MB per thread (virtual memory). 5,000 threads = ~5GB of address space.
+    2.  **Kernel Scheduler Overhead:** The OS kernel must iterate through 5,000 threads to decide who runs next. This "Context Switching" destroys CPU cache locality.
+*   **The "Event Loop" Advantage:** In our model (`select`), we have **1 thread**. The kernel puts it to sleep until *one* of the 5,000 sockets receives a byte. 5,000 idle users cost us nothing but a bit of RAM for the socket buffers.
+
+#### Q2: "Why do Nginx/Node.js use Event Loops?"
+*   **The Answer:** **C10k Problem (Concurrency vs Parallelism).**
+*   **Performance:** Real-world traffic is "Bursty". 99% of time is spent waiting for network/disk (IO). A thread waiting for IO is a wasted resource.
+*   **The Event Loop (Reactor):** Using `epoll` (Linux) or `kqueue` (Mac), a single thread can manage 100,000 connections because it never blocks. It only processes the *active* 0.1% of flows.
+*   **The Caveat:** Event Loops *cannot* do heavy CPU work (hashing passwords, image proc) or strict Blocking IO (long DB query), or they starve *everyone*. **This is why we need the Worker Thread Pool** (in Phase 5)—to offload those specific heavy blocks without reverting to Thread-per-Client.
 
 ---
 

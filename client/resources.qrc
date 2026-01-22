@@ -1,0 +1,10 @@
+<RCC>
+    <qresource prefix="/">
+        <file>assets/login_bg.png</file>
+        <file>assets/butterfly.png</file>
+        <file>assets/alien_green.png</file>
+        <file>assets/alien_gold.png</file>
+        <file>assets/icon_user.png</file>
+        <file>assets/icon_lock.png</file>
+    </qresource>
+</RCC>
