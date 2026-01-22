@@ -41,8 +41,6 @@ LoginDialog::LoginDialog(QWidget *parent) : QDialog(parent) {
           &LoginDialog::onConnectionError);
 }
 
-// Load PNG with transparency preserved (no white removal needed for proper
-// PNGs)
 QPixmap LoginDialog::processTransparentImage(const QString &path, int size) {
   QPixmap pix(path);
   if (pix.isNull())
@@ -57,12 +55,11 @@ void LoginDialog::setupUI() {
   QVBoxLayout *mainLayout = new QVBoxLayout(this);
   mainLayout->setAlignment(Qt::AlignCenter);
 
-  // --- Glass Card ---
+  // --- Outer Glass Card ---
   QFrame *glassCard = new QFrame(this);
   glassCard->setObjectName("glassCard");
-  glassCard->setFixedSize(480, 580);
+  glassCard->setFixedSize(500, 520);
 
-  // Card shadow for depth
   QGraphicsDropShadowEffect *cardShadow = new QGraphicsDropShadowEffect(this);
   cardShadow->setBlurRadius(60);
   cardShadow->setColor(QColor(0, 60, 120, 100));
@@ -70,109 +67,140 @@ void LoginDialog::setupUI() {
   glassCard->setGraphicsEffect(cardShadow);
 
   QVBoxLayout *cardLayout = new QVBoxLayout(glassCard);
-  cardLayout->setContentsMargins(45, 35, 45, 45);
-  cardLayout->setSpacing(18);
+  cardLayout->setContentsMargins(40, 30, 40, 35);
+  cardLayout->setSpacing(12);
 
-  // --- Header with Butterfly ---
-  QHBoxLayout *headerTop = new QHBoxLayout();
-  headerTop->addStretch();
+  // --- Header with Title and Butterfly ---
+  QHBoxLayout *headerLayout = new QHBoxLayout();
+
+  QLabel *titleLabel = new QLabel("Wizz Mania", glassCard);
+  titleLabel->setObjectName("titleLabel");
 
   QLabel *butterflyIcon = new QLabel(glassCard);
   butterflyIcon->setPixmap(
-      processTransparentImage(":/assets/butterfly.png", 80));
-  butterflyIcon->setFixedSize(80, 80);
+      processTransparentImage(":/assets/butterfly.png", 70));
+  butterflyIcon->setFixedSize(70, 70);
   butterflyIcon->setStyleSheet("background: transparent;");
 
   QGraphicsDropShadowEffect *flyShadow = new QGraphicsDropShadowEffect(this);
-  flyShadow->setBlurRadius(15);
-  flyShadow->setColor(QColor(0, 0, 0, 60));
-  flyShadow->setOffset(3, 5);
+  flyShadow->setBlurRadius(12);
+  flyShadow->setColor(QColor(0, 0, 0, 50));
+  flyShadow->setOffset(2, 4);
   butterflyIcon->setGraphicsEffect(flyShadow);
 
-  headerTop->addWidget(butterflyIcon);
-  cardLayout->addLayout(headerTop);
+  headerLayout->addWidget(titleLabel);
+  headerLayout->addStretch();
+  headerLayout->addWidget(butterflyIcon);
+  cardLayout->addLayout(headerLayout);
 
-  // Title
-  QLabel *titleLabel = new QLabel("Wizz Mania", glassCard);
-  titleLabel->setAlignment(Qt::AlignCenter);
-  titleLabel->setObjectName("titleLabel");
-
+  // Tagline
   QLabel *taglineLabel =
       new QLabel("It's not 2003, but you can still log in.", glassCard);
-  taglineLabel->setAlignment(Qt::AlignCenter);
   taglineLabel->setObjectName("taglineLabel");
-
-  cardLayout->addWidget(titleLabel);
   cardLayout->addWidget(taglineLabel);
   cardLayout->addSpacing(20);
 
-  // --- Inputs ---
-  m_hostInput = new QLineEdit("127.0.0.1", glassCard);
-  m_hostInput->setPlaceholderText("Server IP");
-  m_hostInput->setObjectName("glassInput");
+  // --- Inner Glass Frame (contains inputs + buttons) ---
+  QFrame *innerFrame = new QFrame(glassCard);
+  innerFrame->setObjectName("innerFrame");
+  innerFrame->setFixedSize(420, 280);
 
-  m_portInput = new QLineEdit("8080", glassCard);
-  m_portInput->setPlaceholderText("Port");
-  m_portInput->setObjectName("glassInput");
+  QGraphicsDropShadowEffect *innerShadow = new QGraphicsDropShadowEffect(this);
+  innerShadow->setBlurRadius(20);
+  innerShadow->setColor(QColor(150, 200, 255, 80));
+  innerShadow->setOffset(0, 0);
+  innerFrame->setGraphicsEffect(innerShadow);
 
-  m_usernameInput = new QLineEdit(glassCard);
+  QVBoxLayout *innerLayout = new QVBoxLayout(innerFrame);
+  innerLayout->setContentsMargins(25, 25, 25, 25);
+  innerLayout->setSpacing(15);
+
+  // Username Input with Icon
+  QHBoxLayout *userRow = new QHBoxLayout();
+  QLabel *userIcon = new QLabel(innerFrame);
+  userIcon->setPixmap(processTransparentImage(":/assets/icon_user.png", 24));
+  userIcon->setFixedSize(24, 24);
+  userIcon->setStyleSheet("background: transparent;");
+
+  m_usernameInput = new QLineEdit(innerFrame);
   m_usernameInput->setPlaceholderText("Username");
   m_usernameInput->setObjectName("glassInput");
 
-  m_passwordInput = new QLineEdit(glassCard);
+  userRow->addWidget(userIcon);
+  userRow->addWidget(m_usernameInput);
+  innerLayout->addLayout(userRow);
+
+  // Password Input with Icon
+  QHBoxLayout *passRow = new QHBoxLayout();
+  QLabel *lockIcon = new QLabel(innerFrame);
+  lockIcon->setPixmap(processTransparentImage(":/assets/icon_lock.png", 24));
+  lockIcon->setFixedSize(24, 24);
+  lockIcon->setStyleSheet("background: transparent;");
+
+  m_passwordInput = new QLineEdit(innerFrame);
   m_passwordInput->setPlaceholderText("Password");
   m_passwordInput->setEchoMode(QLineEdit::Password);
   m_passwordInput->setObjectName("glassInput");
 
-  cardLayout->addWidget(m_hostInput);
-  cardLayout->addWidget(m_portInput);
-  cardLayout->addWidget(m_usernameInput);
-  cardLayout->addWidget(m_passwordInput);
-  cardLayout->addSpacing(18);
+  passRow->addWidget(lockIcon);
+  passRow->addWidget(m_passwordInput);
+  innerLayout->addLayout(passRow);
 
-  // --- Primary Button ---
-  m_loginButton = new QPushButton("Sign In >", glassCard);
+  innerLayout->addSpacing(10);
+
+  // Sign In Button (Glass style)
+  m_loginButton = new QPushButton("Sign In >", innerFrame);
   m_loginButton->setCursor(Qt::PointingHandCursor);
-  m_loginButton->setFixedHeight(52);
-  m_loginButton->setObjectName("primaryBtn");
+  m_loginButton->setFixedHeight(48);
+  m_loginButton->setObjectName("glassSignInBtn");
 
   QGraphicsDropShadowEffect *btnShadow = new QGraphicsDropShadowEffect(this);
-  btnShadow->setBlurRadius(25);
-  btnShadow->setColor(QColor(0, 150, 255, 120));
-  btnShadow->setOffset(0, 6);
+  btnShadow->setBlurRadius(20);
+  btnShadow->setColor(QColor(100, 180, 255, 100));
+  btnShadow->setOffset(0, 4);
   m_loginButton->setGraphicsEffect(btnShadow);
 
-  cardLayout->addWidget(m_loginButton);
+  innerLayout->addWidget(m_loginButton);
 
-  // --- Secondary Buttons ---
-  QHBoxLayout *footerLayout = new QHBoxLayout();
+  // Secondary Buttons Row
+  QHBoxLayout *secondaryRow = new QHBoxLayout();
 
-  QPushButton *createAcc = new QPushButton("Create account", glassCard);
+  QPushButton *createAcc = new QPushButton("Create account", innerFrame);
   createAcc->setCursor(Qt::PointingHandCursor);
   createAcc->setObjectName("secondaryBtn");
 
-  QPushButton *offlineMode = new QPushButton("Offline mode", glassCard);
+  QLabel *separator = new QLabel("|", innerFrame);
+  separator->setStyleSheet(
+      "color: rgba(100, 120, 140, 150); background: transparent;");
+
+  QPushButton *offlineMode = new QPushButton("Offline mode", innerFrame);
   offlineMode->setCursor(Qt::PointingHandCursor);
   offlineMode->setObjectName("secondaryBtn");
 
-  footerLayout->addWidget(createAcc);
-  footerLayout->addStretch();
-  footerLayout->addWidget(offlineMode);
+  secondaryRow->addStretch();
+  secondaryRow->addWidget(createAcc);
+  secondaryRow->addWidget(separator);
+  secondaryRow->addWidget(offlineMode);
+  secondaryRow->addStretch();
 
-  cardLayout->addLayout(footerLayout);
+  innerLayout->addLayout(secondaryRow);
 
+  cardLayout->addWidget(innerFrame, 0, Qt::AlignCenter);
+
+  // Status Label
   m_statusLabel = new QLabel("", glassCard);
   m_statusLabel->setAlignment(Qt::AlignCenter);
+  m_statusLabel->setStyleSheet("background: transparent;");
   cardLayout->addWidget(m_statusLabel);
 
   mainLayout->addWidget(glassCard);
 
-  // --- Decorative Elements ---
+  // --- Decorative Mascots ---
   QLabel *alienGreen = new QLabel(this);
   alienGreen->setPixmap(
-      processTransparentImage(":/assets/alien_green.png", 130));
-  alienGreen->setFixedSize(130, 130);
-  alienGreen->move(170, 560);
+      processTransparentImage(":/assets/alien_green.png", 140));
+  alienGreen->setFixedSize(140, 140);
+  alienGreen->move(140, 540);
   alienGreen->setStyleSheet("background: transparent;");
 
   QGraphicsDropShadowEffect *greenShadow = new QGraphicsDropShadowEffect(this);
@@ -182,9 +210,9 @@ void LoginDialog::setupUI() {
   alienGreen->setGraphicsEffect(greenShadow);
 
   QLabel *ufoGold = new QLabel(this);
-  ufoGold->setPixmap(processTransparentImage(":/assets/alien_gold.png", 140));
-  ufoGold->setFixedSize(140, 140);
-  ufoGold->move(720, 550);
+  ufoGold->setPixmap(processTransparentImage(":/assets/alien_gold.png", 150));
+  ufoGold->setFixedSize(150, 150);
+  ufoGold->move(730, 530);
   ufoGold->setStyleSheet("background: transparent;");
 
   QGraphicsDropShadowEffect *goldShadow = new QGraphicsDropShadowEffect(this);
@@ -205,95 +233,85 @@ void LoginDialog::applyStyles() {
             background-repeat: no-repeat;
         }
 
-        /* Glass Card */
+        /* Outer Glass Card */
         #glassCard {
-            background-color: rgba(255, 255, 255, 45);
-            border: 2px solid rgba(255, 255, 255, 150);
-            border-top: 2px solid rgba(255, 255, 255, 200);
-            border-bottom: 2px solid rgba(255, 255, 255, 100);
-            border-radius: 32px;
+            background-color: rgba(255, 255, 255, 35);
+            border: 2px solid rgba(255, 255, 255, 120);
+            border-top: 2px solid rgba(255, 255, 255, 180);
+            border-bottom: 2px solid rgba(255, 255, 255, 80);
+            border-radius: 35px;
+        }
+
+        /* Inner Glass Frame with glowing edges */
+        #innerFrame {
+            background-color: rgba(255, 255, 255, 25);
+            border: 2px solid rgba(200, 230, 255, 150);
+            border-radius: 20px;
         }
 
         #titleLabel {
             font-family: 'Segoe UI', 'SF Pro Display', sans-serif;
-            font-size: 36px;
+            font-size: 34px;
             font-weight: 700;
-            color: #1a2530; 
+            color: #1a2530;
+            background: transparent;
         }
         
         #taglineLabel {
             font-family: 'Segoe UI', 'SF Pro Display', sans-serif;
             font-size: 14px;
             color: #4a5568;
+            background: transparent;
         }
 
-        /* Glass Inputs - Proper height with padding */
+        /* Glass Inputs - Transparent rounded */
         #glassInput {
-            background-color: rgb(245, 250, 255);
-            border: 1px solid rgba(255, 255, 255, 200);
-            border-top: 1px solid rgba(180, 200, 220, 100);
-            border-bottom: 2px solid rgba(255, 255, 255, 255);
-            border-radius: 22px;
-            padding: 16px 24px;
-            font-size: 16px;
+            background-color: rgba(255, 255, 255, 50);
+            border: 1px solid rgba(255, 255, 255, 150);
+            border-radius: 20px;
+            padding: 12px 18px;
+            font-size: 15px;
             color: #2d3748;
         }
         #glassInput:focus {
-            background-color: rgb(255, 255, 255);
-            border: 2px solid rgb(80, 180, 255);
+            background-color: rgba(255, 255, 255, 100);
+            border: 2px solid rgba(100, 180, 255, 180);
         }
 
-        /* Primary Gel Button - Smooth Aqua like Maquette */
-        #primaryBtn {
-            background: qlineargradient(
-                x1:0, y1:0, x2:0, y2:1,
-                stop:0.0 rgb(80, 200, 255),
-                stop:0.5 rgb(40, 180, 250),
-                stop:1.0 rgb(20, 150, 230)
-            );
-            color: white;
-            border: 2px solid rgba(120, 220, 255, 200);
-            border-radius: 26px;
-            font-size: 18px;
+        /* Glass Sign In Button */
+        #glassSignInBtn {
+            background-color: rgba(80, 180, 255, 120);
+            border: 2px solid rgba(150, 220, 255, 200);
+            border-radius: 24px;
+            font-size: 17px;
             font-weight: bold;
-            padding: 14px 30px;
+            color: white;
         }
-        #primaryBtn:hover {
-            background: qlineargradient(
-                x1:0, y1:0, x2:0, y2:1,
-                stop:0.0 rgb(100, 220, 255),
-                stop:0.5 rgb(60, 200, 255),
-                stop:1.0 rgb(40, 170, 245)
-            );
+        #glassSignInBtn:hover {
+            background-color: rgba(100, 200, 255, 160);
+            border: 2px solid rgba(180, 240, 255, 220);
         }
-        #primaryBtn:pressed {
-            background: rgb(30, 160, 230);
+        #glassSignInBtn:pressed {
+            background-color: rgba(60, 160, 240, 180);
         }
 
-        /* Secondary Glass Buttons */
+        /* Secondary Text Buttons */
         #secondaryBtn {
-            background-color: rgba(255, 255, 255, 70);
-            border: 1px solid rgba(255, 255, 255, 160);
-            border-radius: 14px;
-            padding: 8px 16px;
+            background-color: transparent;
+            border: none;
             font-size: 13px;
-            font-weight: 600;
-            color: #2d3748;
+            font-weight: 500;
+            color: rgba(60, 80, 100, 180);
         }
         #secondaryBtn:hover {
-            background-color: rgba(255, 255, 255, 120);
-            border: 1px solid rgba(255, 255, 255, 220);
             color: rgb(0, 120, 200);
         }
     )");
 }
 
 void LoginDialog::onLoginClicked() {
-  QString host = m_hostInput->text();
-  quint16 port = m_portInput->text().toUShort();
-
-  if (host.isEmpty() || port == 0) {
-    m_statusLabel->setText("Invalid Host/Port");
+  if (m_usernameInput->text().isEmpty()) {
+    m_statusLabel->setText("Please enter a username");
     m_statusLabel->setStyleSheet("color: #e74c3c; background: transparent;");
     return;
   }
@@ -303,7 +321,7 @@ void LoginDialog::onLoginClicked() {
       "color: #00a8ff; background: transparent; font-weight: bold;");
   m_loginButton->setEnabled(false);
 
-  NetworkManager::instance().connectToHost(host, port);
+  NetworkManager::instance().connectToHost(m_defaultHost, m_defaultPort);
 }
 
 void LoginDialog::onLoginSuccess() { accept(); }

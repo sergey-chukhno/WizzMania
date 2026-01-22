@@ -2,6 +2,7 @@
 
 #include <QDialog>
 #include <QFormLayout>
+#include <QFrame>
 #include <QLabel>
 #include <QLineEdit>
 #include <QPushButton>
@@ -12,6 +13,9 @@ class LoginDialog : public QDialog {
 
 public:
   explicit LoginDialog(QWidget *parent = nullptr);
+
+  QString getHost() const { return m_defaultHost; }
+  quint16 getPort() const { return m_defaultPort; }
 
 private slots:
   void onLoginClicked();
@@ -24,8 +28,10 @@ private:
   void applyStyles();
   QPixmap processTransparentImage(const QString &path, int size);
 
-  QLineEdit *m_hostInput;
-  QLineEdit *m_portInput;
+  // Default connection settings (hidden)
+  QString m_defaultHost = "127.0.0.1";
+  quint16 m_defaultPort = 8080;
+
   QLineEdit *m_usernameInput;
   QLineEdit *m_passwordInput;
   QPushButton *m_loginButton;
