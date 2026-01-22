@@ -17,7 +17,7 @@ endif()
 # Core Components
 add_subdirectory(common)
 add_subdirectory(server)
-# add_subdirectory(client)
+add_subdirectory(client)
 
 # Testing
 enable_testing()

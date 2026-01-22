@@ -141,7 +141,21 @@ This schedule prioritizes **architecture and correctness** over speed.
 
 ---
 
-## 3. Next Step
+## 3. Future Improvements (Phase 5 - Post MVP)
+
+### High Priority
+1.  **Worker Thread Pool (Database Offloading):**
+    *   **Current:** Single Thread (Blocking).
+    *   **Target:** Decouple IO from Logic. 4-8 Worker Threads handling DB queries.
+    *   **Why:** Prevents UI freezes for other clients during heavy load.
+
+2.  **Security Layer:**
+    *   Client-side Password Hashing (SHA-256).
+    *   SSL/TLS Encryption (OpenSSL).
+
+---
+
+## 4. Next Step
 
 If you approve this Roadmap, we will begin with **Day 1: Foundation & Protocol**.
 
