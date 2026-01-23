@@ -1,29 +1,25 @@
 #pragma once
 
 #include <QDialog>
-#include <QFormLayout>
 #include <QFrame>
 #include <QLabel>
 #include <QLineEdit>
 #include <QPushButton>
 #include <QVBoxLayout>
 
-class LoginDialog : public QDialog {
+class RegisterDialog : public QDialog {
   Q_OBJECT
 
 public:
-  explicit LoginDialog(QWidget *parent = nullptr);
-
-  QString getHost() const { return m_defaultHost; }
-  quint16 getPort() const { return m_defaultPort; }
+  explicit RegisterDialog(QWidget *parent = nullptr);
 
 signals:
-  void createAccountRequested();
+  void backToLoginRequested();
 
 private slots:
-  void onLoginClicked();
-  void onLoginSuccess();
-  void onLoginFailed(const QString &reason);
+  void onRegisterClicked();
+  void onRegisterSuccess();
+  void onRegisterFailed(const QString &reason);
   void onConnectionError(const QString &error);
 
 private:
@@ -31,12 +27,13 @@ private:
   void applyStyles();
   QPixmap processTransparentImage(const QString &path, int size);
 
-  // Default connection settings (hidden)
+  // Default connection settings
   QString m_defaultHost = "127.0.0.1";
   quint16 m_defaultPort = 8080;
 
   QLineEdit *m_usernameInput;
   QLineEdit *m_passwordInput;
-  QPushButton *m_loginButton;
+  QLineEdit *m_confirmPasswordInput;
+  QPushButton *m_registerButton;
   QLabel *m_statusLabel;
 };
