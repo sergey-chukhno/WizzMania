@@ -192,7 +192,7 @@ QFrame *AuthWindow::createLoginCard() {
         color: #2d3748;
     )");
 
-  userRow->addWidget(userIcon);
+  userRow->addWidget(userIcon, 0, Qt::AlignVCenter);
   userRow->addWidget(m_loginUsername);
   innerLayout->addLayout(userRow);
 
@@ -208,7 +208,7 @@ QFrame *AuthWindow::createLoginCard() {
   m_loginPassword->setEchoMode(QLineEdit::Password);
   m_loginPassword->setStyleSheet(m_loginUsername->styleSheet());
 
-  passRow->addWidget(lockIcon);
+  passRow->addWidget(lockIcon, 0, Qt::AlignVCenter);
   passRow->addWidget(m_loginPassword);
   innerLayout->addLayout(passRow);
 
@@ -380,7 +380,7 @@ QFrame *AuthWindow::createRegisterCard() {
   m_regUsername->setPlaceholderText("Username");
   m_regUsername->setStyleSheet(inputStyle);
 
-  userRow->addWidget(userIcon);
+  userRow->addWidget(userIcon, 0, Qt::AlignVCenter);
   userRow->addWidget(m_regUsername);
   innerLayout->addLayout(userRow);
 
@@ -396,7 +396,7 @@ QFrame *AuthWindow::createRegisterCard() {
   m_regPassword->setEchoMode(QLineEdit::Password);
   m_regPassword->setStyleSheet(inputStyle);
 
-  passRow->addWidget(lockIcon);
+  passRow->addWidget(lockIcon, 0, Qt::AlignVCenter);
   passRow->addWidget(m_regPassword);
   innerLayout->addLayout(passRow);
 
@@ -412,7 +412,7 @@ QFrame *AuthWindow::createRegisterCard() {
   m_regConfirmPassword->setEchoMode(QLineEdit::Password);
   m_regConfirmPassword->setStyleSheet(inputStyle);
 
-  confirmRow->addWidget(confirmIcon);
+  confirmRow->addWidget(confirmIcon, 0, Qt::AlignVCenter);
   confirmRow->addWidget(m_regConfirmPassword);
   innerLayout->addLayout(confirmRow);
 
