@@ -56,12 +56,21 @@ MainWindow::MainWindow(const QString &username, QWidget *parent)
 
   // Initialize Dialogs
   m_addFriendDialog = new AddFriendDialog(this);
-  connect(m_addFriendDialog, &AddFriendDialog::addRequested, this,
-          [](const QString &username) {
-            wizz::Packet pkt(wizz::PacketType::AddContact);
-            pkt.writeString(username.toStdString());
-            NetworkManager::instance().sendPacket(pkt);
-          });
+  connect(
+      m_addFriendDialog, &AddFriendDialog::addRequested, this,
+      [this](const QString &username) {
+        // Check if user is already in friends list
+        for (const ContactInfo &contact : m_contacts) {
+          if (contact.username.compare(username, Qt::CaseInsensitive) == 0) {
+            m_addFriendDialog->showError("User is already in your friend list");
+            return;
+          }
+        }
+
+        wizz::Packet pkt(wizz::PacketType::AddContact);
+        pkt.writeString(username.toStdString());
+        NetworkManager::instance().sendPacket(pkt);
+      });
 
   setupUI();
 }
