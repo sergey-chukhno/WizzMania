@@ -10,10 +10,12 @@
 class ChatWindow : public QWidget {
   Q_OBJECT
 public:
-  explicit ChatWindow(const QString &partnerName, QWidget *parent = nullptr);
+  explicit ChatWindow(const QString &partnerName, const QPoint &initialPos,
+                      QWidget *parent = nullptr);
   ~ChatWindow();
 
   void addMessage(const QString &sender, const QString &text, bool isSelf);
+  void flash(); // Visual alert
   QString getPartnerName() const { return m_partnerName; }
 
 signals:
@@ -42,4 +44,10 @@ private:
   QVBoxLayout *m_chatLayout;
   QLineEdit *m_messageInput;
   QPixmap m_background;
+
+  // Flash animation state
+  bool m_flashing = false;
+  int m_flashCount = 0;
+  QTimer *m_flashTimer;
+  QColor m_overlayColor = Qt::transparent;
 };

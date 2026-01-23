@@ -572,7 +572,13 @@ void MainWindow::onContactDoubleClicked(const QString &username) {
     return;
   }
 
-  ChatWindow *w = new ChatWindow(username);
+  // Position relative to Main Window (Right side)
+  QPoint startPos;
+  if (this->isVisible()) {
+    startPos = this->geometry().topRight() + QPoint(20, 0); // 20px offset
+  }
+
+  ChatWindow *w = new ChatWindow(username, startPos);
   connect(w, &ChatWindow::windowClosed, this, &MainWindow::onChatWindowClosed);
   connect(w, &ChatWindow::sendMessage, this, [username](const QString &text) {
     wizz::Packet pkt(wizz::PacketType::DirectMessage);
