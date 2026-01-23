@@ -201,7 +201,7 @@ void MainWindow::setupUI() {
             border: none;
         }
     )");
-  m_statusCombo->setFixedWidth(130);
+  m_statusCombo->setFixedWidth(160);
   connect(m_statusCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
           this, &MainWindow::onStatusChanged);
 
@@ -229,7 +229,7 @@ void MainWindow::setupUI() {
             border-radius: 12px;
         }
         QListWidget::item {
-            padding: 8px;
+            padding: 12px;
             border-bottom: 1px solid rgba(200, 220, 240, 80);
         }
         QListWidget::item:hover {
@@ -336,8 +336,8 @@ void MainWindow::populateContactList() {
   for (const ContactInfo &contact : sorted) {
     QWidget *itemWidget = new QWidget();
     QHBoxLayout *itemLayout = new QHBoxLayout(itemWidget);
-    itemLayout->setContentsMargins(5, 5, 5, 5);
-    itemLayout->setSpacing(10);
+    itemLayout->setContentsMargins(10, 8, 10, 8);
+    itemLayout->setSpacing(12);
 
     // Avatar
     QLabel *avatar = new QLabel();
