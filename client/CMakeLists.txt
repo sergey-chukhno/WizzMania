@@ -13,6 +13,7 @@ set(CLIENT_SOURCES
     NetworkManager.cpp
     LoginDialog.cpp
     RegisterDialog.cpp
+    AuthWindow.cpp
     resources.qrc
 )
 
