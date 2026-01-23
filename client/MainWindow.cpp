@@ -1,7 +1,8 @@
 #include "MainWindow.h"
+#include "AddFriendDialog.h"
 #include "NetworkManager.h"
 #include <QGraphicsDropShadowEffect>
-#include <QInputDialog>
+#include <QMessageBox>
 #include <QPaintEvent>
 #include <QPair> // Include QPair
 #include <QTimer>
@@ -38,7 +39,10 @@ MainWindow::MainWindow(const QString &username, QWidget *parent)
             updateContactStatus(username, static_cast<UserStatus>(status), "");
           });
 
-  setupUI();
+  // Connect Error
+  connect(
+      &NetworkManager::instance(), &NetworkManager::errorOccurred, this,
+      [this](const QString &msg) { QMessageBox::warning(this, "Error", msg); });
 
   setupUI();
 }
@@ -455,15 +459,14 @@ void MainWindow::onStatusChanged(int index) {
 }
 
 void MainWindow::onAddFriendClicked() {
-  bool ok;
-  QString text =
-      QInputDialog::getText(this, tr("Add Friend"), tr("Enter username:"),
-                            QLineEdit::Normal, "", &ok);
-  if (ok && !text.isEmpty()) {
-    // Send AddContact Packet
-    wizz::Packet pkt(wizz::PacketType::AddContact);
-    pkt.writeString(text.toStdString());
-    NetworkManager::instance().sendPacket(pkt);
+  AddFriendDialog dialog(this);
+  if (dialog.exec() == QDialog::Accepted) {
+    QString text = dialog.getUsername();
+    if (!text.isEmpty()) {
+      wizz::Packet pkt(wizz::PacketType::AddContact);
+      pkt.writeString(text.toStdString());
+      NetworkManager::instance().sendPacket(pkt);
+    }
   }
 }
 

@@ -14,6 +14,8 @@ set(CLIENT_SOURCES
     LoginDialog.cpp
     RegisterDialog.cpp
     AuthWindow.cpp
+    AuthWindow.cpp
+    AddFriendDialog.cpp
     MainWindow.cpp
     resources.qrc
 )
