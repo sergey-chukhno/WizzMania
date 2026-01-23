@@ -31,6 +31,10 @@ MainWindow::MainWindow(const QString &username, QWidget *parent)
               newContacts.append({name, status, "", QPixmap()});
             }
             setContacts(newContacts);
+
+            if (m_addFriendDialog && m_addFriendDialog->isVisible()) {
+              m_addFriendDialog->clearInput();
+            }
           });
 
   // Connect Status Change
@@ -40,9 +44,23 @@ MainWindow::MainWindow(const QString &username, QWidget *parent)
           });
 
   // Connect Error
-  connect(
-      &NetworkManager::instance(), &NetworkManager::errorOccurred, this,
-      [this](const QString &msg) { QMessageBox::warning(this, "Error", msg); });
+  connect(&NetworkManager::instance(), &NetworkManager::errorOccurred, this,
+          [this](const QString &msg) {
+            if (m_addFriendDialog && m_addFriendDialog->isVisible()) {
+              m_addFriendDialog->showError(msg);
+            } else {
+              QMessageBox::warning(this, "Error", msg);
+            }
+          });
+
+  // Initialize Dialogs
+  m_addFriendDialog = new AddFriendDialog(this);
+  connect(m_addFriendDialog, &AddFriendDialog::addRequested, this,
+          [](const QString &username) {
+            wizz::Packet pkt(wizz::PacketType::AddContact);
+            pkt.writeString(username.toStdString());
+            NetworkManager::instance().sendPacket(pkt);
+          });
 
   setupUI();
 }
@@ -260,9 +278,29 @@ void MainWindow::setupUI() {
   connect(addFriendBtn, &QPushButton::clicked, this,
           &MainWindow::onAddFriendClicked);
 
+  QPushButton *removeFriendBtn = new QPushButton("-", friendHeader);
+  removeFriendBtn->setFixedSize(24, 24);
+  removeFriendBtn->setCursor(Qt::PointingHandCursor);
+  removeFriendBtn->setStyleSheet(R"(
+        QPushButton {
+            background-color: rgba(255, 80, 80, 40);
+            border: 1px solid rgba(255, 80, 80, 100);
+            border-radius: 12px;
+            color: #2d3748;
+            font-weight: bold;
+            padding-bottom: 2px;
+        }
+        QPushButton:hover {
+            background-color: rgba(255, 80, 80, 80);
+        }
+    )");
+  connect(removeFriendBtn, &QPushButton::clicked, this,
+          &MainWindow::onRemoveFriendClicked);
+
   friendHeaderLayout->addWidget(friendsLabel);
   friendHeaderLayout->addStretch();
   friendHeaderLayout->addWidget(addFriendBtn);
+  friendHeaderLayout->addWidget(removeFriendBtn);
 
   cardLayout->addWidget(friendHeader);
 
@@ -459,14 +497,30 @@ void MainWindow::onStatusChanged(int index) {
 }
 
 void MainWindow::onAddFriendClicked() {
-  AddFriendDialog dialog(this);
-  if (dialog.exec() == QDialog::Accepted) {
-    QString text = dialog.getUsername();
-    if (!text.isEmpty()) {
-      wizz::Packet pkt(wizz::PacketType::AddContact);
-      pkt.writeString(text.toStdString());
-      NetworkManager::instance().sendPacket(pkt);
-    }
+  m_addFriendDialog->clearInput();
+  m_addFriendDialog->show();
+  m_addFriendDialog->raise();
+  m_addFriendDialog->activateWindow();
+}
+
+void MainWindow::onRemoveFriendClicked() {
+  QListWidgetItem *selected = m_contactList->currentItem();
+  if (!selected) {
+    QMessageBox::information(this, "Select Contact",
+                             "Please select a friend to remove.");
+    return;
+  }
+
+  QString username = selected->data(Qt::UserRole).toString();
+  auto reply = QMessageBox::question(
+      this, "Remove Friend",
+      QString("Are you sure you want to remove %1?").arg(username),
+      QMessageBox::Yes | QMessageBox::No);
+
+  if (reply == QMessageBox::Yes) {
+    wizz::Packet pkt(wizz::PacketType::RemoveContact);
+    pkt.writeString(username.toStdString());
+    NetworkManager::instance().sendPacket(pkt);
   }
 }
 

@@ -23,6 +23,8 @@ struct ContactInfo {
   QPixmap avatar; // Empty = use initials
 };
 
+class AddFriendDialog; // Forward declaration
+
 /**
  * @brief MainWindow - Contact list window (MSN-style buddy list)
  * Displays user's contacts with online/offline status
@@ -49,6 +51,7 @@ private slots:
   void onStatusChanged(int index);
   void onSendMessage();
   void onAddFriendClicked();
+  void onRemoveFriendClicked();
 
 private:
   void setupUI();
@@ -75,4 +78,7 @@ private:
   QLabel *m_chatPreviewLabel;
   QLineEdit *m_messageInput;
   QPushButton *m_sendButton;
+
+  // Dialogs
+  AddFriendDialog *m_addFriendDialog = nullptr;
 };

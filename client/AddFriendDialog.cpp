@@ -9,11 +9,41 @@
 AddFriendDialog::AddFriendDialog(QWidget *parent) : QDialog(parent) {
   setWindowFlags(Qt::FramelessWindowHint | Qt::Dialog);
   setAttribute(Qt::WA_TranslucentBackground);
-  setFixedSize(300, 180);
+  setFixedSize(320, 240); // Slightly larger for error msg
+  m_background = QPixmap(":/assets/login_bg.png");
   setupUI();
 }
 
 QString AddFriendDialog::getUsername() const { return m_usernameInput->text(); }
+
+void AddFriendDialog::clearInput() {
+  m_usernameInput->clear();
+  m_errorLabel->clear();
+}
+
+void AddFriendDialog::showError(const QString &message) {
+  m_errorLabel->setText(message);
+  // Shake animation could happen here
+}
+
+void AddFriendDialog::onAddClicked() {
+  QString text = m_usernameInput->text().trimmed();
+  if (!text.isEmpty()) {
+    m_errorLabel->clear();
+    emit addRequested(text);
+    // Do NOT accept() here. Wait for success/error.
+  }
+}
+
+void AddFriendDialog::paintEvent(QPaintEvent *event) {
+  QPainter painter(this);
+  if (!m_background.isNull()) {
+    painter.drawPixmap(
+        rect(), m_background.scaled(size(), Qt::KeepAspectRatioByExpanding,
+                                    Qt::SmoothTransformation));
+  }
+  QDialog::paintEvent(event);
+}
 
 void AddFriendDialog::setupUI() {
   QVBoxLayout *mainLayout = new QVBoxLayout(this);
@@ -24,8 +54,8 @@ void AddFriendDialog::setupUI() {
   glassFrame->setObjectName("dialogFrame");
   glassFrame->setStyleSheet(R"(
         #dialogFrame {
-            background-color: rgba(255, 255, 255, 240);
-            border: 1px solid rgba(255, 255, 255, 200);
+            background-color: rgba(255, 255, 255, 200);
+            border: 1px solid rgba(255, 255, 255, 180);
             border-radius: 20px;
         }
     )");
@@ -37,26 +67,35 @@ void AddFriendDialog::setupUI() {
   glassFrame->setGraphicsEffect(shadow);
 
   QVBoxLayout *frameLayout = new QVBoxLayout(glassFrame);
-  frameLayout->setContentsMargins(20, 20, 20, 20);
+  frameLayout->setContentsMargins(25, 25, 25, 25);
   frameLayout->setSpacing(15);
 
   // Title
   QLabel *titleLabel = new QLabel("Add Friend", glassFrame);
   titleLabel->setStyleSheet(
-      "font-size: 18px; font-weight: 700; color: #1a2530; "
+      "font-size: 20px; font-weight: 700; color: #1a2530; "
       "background: transparent;");
   titleLabel->setAlignment(Qt::AlignCenter);
   frameLayout->addWidget(titleLabel);
+
+  // Error Label
+  m_errorLabel = new QLabel("", glassFrame);
+  m_errorLabel->setStyleSheet(
+      "font-size: 12px; color: #e53e3e; font-weight: 600; "
+      "background: transparent;");
+  m_errorLabel->setAlignment(Qt::AlignCenter);
+  m_errorLabel->setFixedHeight(20);
+  frameLayout->addWidget(m_errorLabel);
 
   // Input
   m_usernameInput = new QLineEdit(glassFrame);
   m_usernameInput->setPlaceholderText("Enter username");
   m_usernameInput->setStyleSheet(R"(
         QLineEdit {
-            background-color: rgba(240, 245, 250, 200);
+            background-color: rgba(255, 255, 255, 180);
             border: 1px solid rgba(200, 220, 240, 150);
-            border-radius: 10px;
-            padding: 8px 12px;
+            border-radius: 12px;
+            padding: 10px 15px;
             font-size: 14px;
             color: #2d3748;
         }
@@ -65,26 +104,28 @@ void AddFriendDialog::setupUI() {
             background-color: #FFFFFF;
         }
     )");
+  connect(m_usernameInput, &QLineEdit::returnPressed, this,
+          &AddFriendDialog::onAddClicked);
   frameLayout->addWidget(m_usernameInput);
 
   // Buttons
   QHBoxLayout *btnLayout = new QHBoxLayout();
-  btnLayout->setSpacing(10);
+  btnLayout->setSpacing(15);
 
   QPushButton *cancelBtn = new QPushButton("Cancel", glassFrame);
   cancelBtn->setCursor(Qt::PointingHandCursor);
   cancelBtn->setStyleSheet(R"(
         QPushButton {
-            background-color: transparent;
+            background-color: rgba(255, 255, 255, 150);
             border: 1px solid rgba(200, 200, 200, 150);
-            border-radius: 10px;
-            padding: 6px 12px;
-            color: #718096;
+            border-radius: 12px;
+            padding: 8px 15px;
+            color: #4a5568;
             font-weight: 600;
         }
         QPushButton:hover {
-            background-color: rgba(0, 0, 0, 10);
-            color: #4a5568;
+            background-color: rgba(255, 255, 255, 220);
+            color: #2d3748;
         }
     )");
   connect(cancelBtn, &QPushButton::clicked, this, &QDialog::reject);
@@ -95,8 +136,8 @@ void AddFriendDialog::setupUI() {
         QPushButton {
             background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #4facfe, stop:1 #00f2fe);
             border: none;
-            border-radius: 10px;
-            padding: 6px 20px;
+            border-radius: 12px;
+            padding: 8px 20px;
             color: white;
             font-weight: 700;
         }
@@ -104,7 +145,7 @@ void AddFriendDialog::setupUI() {
             background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #439ce0, stop:1 #00dce8);
         }
     )");
-  connect(addBtn, &QPushButton::clicked, this, &QDialog::accept);
+  connect(addBtn, &QPushButton::clicked, this, &AddFriendDialog::onAddClicked);
 
   btnLayout->addWidget(cancelBtn);
   btnLayout->addWidget(addBtn);
