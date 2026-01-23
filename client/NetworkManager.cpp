@@ -110,6 +110,10 @@ void NetworkManager::onReadyRead() {
       } else if (pkt.type() == wizz::PacketType::Error) {
         QString msg = QString::fromStdString(pkt.readString());
         emit errorOccurred(msg);
+      } else if (pkt.type() == wizz::PacketType::DirectMessage) {
+        QString sender = QString::fromStdString(pkt.readString());
+        QString text = QString::fromStdString(pkt.readString());
+        emit messageReceived(sender, text);
       }
 
     } catch (...) {
