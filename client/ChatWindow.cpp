@@ -317,17 +317,20 @@ void ChatWindow::setupUI() {
 
   m_messageInput = new QLineEdit(inputContainer);
   m_messageInput->setPlaceholderText("Type a message...");
+  m_messageInput->setAttribute(Qt::WA_MacShowFocusRect,
+                               false); // Remove native rect
   m_messageInput->setStyleSheet(R"(
       QLineEdit {
-          background-color: rgba(255, 255, 255, 150);
-          border: 1px solid rgba(255, 255, 255, 200);
+          background-color: rgba(255, 255, 255, 200);
+          border: 1px solid rgba(255, 255, 255, 150);
           border-radius: 20px;
           padding: 8px 15px;
           font-size: 13px;
+          min-height: 24px;
       }
       QLineEdit:focus {
           background-color: white;
-          border: 1px solid #4facfe;
+          border: 2px solid #4facfe;
       }
   )");
   connect(m_messageInput, &QLineEdit::returnPressed, this,
