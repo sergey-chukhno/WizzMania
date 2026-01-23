@@ -229,7 +229,6 @@ void MainWindow::setupUI() {
             border-radius: 12px;
         }
         QListWidget::item {
-            padding: 12px;
             border-bottom: 1px solid rgba(200, 220, 240, 80);
         }
         QListWidget::item:hover {
@@ -336,8 +335,8 @@ void MainWindow::populateContactList() {
   for (const ContactInfo &contact : sorted) {
     QWidget *itemWidget = new QWidget();
     QHBoxLayout *itemLayout = new QHBoxLayout(itemWidget);
-    itemLayout->setContentsMargins(10, 8, 10, 8);
-    itemLayout->setSpacing(12);
+    itemLayout->setContentsMargins(15, 12, 15, 12);
+    itemLayout->setSpacing(15);
 
     // Avatar
     QLabel *avatar = new QLabel();
