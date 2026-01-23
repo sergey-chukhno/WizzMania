@@ -93,13 +93,23 @@ void NetworkManager::onReadyRead() {
       emit packetReceived(pkt);
 
       // Parse high-level packets
+      // Parse high-level packets
       if (pkt.type() == wizz::PacketType::ContactList) {
         uint32_t count = pkt.readInt();
-        QList<QString> contacts;
+        QList<QPair<QString, int>> contacts;
         for (uint32_t i = 0; i < count; ++i) {
-          contacts.append(QString::fromStdString(pkt.readString()));
+          QString name = QString::fromStdString(pkt.readString());
+          int status = static_cast<int>(pkt.readInt());
+          contacts.append({name, status});
         }
         emit contactListReceived(contacts);
+      } else if (pkt.type() == wizz::PacketType::ContactStatusChange) {
+        int status = static_cast<int>(pkt.readInt());
+        QString username = QString::fromStdString(pkt.readString());
+        emit contactStatusChanged(username, status);
+      } else if (pkt.type() == wizz::PacketType::Error) {
+        QString msg = QString::fromStdString(pkt.readString());
+        emit errorOccurred(msg);
       }
 
     } catch (...) {
