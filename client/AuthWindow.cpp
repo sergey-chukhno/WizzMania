@@ -219,12 +219,21 @@ QFrame *AuthWindow::createLoginCard() {
   m_loginButton->setCursor(Qt::PointingHandCursor);
   m_loginButton->setFixedHeight(48);
   m_loginButton->setStyleSheet(R"(
-        background-color: rgba(80, 180, 255, 120);
-        border: 2px solid rgba(150, 220, 255, 200);
-        border-radius: 24px;
-        font-size: 17px;
-        font-weight: bold;
-        color: white;
+        QPushButton {
+            background-color: rgba(80, 180, 255, 120);
+            border: 2px solid rgba(150, 220, 255, 200);
+            border-radius: 24px;
+            font-size: 17px;
+            font-weight: bold;
+            color: white;
+        }
+        QPushButton:hover {
+            background-color: rgba(100, 200, 255, 180);
+            border: 2px solid rgba(180, 240, 255, 255);
+        }
+        QPushButton:pressed {
+            background-color: rgba(60, 160, 240, 200);
+        }
     )");
   innerLayout->addWidget(m_loginButton);
 
@@ -233,8 +242,17 @@ QFrame *AuthWindow::createLoginCard() {
 
   QPushButton *createAcc = new QPushButton("Create account", innerFrame);
   createAcc->setCursor(Qt::PointingHandCursor);
-  createAcc->setStyleSheet("background: transparent; border: none; font-size: "
-                           "13px; color: rgba(60, 80, 100, 180);");
+  createAcc->setStyleSheet(R"(
+        QPushButton {
+            background: transparent;
+            border: none;
+            font-size: 13px;
+            color: rgba(60, 80, 100, 180);
+        }
+        QPushButton:hover {
+            color: rgb(0, 120, 200);
+        }
+    )");
 
   QLabel *separator = new QLabel("|", innerFrame);
   separator->setStyleSheet(
@@ -242,7 +260,17 @@ QFrame *AuthWindow::createLoginCard() {
 
   QPushButton *offlineMode = new QPushButton("Offline mode", innerFrame);
   offlineMode->setCursor(Qt::PointingHandCursor);
-  offlineMode->setStyleSheet(createAcc->styleSheet());
+  offlineMode->setStyleSheet(R"(
+        QPushButton {
+            background: transparent;
+            border: none;
+            font-size: 13px;
+            color: rgba(60, 80, 100, 180);
+        }
+        QPushButton:hover {
+            color: rgb(0, 120, 200);
+        }
+    )");
 
   secondaryRow->addStretch();
   secondaryRow->addWidget(createAcc);
@@ -395,12 +423,21 @@ QFrame *AuthWindow::createRegisterCard() {
   m_registerButton->setCursor(Qt::PointingHandCursor);
   m_registerButton->setFixedHeight(48);
   m_registerButton->setStyleSheet(R"(
-        background-color: rgba(80, 180, 255, 120);
-        border: 2px solid rgba(150, 220, 255, 200);
-        border-radius: 24px;
-        font-size: 17px;
-        font-weight: bold;
-        color: white;
+        QPushButton {
+            background-color: rgba(80, 180, 255, 120);
+            border: 2px solid rgba(150, 220, 255, 200);
+            border-radius: 24px;
+            font-size: 17px;
+            font-weight: bold;
+            color: white;
+        }
+        QPushButton:hover {
+            background-color: rgba(100, 200, 255, 180);
+            border: 2px solid rgba(180, 240, 255, 255);
+        }
+        QPushButton:pressed {
+            background-color: rgba(60, 160, 240, 200);
+        }
     )");
   innerLayout->addWidget(m_registerButton);
 
@@ -408,8 +445,17 @@ QFrame *AuthWindow::createRegisterCard() {
   QHBoxLayout *backRow = new QHBoxLayout();
   QPushButton *backToLogin = new QPushButton("Back to login", innerFrame);
   backToLogin->setCursor(Qt::PointingHandCursor);
-  backToLogin->setStyleSheet("background: transparent; border: none; "
-                             "font-size: 13px; color: rgba(60, 80, 100, 180);");
+  backToLogin->setStyleSheet(R"(
+        QPushButton {
+            background: transparent;
+            border: none;
+            font-size: 13px;
+            color: rgba(60, 80, 100, 180);
+        }
+        QPushButton:hover {
+            color: rgb(0, 120, 200);
+        }
+    )");
 
   backRow->addStretch();
   backRow->addWidget(backToLogin);
