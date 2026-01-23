@@ -107,6 +107,9 @@ void NetworkManager::onReadyRead() {
         int status = static_cast<int>(pkt.readInt());
         QString username = QString::fromStdString(pkt.readString());
         emit contactStatusChanged(username, status);
+      } else if (pkt.type() == wizz::PacketType::Error) {
+        QString msg = QString::fromStdString(pkt.readString());
+        emit errorOccurred(msg);
       }
 
     } catch (...) {

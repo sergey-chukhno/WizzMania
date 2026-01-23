@@ -9,8 +9,7 @@
 AddFriendDialog::AddFriendDialog(QWidget *parent) : QDialog(parent) {
   setWindowFlags(Qt::FramelessWindowHint | Qt::Dialog);
   setAttribute(Qt::WA_TranslucentBackground);
-  setFixedSize(320, 240); // Slightly larger for error msg
-  m_background = QPixmap(":/assets/login_bg.png");
+  setFixedSize(320, 240);
   setupUI();
 }
 
@@ -23,7 +22,6 @@ void AddFriendDialog::clearInput() {
 
 void AddFriendDialog::showError(const QString &message) {
   m_errorLabel->setText(message);
-  // Shake animation could happen here
 }
 
 void AddFriendDialog::onAddClicked() {
@@ -31,18 +29,7 @@ void AddFriendDialog::onAddClicked() {
   if (!text.isEmpty()) {
     m_errorLabel->clear();
     emit addRequested(text);
-    // Do NOT accept() here. Wait for success/error.
   }
-}
-
-void AddFriendDialog::paintEvent(QPaintEvent *event) {
-  QPainter painter(this);
-  if (!m_background.isNull()) {
-    painter.drawPixmap(
-        rect(), m_background.scaled(size(), Qt::KeepAspectRatioByExpanding,
-                                    Qt::SmoothTransformation));
-  }
-  QDialog::paintEvent(event);
 }
 
 void AddFriendDialog::setupUI() {
@@ -52,10 +39,11 @@ void AddFriendDialog::setupUI() {
   // Glass Frame
   QFrame *glassFrame = new QFrame(this);
   glassFrame->setObjectName("dialogFrame");
+  // Updated Style: More transparent (20 alpha), keeping border
   glassFrame->setStyleSheet(R"(
         #dialogFrame {
-            background-color: rgba(255, 255, 255, 200);
-            border: 1px solid rgba(255, 255, 255, 180);
+            background-color: rgba(255, 255, 255, 20);
+            border: 2px solid rgba(255, 255, 255, 180);
             border-radius: 20px;
         }
     )");
@@ -72,6 +60,12 @@ void AddFriendDialog::setupUI() {
 
   // Title
   QLabel *titleLabel = new QLabel("Add Friend", glassFrame);
+  // Title text color might need to be lighter if background is dark?
+  // Assuming generic use, dark text on glass is okay if app bg is lightish.
+  // Given "login_bg.png" is waves, maybe white text is better?
+  // Current: #1a2530 (dark).
+  // I will stick to current text colors as per screenshot request was about
+  // background.
   titleLabel->setStyleSheet(
       "font-size: 20px; font-weight: 700; color: #1a2530; "
       "background: transparent;");

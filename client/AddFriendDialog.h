@@ -16,15 +16,11 @@ public:
 signals:
   void addRequested(const QString &username);
 
-protected:
-  void paintEvent(QPaintEvent *event) override;
-
 private slots:
   void onAddClicked();
 
 private:
   QLineEdit *m_usernameInput;
   QLabel *m_errorLabel;
-  QPixmap m_background;
   void setupUI();
 };

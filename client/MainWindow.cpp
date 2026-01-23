@@ -34,6 +34,7 @@ MainWindow::MainWindow(const QString &username, QWidget *parent)
 
             if (m_addFriendDialog && m_addFriendDialog->isVisible()) {
               m_addFriendDialog->clearInput();
+              m_addFriendDialog->hide();
             }
           });
 
