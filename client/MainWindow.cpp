@@ -1,7 +1,9 @@
 #include "MainWindow.h"
 #include "NetworkManager.h"
 #include <QGraphicsDropShadowEffect>
+#include <QInputDialog>
 #include <QPaintEvent>
+#include <QPair> // Include QPair
 #include <QTimer>
 
 MainWindow::MainWindow(const QString &username, QWidget *parent)
@@ -14,17 +16,29 @@ MainWindow::MainWindow(const QString &username, QWidget *parent)
   m_backgroundPixmap = QPixmap(":/assets/login_bg.png");
 
   // Connect to NetworkManager for contact updates
+  // Connect to NetworkManager for contact updates
   connect(&NetworkManager::instance(), &NetworkManager::contactListReceived,
-          this, [this](const QList<QString> &friends) {
+          this, [this](const QList<QPair<QString, int>> &friends) {
             QList<ContactInfo> newContacts;
-            for (const QString &name : friends) {
-              // New contacts are offline by default until server says otherwise
-              // But we might want to preserve existing status if present
-              UserStatus status = UserStatus::Offline; // Default for now
+            for (const auto &pair : friends) {
+              QString name = pair.first;
+              int statusInt = pair.second;
+              UserStatus status = static_cast<UserStatus>(statusInt);
+              if (statusInt > 3)
+                status = UserStatus::Offline; // Fail-safe
+
               newContacts.append({name, status, "", QPixmap()});
             }
             setContacts(newContacts);
           });
+
+  // Connect Status Change
+  connect(&NetworkManager::instance(), &NetworkManager::contactStatusChanged,
+          this, [this](const QString &username, int status) {
+            updateContactStatus(username, static_cast<UserStatus>(status), "");
+          });
+
+  setupUI();
 
   setupUI();
 }
@@ -214,11 +228,39 @@ void MainWindow::setupUI() {
 
   cardLayout->addWidget(profileFrame);
 
-  // --- Friends Label ---
-  QLabel *friendsLabel = new QLabel("Friends", glassCard);
+  // --- Friends Header Row ---
+  QWidget *friendHeader = new QWidget(glassCard);
+  QHBoxLayout *friendHeaderLayout = new QHBoxLayout(friendHeader);
+  friendHeaderLayout->setContentsMargins(0, 5, 0, 5);
+
+  QLabel *friendsLabel = new QLabel("Friends", friendHeader);
   friendsLabel->setStyleSheet("font-size: 14px; font-weight: 600; color: "
                               "#4a5568; background: transparent;");
-  cardLayout->addWidget(friendsLabel);
+
+  QPushButton *addFriendBtn = new QPushButton("+", friendHeader);
+  addFriendBtn->setFixedSize(24, 24);
+  addFriendBtn->setCursor(Qt::PointingHandCursor);
+  addFriendBtn->setStyleSheet(R"(
+        QPushButton {
+            background-color: rgba(80, 180, 255, 40);
+            border: 1px solid rgba(80, 180, 255, 100);
+            border-radius: 12px;
+            color: #2d3748;
+            font-weight: bold;
+            padding-bottom: 2px;
+        }
+        QPushButton:hover {
+            background-color: rgba(80, 180, 255, 80);
+        }
+    )");
+  connect(addFriendBtn, &QPushButton::clicked, this,
+          &MainWindow::onAddFriendClicked);
+
+  friendHeaderLayout->addWidget(friendsLabel);
+  friendHeaderLayout->addStretch();
+  friendHeaderLayout->addWidget(addFriendBtn);
+
+  cardLayout->addWidget(friendHeader);
 
   // --- Contact List ---
   m_contactList = new QListWidget(glassCard);
@@ -308,13 +350,10 @@ void MainWindow::setupUI() {
   mainLayout->addWidget(glassCard);
 
   // Add sample contacts for testing
-  QList<ContactInfo> sampleContacts = {
-      {"RetroGuy", UserStatus::Away, "BRB, Dialing Up....", QPixmap()},
-      {"NostalgiaQueen", UserStatus::Away, "", QPixmap()},
-      {"CodeMaster", UserStatus::Online, "", QPixmap()},
-      {"SpaceChick123", UserStatus::Online, "Out of This World", QPixmap()},
-      {"TestUser", UserStatus::Offline, "", QPixmap()}};
-  setContacts(sampleContacts);
+  // Remove hardcoded sample data
+  // Contacts will be loaded from NetworkManager signal
+  // QList<ContactInfo> sampleContacts = ...
+  // setContacts(sampleContacts);
 }
 
 void MainWindow::setContacts(const QList<ContactInfo> &contacts) {
@@ -404,6 +443,28 @@ void MainWindow::onStatusChanged(int index) {
   m_currentStatus = static_cast<UserStatus>(index);
   emit statusChanged(m_currentStatus,
                      m_statusMessageInput ? m_statusMessageInput->text() : "");
+
+  // Inform NetworkManager
+  // We need to implement sendStatusChange in NetworkManager first, but for now
+  // we can manually construct packet or assume server knows from heartbeat?
+  // Protocol says: ContactStatusChange(203). We should send this.
+  wizz::Packet statusPkt(wizz::PacketType::ContactStatusChange);
+  statusPkt.writeInt(static_cast<uint32_t>(m_currentStatus));
+  statusPkt.writeString(""); // Optional message
+  NetworkManager::instance().sendPacket(statusPkt);
+}
+
+void MainWindow::onAddFriendClicked() {
+  bool ok;
+  QString text =
+      QInputDialog::getText(this, tr("Add Friend"), tr("Enter username:"),
+                            QLineEdit::Normal, "", &ok);
+  if (ok && !text.isEmpty()) {
+    // Send AddContact Packet
+    wizz::Packet pkt(wizz::PacketType::AddContact);
+    pkt.writeString(text.toStdString());
+    NetworkManager::instance().sendPacket(pkt);
+  }
 }
 
 void MainWindow::onSendMessage() {

@@ -17,9 +17,12 @@ namespace wizz {
 
 ClientSession::ClientSession(SocketType socket, DatabaseManager &db,
                              OnLoginCallback onLogin,
-                             OnMessageCallback onMessage)
+                             OnMessageCallback onMessage,
+                             GetStatusCallback getStatus,
+                             OnStatusChangeCallback onStatusChange)
     : m_socket(socket), m_isLoggedIn(false), m_db(&db), m_onLogin(onLogin),
-      m_onMessage(onMessage) {}
+      m_onMessage(onMessage), m_getStatus(getStatus),
+      m_onStatusChange(onStatusChange) {}
 
 ClientSession::~ClientSession() {
   if (m_socket != INVALID_SOCKET_VAL) {
@@ -32,6 +35,8 @@ ClientSession::ClientSession(ClientSession &&other) noexcept
       m_isLoggedIn(other.m_isLoggedIn), m_db(other.m_db),
       m_onLogin(std::move(other.m_onLogin)),
       m_onMessage(std::move(other.m_onMessage)),
+      m_getStatus(std::move(other.m_getStatus)),
+      m_onStatusChange(std::move(other.m_onStatusChange)),
       m_buffer(std::move(other.m_buffer)) {
   other.m_socket = INVALID_SOCKET_VAL;
 }
@@ -49,6 +54,8 @@ ClientSession &ClientSession::operator=(ClientSession &&other) noexcept {
     m_db = other.m_db; // Copy Pointer
     m_onLogin = std::move(other.m_onLogin);
     m_onMessage = std::move(other.m_onMessage);
+    m_getStatus = std::move(other.m_getStatus);
+    m_onStatusChange = std::move(other.m_onStatusChange);
 
     other.m_socket = INVALID_SOCKET_VAL;
   }
@@ -129,6 +136,10 @@ void ClientSession::processPacket(Packet &packet) {
 
   case PacketType::RemoveContact:
     handleRemoveContact(packet);
+    break;
+
+  case PacketType::ContactStatusChange:
+    handleStatusChange(packet);
     break;
 
   default:
@@ -248,6 +259,9 @@ void ClientSession::handleLogin(Packet &packet) {
       contactList.writeInt(static_cast<uint32_t>(friends.size()));
       for (const auto &name : friends) {
         contactList.writeString(name);
+        // Sync Status
+        int status = m_getStatus ? m_getStatus(name) : 3; // 3 = Offline default
+        contactList.writeInt(static_cast<uint32_t>(status));
       }
       sendPacket(contactList);
     }
@@ -291,6 +305,8 @@ void ClientSession::handleAddContact(Packet &packet) {
     resp.writeInt(static_cast<uint32_t>(friends.size()));
     for (const auto &name : friends) {
       resp.writeString(name);
+      int status = m_getStatus ? m_getStatus(name) : 3;
+      resp.writeInt(static_cast<uint32_t>(status));
     }
     sendPacket(resp);
   } else {
@@ -322,8 +338,31 @@ void ClientSession::handleRemoveContact(Packet &packet) {
     resp.writeInt(static_cast<uint32_t>(friends.size()));
     for (const auto &name : friends) {
       resp.writeString(name);
+      int status = m_getStatus ? m_getStatus(name) : 3;
+      resp.writeInt(static_cast<uint32_t>(status));
     }
     sendPacket(resp);
+  }
+}
+
+void ClientSession::handleStatusChange(Packet &packet) {
+  if (!m_isLoggedIn)
+    return;
+
+  int newStatus;
+  try {
+    newStatus = static_cast<int>(packet.readInt());
+    // Optional status message reading if protocol supports it
+    // std::string msg = packet.readString();
+  } catch (...) {
+    return;
+  }
+
+  std::cout << "[Session] Status Change: " << m_username << " -> " << newStatus
+            << std::endl;
+
+  if (m_onStatusChange) {
+    m_onStatusChange(this, newStatus);
   }
 }
 

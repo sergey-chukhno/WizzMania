@@ -48,6 +48,7 @@ protected:
 private slots:
   void onStatusChanged(int index);
   void onSendMessage();
+  void onAddFriendClicked();
 
 private:
   void setupUI();

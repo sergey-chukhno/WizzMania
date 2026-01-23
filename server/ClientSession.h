@@ -19,12 +19,18 @@ using OnLoginCallback = std::function<void(ClientSession *)>;
 // Callback for Routing: (Sender, TargetUsername, Hash/Body)
 using OnMessageCallback = std::function<void(
     ClientSession *, const std::string &, const std::string &)>;
+// Callback for Status: (Username) -> Status Int
+using GetStatusCallback = std::function<int(const std::string &)>;
+// Callback for Status Change: (Sender, NewStatus)
+using OnStatusChangeCallback = std::function<void(ClientSession *, int)>;
 
 class ClientSession {
 public:
   // Pass DB by reference, store as pointer, and Callbacks
   explicit ClientSession(SocketType socket, DatabaseManager &db,
-                         OnLoginCallback onLogin, OnMessageCallback onMessage);
+                         OnLoginCallback onLogin, OnMessageCallback onMessage,
+                         GetStatusCallback getStatus,
+                         OnStatusChangeCallback onStatusChange);
   ~ClientSession(); // Closes socket if owned
 
   // Delete copy to prevent double-close of socket
@@ -53,6 +59,7 @@ private:
   void handleLogin(Packet &packet);
   void handleRegister(Packet &packet);
   void handleDirectMessage(Packet &packet);
+  void handleStatusChange(Packet &packet);
 
   // Contact Handlers
   void handleAddContact(Packet &packet);
@@ -69,6 +76,8 @@ private:
   // Callbacks
   OnLoginCallback m_onLogin;
   OnMessageCallback m_onMessage;
+  GetStatusCallback m_getStatus;
+  OnStatusChangeCallback m_onStatusChange;
 
   // Buffer for incoming partial data
   std::vector<uint8_t> m_buffer;

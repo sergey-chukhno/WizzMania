@@ -153,6 +153,22 @@ void TcpServer::run() {
                             << std::endl;
                   m_onlineUsers[username] = session;
 
+                  // Broadcast Online Status to Friends
+                  std::vector<std::string> friends = m_db.getFriends(username);
+                  for (const auto &friendName : friends) {
+                    auto it = m_onlineUsers.find(friendName);
+                    if (it != m_onlineUsers.end()) {
+                      // 1. Notify Friend that I am Online (Status=1)
+                      Packet notify(PacketType::ContactStatusChange);
+                      notify.writeInt(1); // Online
+                      notify.writeString(username);
+                      it->second->sendPacket(notify);
+
+                      // 2. Friend is Online, so I should know?
+                      // (Already handled by my initial ContactList sync)
+                    }
+                  }
+
                   // Check for Offline Messages
                   auto pending = m_db.fetchPendingMessages(username);
                   if (!pending.empty()) {
@@ -198,6 +214,28 @@ void TcpServer::run() {
                   // Store in DB (History + Offline)
                   m_db.storeMessage(sender->getUsername(), target, msg,
                                     delivered);
+                },
+                // 3. GetStatus Callback
+                [this](const std::string &username) -> int {
+                  if (m_onlineUsers.find(username) != m_onlineUsers.end()) {
+                    return 1; // Online
+                  }
+                  return 3; // Offline
+                },
+                // 4. OnStatusChange Callback
+                [this](ClientSession *sender, int newStatus) {
+                  std::string username = sender->getUsername();
+                  // Broadcast to friends
+                  std::vector<std::string> friends = m_db.getFriends(username);
+                  for (const auto &friendName : friends) {
+                    auto it = m_onlineUsers.find(friendName);
+                    if (it != m_onlineUsers.end()) {
+                      Packet notify(PacketType::ContactStatusChange);
+                      notify.writeInt(static_cast<uint32_t>(newStatus));
+                      notify.writeString(username);
+                      it->second->sendPacket(notify);
+                    }
+                  }
                 }));
       }
     }
@@ -221,6 +259,18 @@ void TcpServer::run() {
           if (!username.empty()) {
             m_onlineUsers.erase(username);
             std::cout << "[Server] User Offline: " << username << std::endl;
+
+            // Broadcast Offline Status (3) to Friends
+            std::vector<std::string> friends = m_db.getFriends(username);
+            for (const auto &friendName : friends) {
+              auto it = m_onlineUsers.find(friendName);
+              if (it != m_onlineUsers.end()) {
+                Packet notify(PacketType::ContactStatusChange);
+                notify.writeInt(3); // Offline
+                notify.writeString(username);
+                it->second->sendPacket(notify);
+              }
+            }
           }
 
           it = m_sessions.erase(it); // Remove from map
