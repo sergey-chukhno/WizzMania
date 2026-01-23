@@ -20,6 +20,9 @@ class AuthWindow : public QWidget {
 
 public:
   explicit AuthWindow(QWidget *parent = nullptr);
+  QString getLoggedInUsername() const {
+    return m_loginUsername ? m_loginUsername->text() : QString();
+  }
 
 protected:
   void paintEvent(QPaintEvent *event) override;
