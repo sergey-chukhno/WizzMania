@@ -13,6 +13,19 @@ MainWindow::MainWindow(const QString &username, QWidget *parent)
   // Load background
   m_backgroundPixmap = QPixmap(":/assets/login_bg.png");
 
+  // Connect to NetworkManager for contact updates
+  connect(&NetworkManager::instance(), &NetworkManager::contactListReceived,
+          this, [this](const QList<QString> &friends) {
+            QList<ContactInfo> newContacts;
+            for (const QString &name : friends) {
+              // New contacts are offline by default until server says otherwise
+              // But we might want to preserve existing status if present
+              UserStatus status = UserStatus::Offline; // Default for now
+              newContacts.append({name, status, "", QPixmap()});
+            }
+            setContacts(newContacts);
+          });
+
   setupUI();
 }
 

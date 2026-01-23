@@ -91,6 +91,17 @@ void NetworkManager::onReadyRead() {
     try {
       wizz::Packet pkt(packetData);
       emit packetReceived(pkt);
+
+      // Parse high-level packets
+      if (pkt.type() == wizz::PacketType::ContactList) {
+        uint32_t count = pkt.readInt();
+        QList<QString> contacts;
+        for (uint32_t i = 0; i < count; ++i) {
+          contacts.append(QString::fromStdString(pkt.readString()));
+        }
+        emit contactListReceived(contacts);
+      }
+
     } catch (...) {
       // Log error?
       emit errorOccurred("Packet parsing error");
