@@ -26,8 +26,8 @@ signals:
   void errorOccurred(QString errorMsg);
 
   // Data Signals (To be expanded)
-  void packetReceived(const wizz::Packet &packet); // Raw packet for now, will
-                                                   // refine signals later
+  void packetReceived(const wizz::Packet &packet); // Raw packet
+  void contactListReceived(const QList<QString> &contacts);
 
 private slots:
   void onSocketConnected();
