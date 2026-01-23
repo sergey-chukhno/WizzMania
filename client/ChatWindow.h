@@ -16,10 +16,12 @@ public:
 
   void addMessage(const QString &sender, const QString &text, bool isSelf);
   void flash(); // Visual alert
+  void shake(); // Nudge effect
   QString getPartnerName() const { return m_partnerName; }
 
 signals:
   void sendMessage(const QString &text);
+  void sendNudge();
   void windowClosed(const QString &partnerName);
 
 protected:
@@ -30,6 +32,7 @@ protected:
 
 private slots:
   void onSendClicked();
+  void onWizzClicked();
 
 private:
   void setupUI();

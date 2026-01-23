@@ -114,6 +114,9 @@ void NetworkManager::onReadyRead() {
         QString sender = QString::fromStdString(pkt.readString());
         QString text = QString::fromStdString(pkt.readString());
         emit messageReceived(sender, text);
+      } else if (pkt.type() == wizz::PacketType::Nudge) {
+        QString sender = QString::fromStdString(pkt.readString());
+        emit nudgeReceived(sender);
       }
 
     } catch (...) {

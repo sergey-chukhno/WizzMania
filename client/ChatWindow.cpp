@@ -5,6 +5,8 @@
 #include <QLabel>
 #include <QMouseEvent>
 #include <QPainter>
+#include <QPainterPath>
+#include <QPropertyAnimation>
 #include <QPushButton>
 #include <QScrollBar>
 
@@ -65,6 +67,15 @@ void ChatWindow::closeEvent(QCloseEvent *event) {
 void ChatWindow::paintEvent(QPaintEvent *event) {
   Q_UNUSED(event);
   QPainter painter(this);
+  painter.setRenderHint(QPainter::Antialiasing);
+
+  // Rounded Path
+  QPainterPath path;
+  path.addRoundedRect(rect(), 20, 20);
+
+  // Clip to rounded rect
+  painter.setClipPath(path);
+
   if (!m_background.isNull()) {
     // Fill with scaled background
     painter.drawPixmap(
@@ -122,6 +133,24 @@ void ChatWindow::flash() {
   QApplication::alert(this); // OS-level flash
 }
 
+void ChatWindow::shake() {
+  // Shake animation
+  QPropertyAnimation *animation = new QPropertyAnimation(this, "pos");
+  animation->setDuration(500);
+  animation->setLoopCount(3);
+
+  QPoint startPos = pos();
+  animation->setKeyValueAt(0, startPos);
+  animation->setKeyValueAt(0.25, startPos + QPoint(10, 0));
+  animation->setKeyValueAt(0.5, startPos + QPoint(-10, 0));
+  animation->setKeyValueAt(0.75, startPos + QPoint(10, 0));
+  animation->setKeyValueAt(1, startPos);
+
+  animation->start(QAbstractAnimation::DeleteWhenStopped);
+  flash();
+  // Play sound here if implemented
+}
+
 void ChatWindow::onSendClicked() {
   QString text = m_messageInput->text().trimmed();
   if (text.isEmpty())
@@ -132,6 +161,11 @@ void ChatWindow::onSendClicked() {
   m_messageInput->clear();
 }
 
+void ChatWindow::onWizzClicked() {
+  emit sendNudge();
+  addMessage("Me", "You sent a Wizz!", true); // Local echo
+}
+
 QWidget *ChatWindow::createMessageBubble(const QString &text, bool isSelf) {
   QWidget *container = new QWidget();
   QHBoxLayout *layout = new QHBoxLayout(container);
@@ -140,8 +174,7 @@ QWidget *ChatWindow::createMessageBubble(const QString &text, bool isSelf) {
   QLabel *bubble = new QLabel(text);
   bubble->setWordWrap(true);
   bubble->setTextInteractionFlags(Qt::TextSelectableByMouse);
-  bubble->setMaximumWidth(
-      250); // Max width of bubble (slightly less for compact window)
+  bubble->setMaximumWidth(250); // Max width of bubble
 
   // Style based on sender
   if (isSelf) {
@@ -236,11 +269,18 @@ void ChatWindow::setupUI() {
 
   mainLayout->addWidget(header);
 
+  // Add spacer between header and chat if needed, but ScrollArea should take
+  // it. Ensure header is fixed size
+  header->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
+  header->setFixedHeight(50);
+
   // Chat Area
   m_chatArea = new QScrollArea(this);
   m_chatArea->setWidgetResizable(true);
   m_chatArea->setStyleSheet("background: transparent; border: none;");
   m_chatArea->viewport()->setStyleSheet("background: transparent;");
+  m_chatArea->setSizePolicy(QSizePolicy::Expanding,
+                            QSizePolicy::Expanding); // FORCE EXPAND
 
   m_chatContainer = new QWidget();
   m_chatContainer->setStyleSheet("background: transparent;");
@@ -252,8 +292,28 @@ void ChatWindow::setupUI() {
 
   // Input Area
   QWidget *inputContainer = new QWidget(this);
+  inputContainer->setSizePolicy(QSizePolicy::Preferred,
+                                QSizePolicy::Fixed); // Fixed height
+  // ...
   QHBoxLayout *inputLayout = new QHBoxLayout(inputContainer);
   inputLayout->setContentsMargins(0, 10, 0, 0);
+  inputLayout->setSpacing(8);
+
+  // Emoji Button (Placeholder)
+  QPushButton *emojiBtn = new QPushButton("😊", inputContainer);
+  emojiBtn->setFixedSize(36, 36);
+  emojiBtn->setCursor(Qt::PointingHandCursor);
+  emojiBtn->setStyleSheet(R"(
+      QPushButton {
+          background: rgba(255, 255, 255, 100);
+          border-radius: 18px;
+          border: 1px solid rgba(255, 255, 255, 200);
+          font-size: 16px;
+      }
+      QPushButton:hover {
+          background: rgba(255, 255, 255, 150);
+      }
+  )");
 
   m_messageInput = new QLineEdit(inputContainer);
   m_messageInput->setPlaceholderText("Type a message...");
@@ -273,6 +333,30 @@ void ChatWindow::setupUI() {
   connect(m_messageInput, &QLineEdit::returnPressed, this,
           &ChatWindow::onSendClicked);
 
+  // Wizz Button
+  QPushButton *wizzBtn = new QPushButton(inputContainer);
+  wizzBtn->setFixedSize(40, 40);
+  wizzBtn->setCursor(Qt::PointingHandCursor);
+  QPixmap wizzIcon(":/assets/wizz_icon.png");
+  if (!wizzIcon.isNull()) {
+    wizzBtn->setIcon(wizzIcon);
+    wizzBtn->setIconSize(QSize(24, 24));
+  } else {
+    wizzBtn->setText("⚡");
+  }
+  wizzBtn->setStyleSheet(R"(
+      QPushButton {
+          background: rgba(255, 255, 255, 100);
+          border-radius: 20px;
+          border: 1px solid rgba(255, 255, 255, 200);
+      }
+      QPushButton:hover {
+           background: rgba(255, 255, 255, 180);
+           border: 1px solid #a1c4fd;
+      }
+  )");
+  connect(wizzBtn, &QPushButton::clicked, this, &ChatWindow::onWizzClicked);
+
   QPushButton *sendBtn = new QPushButton("➤", inputContainer);
   sendBtn->setFixedSize(36, 36);
   sendBtn->setCursor(Qt::PointingHandCursor);
@@ -290,8 +374,19 @@ void ChatWindow::setupUI() {
   )");
   connect(sendBtn, &QPushButton::clicked, this, &ChatWindow::onSendClicked);
 
+  inputLayout->addWidget(emojiBtn);
   inputLayout->addWidget(m_messageInput);
+  inputLayout->addWidget(wizzBtn);
   inputLayout->addWidget(sendBtn);
 
-  mainLayout->addWidget(inputContainer);
+  QVBoxLayout *bottomLayout = new QVBoxLayout();
+  bottomLayout->addWidget(inputContainer);
+
+  // Typing Label
+  QLabel *typingLabel = new QLabel("", this);
+  typingLabel->setStyleSheet("font-size: 10px; color: #4a5568; font-style: "
+                             "italic; margin-left: 50px;");
+  bottomLayout->addWidget(typingLabel);
+
+  mainLayout->addLayout(bottomLayout);
 }

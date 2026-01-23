@@ -67,6 +67,21 @@ MainWindow::MainWindow(const QString &username, QWidget *parent)
             }
           });
 
+  // Connect Nudge Received
+  connect(&NetworkManager::instance(), &NetworkManager::nudgeReceived, this,
+          [this](const QString &sender) {
+            if (!m_openChats.contains(sender)) {
+              onContactDoubleClicked(sender); // Open window
+            }
+            if (m_openChats.contains(sender)) {
+              m_openChats[sender]->addMessage(sender, "sent you a Wizz!",
+                                              false);
+              m_openChats[sender]->shake();
+              m_openChats[sender]->show();
+              m_openChats[sender]->activateWindow();
+            }
+          });
+
   // Initialize Dialogs
   m_addFriendDialog = new AddFriendDialog(this);
   connect(
