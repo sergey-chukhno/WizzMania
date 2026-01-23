@@ -29,6 +29,8 @@ signals:
   void packetReceived(const wizz::Packet &packet); // Raw packet
   void contactListReceived(const QList<QPair<QString, int>> &contacts);
   void contactStatusChanged(const QString &username, int status);
+  void messageReceived(const QString &sender, const QString &text);
+  void nudgeReceived(const QString &sender);
 
 private slots:
   void onSocketConnected();

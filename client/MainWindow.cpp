@@ -1,5 +1,6 @@
 #include "MainWindow.h"
 #include "AddFriendDialog.h"
+#include "ChatWindow.h"
 #include "NetworkManager.h"
 #include <QGraphicsDropShadowEffect>
 #include <QMessageBox>
@@ -16,7 +17,6 @@ MainWindow::MainWindow(const QString &username, QWidget *parent)
   // Load background
   m_backgroundPixmap = QPixmap(":/assets/login_bg.png");
 
-  // Connect to NetworkManager for contact updates
   // Connect to NetworkManager for contact updates
   connect(&NetworkManager::instance(), &NetworkManager::contactListReceived,
           this, [this](const QList<QPair<QString, int>> &friends) {
@@ -51,6 +51,34 @@ MainWindow::MainWindow(const QString &username, QWidget *parent)
               m_addFriendDialog->showError(msg);
             } else {
               QMessageBox::warning(this, "Error", msg);
+            }
+          });
+
+  // Connect Message Received (Mediator)
+  connect(&NetworkManager::instance(), &NetworkManager::messageReceived, this,
+          [this](const QString &sender, const QString &text) {
+            if (!m_openChats.contains(sender)) {
+              onContactDoubleClicked(sender);
+            }
+            if (m_openChats.contains(sender)) {
+              m_openChats[sender]->addMessage(sender, text, false);
+              m_openChats[sender]->show();
+              m_openChats[sender]->activateWindow();
+            }
+          });
+
+  // Connect Nudge Received
+  connect(&NetworkManager::instance(), &NetworkManager::nudgeReceived, this,
+          [this](const QString &sender) {
+            if (!m_openChats.contains(sender)) {
+              onContactDoubleClicked(sender); // Open window
+            }
+            if (m_openChats.contains(sender)) {
+              m_openChats[sender]->addMessage(sender, "sent you a Wizz!",
+                                              false);
+              m_openChats[sender]->shake();
+              m_openChats[sender]->show();
+              m_openChats[sender]->activateWindow();
             }
           });
 
@@ -333,9 +361,10 @@ void MainWindow::setupUI() {
         }
     )");
   m_contactList->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
+  m_contactList->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
   connect(m_contactList, &QListWidget::itemDoubleClicked, this,
           [this](QListWidgetItem *item) {
-            emit contactDoubleClicked(item->data(Qt::UserRole).toString());
+            onContactDoubleClicked(item->data(Qt::UserRole).toString());
           });
 
   cardLayout->addWidget(m_contactList, 1); // Stretch
@@ -547,4 +576,36 @@ void MainWindow::onSendMessage() {
     m_messageInput->clear();
     m_chatPreviewLabel->setText("You: " + message);
   }
+}
+
+void MainWindow::onContactDoubleClicked(const QString &username) {
+  if (m_openChats.contains(username)) {
+    ChatWindow *w = m_openChats[username];
+    w->show();
+    w->raise();
+    w->activateWindow();
+    return;
+  }
+
+  // Position relative to Main Window (Right side)
+  QPoint startPos;
+  if (this->isVisible()) {
+    startPos = this->geometry().topRight() + QPoint(20, 0); // 20px offset
+  }
+
+  ChatWindow *w = new ChatWindow(username, startPos);
+  connect(w, &ChatWindow::windowClosed, this, &MainWindow::onChatWindowClosed);
+  connect(w, &ChatWindow::sendMessage, this, [username](const QString &text) {
+    wizz::Packet pkt(wizz::PacketType::DirectMessage);
+    pkt.writeString(username.toStdString()); // Target
+    pkt.writeString(text.toStdString());     // Message
+    NetworkManager::instance().sendPacket(pkt);
+  });
+
+  w->show();
+  m_openChats.insert(username, w);
+}
+
+void MainWindow::onChatWindowClosed(const QString &partnerName) {
+  m_openChats.remove(partnerName);
 }

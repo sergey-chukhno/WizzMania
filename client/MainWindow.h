@@ -24,6 +24,7 @@ struct ContactInfo {
 };
 
 class AddFriendDialog; // Forward declaration
+class ChatWindow;      // Forward declaration
 
 /**
  * @brief MainWindow - Contact list window (MSN-style buddy list)
@@ -52,6 +53,8 @@ private slots:
   void onSendMessage();
   void onAddFriendClicked();
   void onRemoveFriendClicked();
+  void onChatWindowClosed(const QString &partnerName);
+  void onContactDoubleClicked(const QString &username);
 
 private:
   void setupUI();
@@ -81,4 +84,7 @@ private:
 
   // Dialogs
   AddFriendDialog *m_addFriendDialog = nullptr;
+
+  // Active Chats
+  QMap<QString, ChatWindow *> m_openChats;
 };
