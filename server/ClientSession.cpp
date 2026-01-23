@@ -188,7 +188,7 @@ void ClientSession::handleRegister(Packet &packet) {
     m_isLoggedIn = true;
 
     // 1. Send Success Packet FIRST
-    Packet resp(PacketType::LoginSuccess); // Reuse LoginSuccess for now
+    Packet resp(PacketType::RegisterSuccess);
     resp.writeString("Registration Successful! Welcome, " + username);
 
     std::vector<uint8_t> buffer = resp.serialize();

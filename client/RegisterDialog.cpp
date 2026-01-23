@@ -1,55 +1,54 @@
-#include "LoginDialog.h"
+#include "RegisterDialog.h"
 #include "../common/Packet.h"
 #include "NetworkManager.h"
 #include <QGraphicsDropShadowEffect>
-#include <QGraphicsOpacityEffect>
 #include <QImage>
 #include <QMessageBox>
-#include <QPainter>
+#include <QTimer>
 
-LoginDialog::LoginDialog(QWidget *parent) : QDialog(parent) {
+RegisterDialog::RegisterDialog(QWidget *parent) : QDialog(parent) {
   setupUI();
   applyStyles();
 
   connect(&NetworkManager::instance(), &NetworkManager::connected, this,
           [this]() {
-            m_statusLabel->setText("Verifying...");
+            m_statusLabel->setText("Registering...");
             m_statusLabel->setStyleSheet(
                 "color: #00f2fe; font-weight: bold; background: transparent;");
 
-            wizz::Packet loginPkt(wizz::PacketType::Login);
-            loginPkt.writeString(m_usernameInput->text().toStdString());
-            loginPkt.writeString(m_passwordInput->text().toStdString());
-            NetworkManager::instance().sendPacket(loginPkt);
+            wizz::Packet regPkt(wizz::PacketType::Register);
+            regPkt.writeString(m_usernameInput->text().toStdString());
+            regPkt.writeString(m_passwordInput->text().toStdString());
+            NetworkManager::instance().sendPacket(regPkt);
           });
 
   connect(&NetworkManager::instance(), &NetworkManager::packetReceived, this,
           [this](const wizz::Packet &constPkt) {
             wizz::Packet pkt = constPkt;
-            if (pkt.type() == wizz::PacketType::LoginSuccess) {
-              onLoginSuccess();
-            } else if (pkt.type() == wizz::PacketType::LoginFailed) {
+            if (pkt.type() == wizz::PacketType::RegisterSuccess) {
+              onRegisterSuccess();
+            } else if (pkt.type() == wizz::PacketType::RegisterFailed) {
               std::string reason = pkt.readString();
-              onLoginFailed(QString::fromStdString(reason));
+              onRegisterFailed(QString::fromStdString(reason));
             } else if (pkt.type() == wizz::PacketType::Error) {
               std::string err = pkt.readString();
-              onLoginFailed("Error: " + QString::fromStdString(err));
+              onRegisterFailed("Error: " + QString::fromStdString(err));
             }
           });
 
   connect(&NetworkManager::instance(), &NetworkManager::errorOccurred, this,
-          &LoginDialog::onConnectionError);
+          &RegisterDialog::onConnectionError);
 }
 
-QPixmap LoginDialog::processTransparentImage(const QString &path, int size) {
+QPixmap RegisterDialog::processTransparentImage(const QString &path, int size) {
   QPixmap pix(path);
   if (pix.isNull())
     return QPixmap();
   return pix.scaled(size, size, Qt::KeepAspectRatio, Qt::SmoothTransformation);
 }
 
-void LoginDialog::setupUI() {
-  setWindowTitle("Wizz Mania");
+void RegisterDialog::setupUI() {
+  setWindowTitle("Wizz Mania - Register");
   setFixedSize(1024, 768);
 
   QVBoxLayout *mainLayout = new QVBoxLayout(this);
@@ -58,7 +57,7 @@ void LoginDialog::setupUI() {
   // --- Outer Glass Card ---
   QFrame *glassCard = new QFrame(this);
   glassCard->setObjectName("glassCard");
-  glassCard->setFixedSize(500, 520);
+  glassCard->setFixedSize(500, 540);
 
   QGraphicsDropShadowEffect *cardShadow = new QGraphicsDropShadowEffect(this);
   cardShadow->setBlurRadius(60);
@@ -94,16 +93,15 @@ void LoginDialog::setupUI() {
   cardLayout->addLayout(headerLayout);
 
   // Tagline
-  QLabel *taglineLabel =
-      new QLabel("It's not 2003, but you can still log in.", glassCard);
+  QLabel *taglineLabel = new QLabel("Create your account", glassCard);
   taglineLabel->setObjectName("taglineLabel");
   cardLayout->addWidget(taglineLabel);
-  cardLayout->addSpacing(20);
+  cardLayout->addSpacing(15);
 
-  // --- Inner Glass Frame (contains inputs + buttons) ---
+  // --- Inner Glass Frame ---
   QFrame *innerFrame = new QFrame(glassCard);
   innerFrame->setObjectName("innerFrame");
-  innerFrame->setFixedSize(420, 280);
+  innerFrame->setFixedSize(420, 310);
 
   QGraphicsDropShadowEffect *innerShadow = new QGraphicsDropShadowEffect(this);
   innerShadow->setBlurRadius(20);
@@ -113,7 +111,7 @@ void LoginDialog::setupUI() {
 
   QVBoxLayout *innerLayout = new QVBoxLayout(innerFrame);
   innerLayout->setContentsMargins(25, 25, 25, 25);
-  innerLayout->setSpacing(15);
+  innerLayout->setSpacing(12);
 
   // Username Input with Icon
   QHBoxLayout *userRow = new QHBoxLayout();
@@ -146,44 +144,50 @@ void LoginDialog::setupUI() {
   passRow->addWidget(m_passwordInput);
   innerLayout->addLayout(passRow);
 
-  innerLayout->addSpacing(10);
+  // Confirm Password Input with Icon
+  QHBoxLayout *confirmRow = new QHBoxLayout();
+  QLabel *confirmIcon = new QLabel(innerFrame);
+  confirmIcon->setPixmap(processTransparentImage(":/assets/icon_lock.png", 24));
+  confirmIcon->setFixedSize(24, 24);
+  confirmIcon->setStyleSheet("background: transparent;");
 
-  // Sign In Button (Glass style)
-  m_loginButton = new QPushButton("Sign In >", innerFrame);
-  m_loginButton->setCursor(Qt::PointingHandCursor);
-  m_loginButton->setFixedHeight(48);
-  m_loginButton->setObjectName("glassSignInBtn");
+  m_confirmPasswordInput = new QLineEdit(innerFrame);
+  m_confirmPasswordInput->setPlaceholderText("Confirm Password");
+  m_confirmPasswordInput->setEchoMode(QLineEdit::Password);
+  m_confirmPasswordInput->setObjectName("glassInput");
+
+  confirmRow->addWidget(confirmIcon);
+  confirmRow->addWidget(m_confirmPasswordInput);
+  innerLayout->addLayout(confirmRow);
+
+  innerLayout->addSpacing(8);
+
+  // Register Button (Glass style)
+  m_registerButton = new QPushButton("Register >", innerFrame);
+  m_registerButton->setCursor(Qt::PointingHandCursor);
+  m_registerButton->setFixedHeight(48);
+  m_registerButton->setObjectName("glassSignInBtn");
 
   QGraphicsDropShadowEffect *btnShadow = new QGraphicsDropShadowEffect(this);
   btnShadow->setBlurRadius(20);
   btnShadow->setColor(QColor(100, 180, 255, 100));
   btnShadow->setOffset(0, 4);
-  m_loginButton->setGraphicsEffect(btnShadow);
+  m_registerButton->setGraphicsEffect(btnShadow);
 
-  innerLayout->addWidget(m_loginButton);
+  innerLayout->addWidget(m_registerButton);
 
-  // Secondary Buttons Row
-  QHBoxLayout *secondaryRow = new QHBoxLayout();
+  // Back to Login Link
+  QHBoxLayout *backRow = new QHBoxLayout();
 
-  QPushButton *createAcc = new QPushButton("Create account", innerFrame);
-  createAcc->setCursor(Qt::PointingHandCursor);
-  createAcc->setObjectName("secondaryBtn");
+  QPushButton *backToLogin = new QPushButton("Back to login", innerFrame);
+  backToLogin->setCursor(Qt::PointingHandCursor);
+  backToLogin->setObjectName("secondaryBtn");
 
-  QLabel *separator = new QLabel("|", innerFrame);
-  separator->setStyleSheet(
-      "color: rgba(100, 120, 140, 150); background: transparent;");
+  backRow->addStretch();
+  backRow->addWidget(backToLogin);
+  backRow->addStretch();
 
-  QPushButton *offlineMode = new QPushButton("Offline mode", innerFrame);
-  offlineMode->setCursor(Qt::PointingHandCursor);
-  offlineMode->setObjectName("secondaryBtn");
-
-  secondaryRow->addStretch();
-  secondaryRow->addWidget(createAcc);
-  secondaryRow->addWidget(separator);
-  secondaryRow->addWidget(offlineMode);
-  secondaryRow->addStretch();
-
-  innerLayout->addLayout(secondaryRow);
+  innerLayout->addLayout(backRow);
 
   cardLayout->addWidget(innerFrame, 0, Qt::AlignCenter);
 
@@ -221,19 +225,18 @@ void LoginDialog::setupUI() {
   goldShadow->setOffset(0, 12);
   ufoGold->setGraphicsEffect(goldShadow);
 
-  connect(m_loginButton, &QPushButton::clicked, this,
-          &LoginDialog::onLoginClicked);
-
-  // Connect "Create account" to emit signal and close dialog
-  connect(createAcc, &QPushButton::clicked, this, [this]() {
-    emit createAccountRequested();
+  // Connect signals
+  connect(m_registerButton, &QPushButton::clicked, this,
+          &RegisterDialog::onRegisterClicked);
+  connect(backToLogin, &QPushButton::clicked, this, [this]() {
+    emit backToLoginRequested();
     reject();
   });
 }
 
-void LoginDialog::applyStyles() {
+void RegisterDialog::applyStyles() {
   this->setStyleSheet(R"(
-        LoginDialog {
+        RegisterDialog {
             background-image: url(:/assets/login_bg.png);
             background-position: center;
             background-repeat: no-repeat;
@@ -315,9 +318,32 @@ void LoginDialog::applyStyles() {
     )");
 }
 
-void LoginDialog::onLoginClicked() {
-  if (m_usernameInput->text().isEmpty()) {
+void RegisterDialog::onRegisterClicked() {
+  QString username = m_usernameInput->text().trimmed();
+  QString password = m_passwordInput->text();
+  QString confirm = m_confirmPasswordInput->text();
+
+  // Validate inputs
+  if (username.isEmpty()) {
     m_statusLabel->setText("Please enter a username");
+    m_statusLabel->setStyleSheet("color: #e74c3c; background: transparent;");
+    return;
+  }
+
+  if (password.isEmpty()) {
+    m_statusLabel->setText("Please enter a password");
+    m_statusLabel->setStyleSheet("color: #e74c3c; background: transparent;");
+    return;
+  }
+
+  if (password != confirm) {
+    m_statusLabel->setText("Passwords do not match");
+    m_statusLabel->setStyleSheet("color: #e74c3c; background: transparent;");
+    return;
+  }
+
+  if (password.length() < 4) {
+    m_statusLabel->setText("Password must be at least 4 characters");
     m_statusLabel->setStyleSheet("color: #e74c3c; background: transparent;");
     return;
   }
@@ -325,22 +351,35 @@ void LoginDialog::onLoginClicked() {
   m_statusLabel->setText("Connecting...");
   m_statusLabel->setStyleSheet(
       "color: #00a8ff; background: transparent; font-weight: bold;");
-  m_loginButton->setEnabled(false);
+  m_registerButton->setEnabled(false);
 
   NetworkManager::instance().connectToHost(m_defaultHost, m_defaultPort);
 }
 
-void LoginDialog::onLoginSuccess() { accept(); }
+void RegisterDialog::onRegisterSuccess() {
+  m_statusLabel->setText("Account created! Returning to login...");
+  m_statusLabel->setStyleSheet(
+      "color: #27ae60; font-weight: bold; background: transparent;");
 
-void LoginDialog::onLoginFailed(const QString &reason) {
+  // Disconnect from server and return to login after short delay
+  NetworkManager::instance().disconnect();
+
+  QTimer::singleShot(1500, this, [this]() {
+    emit backToLoginRequested();
+    accept();
+  });
+}
+
+void RegisterDialog::onRegisterFailed(const QString &reason) {
   m_statusLabel->setText(reason);
   m_statusLabel->setStyleSheet(
       "color: #e74c3c; font-weight: bold; background: transparent;");
-  m_loginButton->setEnabled(true);
+  m_registerButton->setEnabled(true);
+  NetworkManager::instance().disconnect();
 }
 
-void LoginDialog::onConnectionError(const QString &error) {
-  m_statusLabel->setText("Error: " + error);
+void RegisterDialog::onConnectionError(const QString &error) {
+  m_statusLabel->setText("Connection error: " + error);
   m_statusLabel->setStyleSheet("color: #e74c3c; background: transparent;");
-  m_loginButton->setEnabled(true);
+  m_registerButton->setEnabled(true);
 }
