@@ -1,5 +1,6 @@
 #include "NetworkManager.h"
 #include <QDataStream>
+#include <QDebug>
 
 #ifdef _WIN32
 #include <winsock2.h>

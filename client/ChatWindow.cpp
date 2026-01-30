@@ -1,5 +1,6 @@
 #include "ChatWindow.h"
 #include <QApplication>
+#include <QDebug>
 #include <QGraphicsDropShadowEffect>
 #include <QHBoxLayout>
 #include <QLabel>
@@ -9,6 +10,9 @@
 #include <QPropertyAnimation>
 #include <QPushButton>
 #include <QScrollBar>
+
+#include <QRandomGenerator>
+#include <QUrl>
 
 ChatWindow::ChatWindow(const QString &partnerName, const QPoint &initialPos,
                        QWidget *parent)
@@ -43,17 +47,22 @@ ChatWindow::ChatWindow(const QString &partnerName, const QPoint &initialPos,
     // Toggle color (Blink effect)
     m_flashCount++;
     if (m_flashCount % 2 == 0) {
-      m_overlayColor = QColor(255, 255, 255, 100); // White flash
+      m_overlayColor = QColor(255, 0, 0, 120); // RED flash!
     } else {
       m_overlayColor = Qt::transparent;
     }
     update();
 
-    if (m_flashCount > 6) { // Blink 3 times (6 toggles)
+    if (m_flashCount > 10) { // Blink 5 times (10 toggles)
       m_flashing = false;
       m_flashCount = 0;
     }
   });
+
+  // Init Sound
+  m_soundEffect = new QSoundEffect(this);
+  m_soundEffect->setSource(QUrl("qrc:/assets/wizz.wav"));
+  m_soundEffect->setVolume(1.0f);
 }
 
 ChatWindow::~ChatWindow() {}
@@ -134,21 +143,34 @@ void ChatWindow::flash() {
 }
 
 void ChatWindow::shake() {
-  // Shake animation
+
+  // Play Sound
+  if (m_soundEffect) {
+    m_soundEffect->play();
+  }
+
+  // Chaotic Shake Animation
   QPropertyAnimation *animation = new QPropertyAnimation(this, "pos");
-  animation->setDuration(500);
-  animation->setLoopCount(3);
+  animation->setDuration(700); // Longer duration
+  animation->setLoopCount(1);  // One chaotic pass
 
   QPoint startPos = pos();
   animation->setKeyValueAt(0, startPos);
-  animation->setKeyValueAt(0.25, startPos + QPoint(10, 0));
-  animation->setKeyValueAt(0.5, startPos + QPoint(-10, 0));
-  animation->setKeyValueAt(0.75, startPos + QPoint(10, 0));
+
+  // Generate 20 random keyframes for "tremble"
+  for (int i = 1; i < 20; ++i) {
+    double progress = i / 20.0;
+    int xOffset = QRandomGenerator::global()->bounded(-15, 16); // -15 to +15
+    int yOffset = QRandomGenerator::global()->bounded(-15, 16);
+    animation->setKeyValueAt(progress, startPos + QPoint(xOffset, yOffset));
+  }
+
   animation->setKeyValueAt(1, startPos);
 
   animation->start(QAbstractAnimation::DeleteWhenStopped);
+
+  // Trigger Red Flash
   flash();
-  // Play sound here if implemented
 }
 
 void ChatWindow::onSendClicked() {

@@ -3,6 +3,7 @@
 #include <QFrame>
 #include <QLineEdit>
 #include <QScrollArea>
+#include <QSoundEffect>
 #include <QTimer>
 #include <QVBoxLayout>
 #include <QWidget>
@@ -53,4 +54,7 @@ private:
   int m_flashCount = 0;
   QTimer *m_flashTimer;
   QColor m_overlayColor = Qt::transparent;
+
+  // Sound
+  QSoundEffect *m_soundEffect;
 };

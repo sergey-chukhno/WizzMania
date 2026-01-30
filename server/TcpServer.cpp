@@ -215,16 +215,63 @@ void TcpServer::run() {
                   m_db.storeMessage(sender->getUsername(), target, msg,
                                     delivered);
                 },
-                // 3. GetStatus Callback
+                // 3. OnNudge Callback
+                [this](ClientSession *sender, const std::string &target) {
+                  // Check Status in Registry
+                  int status = 3; // Default Offline
+                  if (m_userStatuses.find(target) != m_userStatuses.end()) {
+                    status = m_userStatuses[target];
+                  }
+
+                  // Rule: Cannot Nudge if Busy (2) or Offline (3)
+                  // Note: If user is in m_onlineUsers but status is Busy, we
+                  // block. If user is NOT in m_onlineUsers, they are Offline.
+
+                  bool isOnline =
+                      m_onlineUsers.find(target) != m_onlineUsers.end();
+
+                  if (!isOnline) {
+                    // Target Offline
+                    Packet err(PacketType::Error);
+                    err.writeString("User " + target + " is offline.");
+                    sender->sendPacket(err);
+                    return;
+                  }
+
+                  if (status == 2) { // Busy
+                    Packet err(PacketType::Error);
+                    err.writeString("User " + target +
+                                    " is busy and cannot be nudged.");
+                    sender->sendPacket(err);
+                    return;
+                  }
+
+                  // Forward Nudge
+                  ClientSession *targetSession = m_onlineUsers[target];
+                  Packet p(PacketType::Nudge);
+                  p.writeString(sender->getUsername());
+                  targetSession->sendPacket(p);
+                  std::cout << "[Server] Wizz sent from "
+                            << sender->getUsername() << " to " << target
+                            << std::endl;
+                },
+                // 4. GetStatus Callback
                 [this](const std::string &username) -> int {
+                  if (m_userStatuses.find(username) != m_userStatuses.end()) {
+                    return m_userStatuses[username];
+                  }
+                  // Fallback logic if needed, but userStatuses should track
+                  // online users
                   if (m_onlineUsers.find(username) != m_onlineUsers.end()) {
-                    return 1; // Online
+                    return 1; // Online default
                   }
                   return 3; // Offline
                 },
-                // 4. OnStatusChange Callback
+                // 5. OnStatusChange Callback
                 [this](ClientSession *sender, int newStatus) {
                   std::string username = sender->getUsername();
+                  m_userStatuses[username] = newStatus; // Store Status
+
                   // Broadcast to friends
                   std::vector<std::string> friends = m_db.getFriends(username);
                   for (const auto &friendName : friends) {

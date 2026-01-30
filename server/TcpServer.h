@@ -48,6 +48,8 @@ private:
   // Day 4: Online Registry (The "Phonebook")
   // Key: Username, Value: Pointer to Session
   std::unordered_map<std::string, ClientSession *> m_onlineUsers;
+  // Track Status (1=Online, 2=Busy, 3=Offline)
+  std::unordered_map<std::string, int> m_userStatuses;
 
   // Helpers
   void initSocket();   // Step 1: Create

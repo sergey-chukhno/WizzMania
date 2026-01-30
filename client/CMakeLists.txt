@@ -1,7 +1,7 @@
 
 # Wizz Mania Client
 # Requires Qt 6
-find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Network)
+find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Network Multimedia)
 
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTOUIC ON)
@@ -33,5 +33,6 @@ target_link_libraries(wizz_client
     Qt6::Gui
     Qt6::Widgets
     Qt6::Network
+    Qt6::Multimedia
     wizz_common # Link our Packet library
 )

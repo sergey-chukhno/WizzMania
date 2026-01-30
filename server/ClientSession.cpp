@@ -18,10 +18,11 @@ namespace wizz {
 ClientSession::ClientSession(SocketType socket, DatabaseManager &db,
                              OnLoginCallback onLogin,
                              OnMessageCallback onMessage,
+                             OnNudgeCallback onNudge,
                              GetStatusCallback getStatus,
                              OnStatusChangeCallback onStatusChange)
     : m_socket(socket), m_isLoggedIn(false), m_db(&db), m_onLogin(onLogin),
-      m_onMessage(onMessage), m_getStatus(getStatus),
+      m_onMessage(onMessage), m_onNudge(onNudge), m_getStatus(getStatus),
       m_onStatusChange(onStatusChange) {}
 
 ClientSession::~ClientSession() {
@@ -35,6 +36,7 @@ ClientSession::ClientSession(ClientSession &&other) noexcept
       m_isLoggedIn(other.m_isLoggedIn), m_db(other.m_db),
       m_onLogin(std::move(other.m_onLogin)),
       m_onMessage(std::move(other.m_onMessage)),
+      m_onNudge(std::move(other.m_onNudge)),
       m_getStatus(std::move(other.m_getStatus)),
       m_onStatusChange(std::move(other.m_onStatusChange)),
       m_buffer(std::move(other.m_buffer)) {
@@ -54,6 +56,7 @@ ClientSession &ClientSession::operator=(ClientSession &&other) noexcept {
     m_db = other.m_db; // Copy Pointer
     m_onLogin = std::move(other.m_onLogin);
     m_onMessage = std::move(other.m_onMessage);
+    m_onNudge = std::move(other.m_onNudge);
     m_getStatus = std::move(other.m_getStatus);
     m_onStatusChange = std::move(other.m_onStatusChange);
 
@@ -140,6 +143,10 @@ void ClientSession::processPacket(Packet &packet) {
 
   case PacketType::ContactStatusChange:
     handleStatusChange(packet);
+    break;
+
+  case PacketType::Nudge:
+    handleNudge(packet);
     break;
 
   default:
@@ -363,6 +370,25 @@ void ClientSession::handleStatusChange(Packet &packet) {
 
   if (m_onStatusChange) {
     m_onStatusChange(this, newStatus);
+  }
+}
+
+void ClientSession::handleNudge(Packet &packet) {
+  if (!m_isLoggedIn)
+    return;
+
+  std::string targetUser;
+  try {
+    targetUser = packet.readString();
+  } catch (...) {
+    return;
+  }
+
+  std::cout << "[Session] Nudge: " << m_username << " -> " << targetUser
+            << std::endl;
+
+  if (m_onNudge) {
+    m_onNudge(this, targetUser);
   }
 }
 
