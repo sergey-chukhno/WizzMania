@@ -2,6 +2,7 @@
 #include "AddFriendDialog.h"
 #include "ChatWindow.h"
 #include "NetworkManager.h"
+#include <QDebug>
 #include <QGraphicsDropShadowEffect>
 #include <QMessageBox>
 #include <QPaintEvent>
@@ -599,6 +600,11 @@ void MainWindow::onContactDoubleClicked(const QString &username) {
     wizz::Packet pkt(wizz::PacketType::DirectMessage);
     pkt.writeString(username.toStdString()); // Target
     pkt.writeString(text.toStdString());     // Message
+    NetworkManager::instance().sendPacket(pkt);
+  });
+  connect(w, &ChatWindow::sendNudge, this, [username]() {
+    wizz::Packet pkt(wizz::PacketType::Nudge);
+    pkt.writeString(username.toStdString()); // Target
     NetworkManager::instance().sendPacket(pkt);
   });
 

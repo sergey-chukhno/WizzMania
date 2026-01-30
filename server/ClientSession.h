@@ -19,6 +19,9 @@ using OnLoginCallback = std::function<void(ClientSession *)>;
 // Callback for Routing: (Sender, TargetUsername, Hash/Body)
 using OnMessageCallback = std::function<void(
     ClientSession *, const std::string &, const std::string &)>;
+// Callback for Nudge: (Sender, TargetUsername)
+using OnNudgeCallback =
+    std::function<void(ClientSession *, const std::string &)>;
 // Callback for Status: (Username) -> Status Int
 using GetStatusCallback = std::function<int(const std::string &)>;
 // Callback for Status Change: (Sender, NewStatus)
@@ -29,7 +32,7 @@ public:
   // Pass DB by reference, store as pointer, and Callbacks
   explicit ClientSession(SocketType socket, DatabaseManager &db,
                          OnLoginCallback onLogin, OnMessageCallback onMessage,
-                         GetStatusCallback getStatus,
+                         OnNudgeCallback onNudge, GetStatusCallback getStatus,
                          OnStatusChangeCallback onStatusChange);
   ~ClientSession(); // Closes socket if owned
 
@@ -59,6 +62,7 @@ private:
   void handleLogin(Packet &packet);
   void handleRegister(Packet &packet);
   void handleDirectMessage(Packet &packet);
+  void handleNudge(Packet &packet);
   void handleStatusChange(Packet &packet);
 
   // Contact Handlers
@@ -76,6 +80,7 @@ private:
   // Callbacks
   OnLoginCallback m_onLogin;
   OnMessageCallback m_onMessage;
+  OnNudgeCallback m_onNudge;
   GetStatusCallback m_getStatus;
   OnStatusChangeCallback m_onStatusChange;
 

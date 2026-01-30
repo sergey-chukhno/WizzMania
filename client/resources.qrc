@@ -6,5 +6,6 @@
         <file>assets/alien_gold.png</file>
         <file>assets/icon_user.png</file>
         <file>assets/icon_lock.png</file>
+        <file>assets/wizz.wav</file>
     </qresource>
 </RCC>
