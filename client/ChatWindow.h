@@ -57,4 +57,9 @@ private:
 
   // Sound
   QSoundEffect *m_soundEffect;
+
+  // Vibration
+  QTimer *m_vibrationTimer;
+  int m_vibrationSteps;
+  QPoint m_originalPos;
 };

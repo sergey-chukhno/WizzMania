@@ -4,6 +4,7 @@
 #include <QGraphicsDropShadowEffect>
 #include <QMessageBox>
 #include <QPaintEvent>
+#include <QRandomGenerator>
 #include <QTimer>
 
 AuthWindow::AuthWindow(QWidget *parent) : QWidget(parent) {
@@ -12,6 +13,11 @@ AuthWindow::AuthWindow(QWidget *parent) : QWidget(parent) {
 
   // Load background image
   m_backgroundPixmap = QPixmap(":/assets/login_bg.png");
+
+  // Random Offset for Multi-Client testing
+  int x = QRandomGenerator::global()->bounded(100, 400);
+  int y = QRandomGenerator::global()->bounded(100, 300);
+  move(x, y);
 
   setupUI();
 }

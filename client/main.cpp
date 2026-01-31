@@ -13,8 +13,8 @@ int main(int argc, char *argv[]) {
     // Get logged-in username (we'll need to pass this)
     QString username = authWindow->getLoggedInUsername();
 
-    // Create and show main window
-    mainWindow = new MainWindow(username);
+    // Create and show main window (at same position)
+    mainWindow = new MainWindow(username, authWindow->pos());
     mainWindow->show();
 
     // Hide auth window
