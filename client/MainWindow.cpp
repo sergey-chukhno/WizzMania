@@ -9,11 +9,16 @@
 #include <QPair> // Include QPair
 #include <QTimer>
 
-MainWindow::MainWindow(const QString &username, QWidget *parent)
+MainWindow::MainWindow(const QString &username, const QPoint &initialPos,
+                       QWidget *parent)
     : QWidget(parent), m_username(username) {
   setWindowTitle("Wizz Mania - " + username);
   setMinimumSize(350, 500);
   resize(400, 600);
+
+  if (!initialPos.isNull()) {
+    move(initialPos);
+  }
 
   // Load background
   m_backgroundPixmap = QPixmap(":/assets/login_bg.png");

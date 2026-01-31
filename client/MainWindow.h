@@ -34,7 +34,9 @@ class MainWindow : public QWidget {
   Q_OBJECT
 
 public:
-  explicit MainWindow(const QString &username, QWidget *parent = nullptr);
+  explicit MainWindow(const QString &username,
+                      const QPoint &initialPos = QPoint(),
+                      QWidget *parent = nullptr);
 
   void setContacts(const QList<ContactInfo> &contacts);
   void updateContactStatus(const QString &username, UserStatus status,

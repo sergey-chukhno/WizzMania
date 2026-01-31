@@ -63,6 +63,22 @@ ChatWindow::ChatWindow(const QString &partnerName, const QPoint &initialPos,
   m_soundEffect = new QSoundEffect(this);
   m_soundEffect->setSource(QUrl("qrc:/assets/wizz.wav"));
   m_soundEffect->setVolume(1.0f);
+  // Init Vibration
+  m_vibrationTimer = new QTimer(this);
+  connect(m_vibrationTimer, &QTimer::timeout, this, [this]() {
+    if (m_vibrationSteps <= 0) {
+      m_vibrationTimer->stop();
+      move(m_originalPos); // Restore exact position
+      return;
+    }
+
+    // Random "Violent" Offset
+    int x = QRandomGenerator::global()->bounded(-8, 9); // -8 to +8
+    int y = QRandomGenerator::global()->bounded(-8, 9);
+    move(m_originalPos + QPoint(x, y));
+
+    m_vibrationSteps--;
+  });
 }
 
 ChatWindow::~ChatWindow() {}
@@ -149,25 +165,11 @@ void ChatWindow::shake() {
     m_soundEffect->play();
   }
 
-  // Chaotic Shake Animation
-  QPropertyAnimation *animation = new QPropertyAnimation(this, "pos");
-  animation->setDuration(700); // Longer duration
-  animation->setLoopCount(1);  // One chaotic pass
-
-  QPoint startPos = pos();
-  animation->setKeyValueAt(0, startPos);
-
-  // Generate 20 random keyframes for "tremble"
-  for (int i = 1; i < 20; ++i) {
-    double progress = i / 20.0;
-    int xOffset = QRandomGenerator::global()->bounded(-15, 16); // -15 to +15
-    int yOffset = QRandomGenerator::global()->bounded(-15, 16);
-    animation->setKeyValueAt(progress, startPos + QPoint(xOffset, yOffset));
-  }
-
-  animation->setKeyValueAt(1, startPos);
-
-  animation->start(QAbstractAnimation::DeleteWhenStopped);
+  // Start Rigid Vibration
+  m_originalPos = pos();
+  m_vibrationSteps = 40; // ~600ms total
+  m_vibrationTimer->start(
+      15); // Update every 15ms (approx 60fps) for staccato feel
 
   // Trigger Red Flash
   flash();
