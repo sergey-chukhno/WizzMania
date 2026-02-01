@@ -414,8 +414,9 @@ QWidget *ChatWindow::createVoiceBubble(uint16_t duration,
     playBtn->setStyleSheet(R"(
           QPushButton {
               background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #4facfe, stop:1 #00f2fe);
-              color: white; border-radius: 15px; padding: 5px; border: none; font-weight: bold;
+              color: white; border-radius: 18px; padding: 5px; border: none; font-weight: bold;
               text-align: left; padding-left: 15px;
+              min-height: 36px;
           }
       )");
   } else {
@@ -427,8 +428,9 @@ QWidget *ChatWindow::createVoiceBubble(uint16_t duration,
           QPushButton {
               background-color: rgba(255, 255, 255, 180);
               border: 1px solid rgba(255, 255, 255, 100);
-              color: #2d3748; border-radius: 15px; padding: 5px; font-weight: bold;
+              color: #2d3748; border-radius: 18px; padding: 5px; font-weight: bold;
               text-align: left; padding-left: 15px;
+              min-height: 36px;
           }
       )");
   }
@@ -551,8 +553,10 @@ void ChatWindow::setupUI() {
           background-color: rgba(255, 255, 255, 200);
           border: 1px solid rgba(255, 255, 255, 150);
           border-radius: 20px;
+          border-radius: 20px;
           padding: 8px 15px;
           font-size: 13px;
+          color: #1a2530; 
           min-height: 24px;
       }
       QLineEdit:focus {
