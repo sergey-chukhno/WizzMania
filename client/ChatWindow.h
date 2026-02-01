@@ -34,6 +34,7 @@ protected:
 private slots:
   void onSendClicked();
   void onWizzClicked();
+  void onEmojiClicked();
 
 private:
   void setupUI();
