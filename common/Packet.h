@@ -28,8 +28,11 @@ enum class PacketType : uint32_t {
 
   // Messaging
   DirectMessage = 300,
-  MessageSent = 301, // Acknowledge
-  Nudge = 302,       // Wizz/Nudge
+  MessageSent = 301,  // Acknowledge
+  Nudge = 302,        // Wizz/Nudge
+  VoiceMessage = 303, // Voice Message (Binary Blob)
+
+  // Errors
 
   // Errors
   Error = 999
@@ -64,6 +67,7 @@ public:
   // Reading Data (Stateful)
   uint32_t readInt();
   std::string readString();
+  std::vector<uint8_t> readBytes(uint32_t len);
 
   // Accessors
   uint32_t bodySize() const { return static_cast<uint32_t>(m_body.size()); }

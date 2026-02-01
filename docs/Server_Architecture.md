@@ -98,6 +98,25 @@ To enable 1-to-1 messaging (User A -> User B), we treat the Server as the **Cent
         *   Server looks up "B" in `online_users`.
         *   If found: Server calls `B->send()`.
         *   If not found: Server stores message in DB (Offline).
+
+### Diagram: The Hub Pattern
+```mermaid
+sequenceDiagram
+    participant A as User A
+    participant S as Server (The Hub)
+    participant B as User B
+    participant DB as SQLite
+
+    A->>S: DirectMessage("Hi", Target="B")
+    S->>S: Lookup "B" in online_users
+    alt B is Online
+        S->>B: DirectMessage("Hi", Sender="A")
+        B-->>A: (Optional Read Receipt)
+    else B is Offline
+        S->>DB: INSERT into messages...
+    end
+```
+
 *   **Source of Truth:** The Server is the *only* entity that knows who is online. Sessions are stateless regarding neighbors.
 
 ## 9. Session Registry Implementation (Callbacks)
@@ -155,3 +174,20 @@ As a prototype, Wizz Mania makes certain simplifications. In a production enviro
     *   Client sends `RequestHistory(Offset=50)` to fetch the next batch.
     *   This keeps the Server responsive (Time-slicing).
 
+
+## 13. Feature Specifics: Wizz (Nudge) Routing
+The Wizz feature introduces a "Stateful" check before routing.
+*   **Logic:**
+    1.  Sender sends `Nudge`.
+    2.  Server checks Recipient's **Status**.
+    3.  If Status == `Busy`: Server sends `PacketType::Error` ("User is busy") back to Sender. **Dropping the Wizz.**
+    4.  If Status == `Online`: Server routes `Nudge` to Recipient.
+*   This illustrates **Server-Side Validation**. The client UI also disables the button, but the Server enforces the rule (anti-cheat).
+
+## 14. Database Integration (SQLite) - `DatabaseManager`
+The `DatabaseManager` class abstracts all SQL logic.
+*   **Schema**:
+    *   `users`: `(id, username, password_hash)`
+    *   `messages`: `(id, sender, recipient, body, timestamp, delivered)`
+    *   `friends`: `(user_id, friend_id)`
+*   **Concurrency**: Currently runs on the Main Thread (Blocking). In Phase 5, this will move to a `std::future` / Thread Pool model.

@@ -88,6 +88,21 @@ MainWindow::MainWindow(const QString &username, const QPoint &initialPos,
             }
           });
 
+  // Connect Voice Message Received
+  connect(
+      &NetworkManager::instance(), &NetworkManager::voiceMessageReceived, this,
+      [this](const QString &sender, uint16_t duration,
+             const std::vector<uint8_t> &data) {
+        if (!m_openChats.contains(sender)) {
+          onContactDoubleClicked(sender); // Open window
+        }
+        if (m_openChats.contains(sender)) {
+          m_openChats[sender]->addVoiceMessage(sender, duration, data, false);
+          m_openChats[sender]->show();
+          m_openChats[sender]->activateWindow();
+        }
+      });
+
   // Initialize Dialogs
   m_addFriendDialog = new AddFriendDialog(this);
   connect(
@@ -612,6 +627,12 @@ void MainWindow::onContactDoubleClicked(const QString &username) {
     pkt.writeString(username.toStdString()); // Target
     NetworkManager::instance().sendPacket(pkt);
   });
+
+  connect(w, &ChatWindow::sendVoiceMessage, this,
+          [username](uint16_t duration, const std::vector<uint8_t> &data) {
+            NetworkManager::instance().sendVoiceMessage(username, duration,
+                                                        data);
+          });
 
   w->show();
   m_openChats.insert(username, w);

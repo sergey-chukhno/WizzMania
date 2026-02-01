@@ -52,10 +52,11 @@ private:
   std::unordered_map<std::string, int> m_userStatuses;
 
   // Helpers
-  void initSocket();   // Step 1: Create
-  void bindSocket();   // Step 2: Bind
-  void listenSocket(); // Step 3: Listen
-  void cleanup();      // Close and cleanup
+  void initSocket();        // Step 1: Create
+  void bindSocket();        // Step 2: Bind
+  void listenSocket();      // Step 3: Listen
+  void cleanup();           // Close and cleanup
+  void setupVoiceStorage(); // Create storage directory
 };
 
 } // namespace wizz

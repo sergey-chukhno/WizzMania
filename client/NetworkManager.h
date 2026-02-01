@@ -18,6 +18,8 @@ public:
 
   // Sending Data
   void sendPacket(const wizz::Packet &packet);
+  void sendVoiceMessage(const QString &target, uint16_t duration,
+                        const std::vector<uint8_t> &data);
 
 signals:
   // Status Signals
@@ -31,6 +33,8 @@ signals:
   void contactStatusChanged(const QString &username, int status);
   void messageReceived(const QString &sender, const QString &text);
   void nudgeReceived(const QString &sender);
+  void voiceMessageReceived(const QString &sender, uint16_t duration,
+                            const std::vector<uint8_t> &data);
 
 private slots:
   void onSocketConnected();
