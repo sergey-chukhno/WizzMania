@@ -21,6 +21,32 @@ We are applying the **Observer Pattern** using Qt's Signal & Slot mechanism.
 *   **Observers:** `LoginDialog`, `MainWindow`. They subscribe to signals to react to changes without polling.
 *   **Benefit:** Loose coupling. `NetworkManager` doesn't know *who* is listening, only that it has broadcast an event.
 
+### Diagram: Observer Pattern (Signals & Slots)
+```mermaid
+classDiagram
+    class NetworkManager {
+        +connectToHost()
+        +sendPacket()
+        signals: packetReceived()
+        signals: connected()
+    }
+
+    class LoginDialog {
+        -submitButton
+        slots: onConnected()
+    }
+
+    class MainWindow {
+        -chatWindows check
+        slots: onPacketReceived()
+    }
+
+    NetworkManager --|> QTcpSocket : owns
+    LoginDialog ..> NetworkManager : listens to
+    MainWindow ..> NetworkManager : listens to
+```
+
+
 ### Senior Analysis: Why not Blocking I/O?
 *   **Q: What happens if we put a `while(true)` loop (or `recv()`) inside a Button Click?**
     *   **A: UI Responsiveness.** In a blocking model, if only 5 bytes arrive, we must sleep and wait for the rest. In Async, we buffer the 5 bytes and **return to the Event Loop**. The user can continue to switch tabs or type while we wait for the rest of the packet.
@@ -64,3 +90,30 @@ Since the Network is a global resource required by multiple isolated windows, we
 7.  ... Server responds ...
 8.  `NetworkManager` buffers data -> parses `Packet` -> emits `packetReceived`.
 9.  `LoginDialog` checks packet type. If `LoginSuccess`, it closes itself.
+
+## 4. GUI & Feature Architecture
+The GUI is built using **Qt Widgets** (not QML) for maximum native performance and desktop integration.
+
+### Class Structure
+*   **`MainWindow`**: The "Roster" or "Buddy List".
+    *   Manages the list of friends.
+    *   Listens to `NetworkManager::packetReceived` for status updates (Online/Busy).
+    *   Spawns `ChatWindow` instances when a friend is clicked.
+*   **`ChatWindow`**: The conversation view.
+    *   **Self-Contained**: Manages its own layout, message history, and animations.
+    *   **Features Integrated**:
+        *   **Wizz (Nudge)**: Implements `shake()` (rigid vibration) and `flash(QColor)` (Red overlay).
+        *   **Emoji**: Implements a custom `QMenu` grid for emoji insertion.
+        *   **Timestamps**: Client-generated timestamps for immediate feedback.
+
+### Key Logic: The "Wizz"
+The Wizz feature demonstrates the tight integration of Networking and UI Animation:
+1.  **Sender**: Clicks "⚡" -> Calls `NetworkManager::sendPacket(Nudge)`.
+2.  **Server**: Routes packet to Target.
+3.  **Receiver**:
+    *   `NetworkManager` emits `packetReceived(Nudge)`.
+    *   `MainWindow` finds the active `ChatWindow` for that sender.
+    *   Calls `ChatWindow::shake()`.
+    *   **Animation**: `QTimer` moves the window randomly by +/- 8 pixels for 600ms.
+    *   **Visuals**: `QPainter` draws a Red overlay (`QColor(255,0,0,120)`).
+    *   **Audio**: `QSoundEffect` plays `wizz.wav`.

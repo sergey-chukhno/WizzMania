@@ -3,7 +3,14 @@
 #include <iostream>
 #include <stdexcept>
 
+#include <ctime>
+#include <filesystem>
+#include <fstream>
+#include <sstream>
+
 namespace wizz {
+
+namespace fs = std::filesystem;
 
 TcpServer::TcpServer(int port)
     : m_port(port), m_serverSocket(INVALID_SOCKET_VAL), m_isRunning(false),
@@ -31,6 +38,8 @@ void TcpServer::start() {
     if (!m_db.init()) {
       throw std::runtime_error("Failed to initialize Database!");
     }
+
+    setupVoiceStorage(); // Create storage directory
 
     initSocket();
     bindSocket();
@@ -176,10 +185,53 @@ void TcpServer::run() {
                               << " offline messages to " << username
                               << std::endl;
                     for (const auto &msg : pending) {
-                      Packet outPacket(PacketType::DirectMessage);
-                      outPacket.writeString(msg.sender);
-                      outPacket.writeString(msg.body);
-                      session->sendPacket(outPacket);
+                      if (msg.body.rfind("VOICE:", 0) == 0) {
+                        // It's a voice message! Format:
+                        // VOICE:<duration>:<filename>
+                        std::vector<std::string> parts;
+                        std::stringstream ss(msg.body);
+                        std::string item;
+                        while (std::getline(ss, item, ':')) {
+                          parts.push_back(item);
+                        }
+
+                        if (parts.size() >= 3) {
+                          uint16_t duration =
+                              static_cast<uint16_t>(std::stoi(parts[1]));
+                          std::string filename = parts[2];
+
+                          // Load file
+                          std::ifstream infile(filename, std::ios::binary |
+                                                             std::ios::ate);
+                          if (infile.is_open()) {
+                            std::streamsize size = infile.tellg();
+                            infile.seekg(0, std::ios::beg);
+                            std::vector<uint8_t> buffer(size);
+                            if (infile.read(
+                                    reinterpret_cast<char *>(buffer.data()),
+                                    size)) {
+                              Packet outPacket(PacketType::VoiceMessage);
+                              outPacket.writeString(msg.sender);
+                              outPacket.writeInt(
+                                  static_cast<uint32_t>(duration));
+                              outPacket.writeInt(
+                                  static_cast<uint32_t>(buffer.size()));
+                              outPacket.writeData(buffer.data(), buffer.size());
+                              session->sendPacket(outPacket);
+                            }
+                          } else {
+                            std::cerr << "[Server] Failed to load offline "
+                                         "voice file: "
+                                      << filename << std::endl;
+                          }
+                        }
+                      } else {
+                        // Standard Text Message
+                        Packet outPacket(PacketType::DirectMessage);
+                        outPacket.writeString(msg.sender);
+                        outPacket.writeString(msg.body);
+                        session->sendPacket(outPacket);
+                      }
 
                       // Mark as Delivered
                       m_db.markAsDelivered(msg.id);
@@ -255,7 +307,54 @@ void TcpServer::run() {
                             << sender->getUsername() << " to " << target
                             << std::endl;
                 },
-                // 4. GetStatus Callback
+
+                // 4. OnVoiceMessage Callback
+                [this](ClientSession *sender, const std::string &target,
+                       uint16_t duration, const std::vector<uint8_t> &data) {
+                  std::cout << "[Server] Processing Voice Msg for " << target
+                            << " (" << data.size() << " bytes)" << std::endl;
+
+                  // 1. Save to Disk
+                  long long timestamp = std::time(nullptr);
+                  std::stringstream ss;
+                  ss << "server/storage/voice_" << sender->getUsername() << "_"
+                     << timestamp << ".wav";
+                  std::string filepath = ss.str();
+
+                  // Ensure the file is written
+                  std::ofstream outfile(filepath, std::ios::binary);
+                  if (outfile.is_open()) {
+                    outfile.write(reinterpret_cast<const char *>(data.data()),
+                                  data.size());
+                    outfile.close();
+                    std::cout << "[Server] Saved to " << filepath << std::endl;
+                  } else {
+                    std::cerr
+                        << "[Server] Failed to write voice file: " << filepath
+                        << std::endl;
+                  }
+
+                  // 2. Relay or Notify
+                  auto it = m_onlineUsers.find(target);
+                  if (it != m_onlineUsers.end()) {
+                    // Target Online: Relay full blob for instant playback
+                    ClientSession *targetSession = it->second;
+                    Packet p(PacketType::VoiceMessage);
+                    p.writeString(sender->getUsername());
+                    p.writeInt(static_cast<uint32_t>(duration));
+                    p.writeInt(static_cast<uint32_t>(data.size()));
+                    p.writeData(data.data(), data.size());
+                    targetSession->sendPacket(p);
+                  } else {
+                    // Target Offline: Store metadata in DB with file reference
+                    // Format: VOICE:<duration>:<filepath>
+                    std::string proxyMsg =
+                        "VOICE:" + std::to_string(duration) + ":" + filepath;
+                    m_db.storeMessage(sender->getUsername(), target, proxyMsg,
+                                      false);
+                  }
+                },
+                // 5. GetStatus Callback
                 [this](const std::string &username) -> int {
                   if (m_userStatuses.find(username) != m_userStatuses.end()) {
                     return m_userStatuses[username];
@@ -338,6 +437,14 @@ void TcpServer::run() {
         ++it;
       }
     }
+  }
+}
+
+void TcpServer::setupVoiceStorage() {
+  if (!fs::exists("server/storage")) {
+    fs::create_directories("server/storage");
+    std::cout << "[Server] Created storage directory: server/storage"
+              << std::endl;
   }
 }
 

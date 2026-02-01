@@ -136,4 +136,20 @@ std::string Packet::readString() {
   return str;
 }
 
+std::vector<uint8_t> Packet::readBytes(uint32_t len) {
+  // 1. Bounds Check
+  if (m_readOffset + len > m_body.size()) {
+    throw std::out_of_range("Not enough data to read bytes");
+  }
+
+  // 2. Extract Data
+  std::vector<uint8_t> data(m_body.begin() + m_readOffset,
+                            m_body.begin() + m_readOffset + len);
+
+  // 3. Advance Cursor
+  m_readOffset += len;
+
+  return data;
+}
+
 } // namespace wizz

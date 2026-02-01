@@ -8,6 +8,9 @@
 #include <QVBoxLayout>
 #include <QWidget>
 
+#include "AudioManager.h"
+#include <QPushButton>
+
 class ChatWindow : public QWidget {
   Q_OBJECT
 public:
@@ -16,12 +19,15 @@ public:
   ~ChatWindow();
 
   void addMessage(const QString &sender, const QString &text, bool isSelf);
+  void addVoiceMessage(const QString &sender, uint16_t duration,
+                       const std::vector<uint8_t> &data, bool isSelf);
   void flash(const QColor &color); // Visual alert
   void shake();                    // Nudge effect
   QString getPartnerName() const { return m_partnerName; }
 
 signals:
   void sendMessage(const QString &text);
+  void sendVoiceMessage(uint16_t duration, const std::vector<uint8_t> &data);
   void sendNudge();
   void windowClosed(const QString &partnerName);
 
@@ -35,11 +41,15 @@ private slots:
   void onSendClicked();
   void onWizzClicked();
   void onEmojiClicked();
+  void onMicClicked(); // Toggle recording
 
 private:
   void setupUI();
   QWidget *createMessageBubble(const QString &text, const QString &time,
                                bool isSelf);
+  QWidget *createVoiceBubble(uint16_t duration,
+                             const std::vector<uint8_t> &data,
+                             const QString &time, bool isSelf);
 
   QString m_partnerName;
   QPoint m_dragPosition;
@@ -49,7 +59,11 @@ private:
   QWidget *m_chatContainer;
   QVBoxLayout *m_chatLayout;
   QLineEdit *m_messageInput;
+  QPushButton *m_micBtn; // New Mic Button
   QPixmap m_background;
+
+  // Audio Logic
+  AudioManager *m_audioManager;
 
   // Flash animation state
   bool m_flashing = false;

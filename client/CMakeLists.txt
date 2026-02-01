@@ -11,6 +11,7 @@ set(CMAKE_AUTORCC ON)
 set(CLIENT_SOURCES
     main.cpp
     NetworkManager.cpp
+    AudioManager.cpp
     LoginDialog.cpp
     RegisterDialog.cpp
     AuthWindow.cpp

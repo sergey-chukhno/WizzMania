@@ -22,6 +22,10 @@ using OnMessageCallback = std::function<void(
 // Callback for Nudge: (Sender, TargetUsername)
 using OnNudgeCallback =
     std::function<void(ClientSession *, const std::string &)>;
+// New: Voice Message Callback (Sender, Recipient, Duration, Data)
+using OnVoiceMessageCallback =
+    std::function<void(ClientSession *, const std::string &, uint16_t,
+                       const std::vector<uint8_t> &)>;
 // Callback for Status: (Username) -> Status Int
 using GetStatusCallback = std::function<int(const std::string &)>;
 // Callback for Status Change: (Sender, NewStatus)
@@ -32,7 +36,9 @@ public:
   // Pass DB by reference, store as pointer, and Callbacks
   explicit ClientSession(SocketType socket, DatabaseManager &db,
                          OnLoginCallback onLogin, OnMessageCallback onMessage,
-                         OnNudgeCallback onNudge, GetStatusCallback getStatus,
+                         OnNudgeCallback onNudge,
+                         OnVoiceMessageCallback onVoiceMessage,
+                         GetStatusCallback getStatus,
                          OnStatusChangeCallback onStatusChange);
   ~ClientSession(); // Closes socket if owned
 
@@ -63,6 +69,7 @@ private:
   void handleRegister(Packet &packet);
   void handleDirectMessage(Packet &packet);
   void handleNudge(Packet &packet);
+  void handleVoiceMessage(Packet &packet);
   void handleStatusChange(Packet &packet);
 
   // Contact Handlers
@@ -81,6 +88,7 @@ private:
   OnLoginCallback m_onLogin;
   OnMessageCallback m_onMessage;
   OnNudgeCallback m_onNudge;
+  OnVoiceMessageCallback m_onVoiceMessage;
   GetStatusCallback m_getStatus;
   OnStatusChangeCallback m_onStatusChange;
 

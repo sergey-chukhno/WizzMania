@@ -53,6 +53,17 @@ void NetworkManager::sendPacket(const wizz::Packet &packet) {
   m_socket->flush();
 }
 
+void NetworkManager::sendVoiceMessage(const QString &target, uint16_t duration,
+                                      const std::vector<uint8_t> &data) {
+  wizz::Packet p(wizz::PacketType::VoiceMessage);
+  p.writeString(target.toStdString());
+  p.writeInt(static_cast<uint32_t>(duration));
+  p.writeInt(static_cast<uint32_t>(data.size()));
+  p.writeData(data.data(), data.size());
+
+  sendPacket(p);
+}
+
 // --- Slots ---
 
 void NetworkManager::onSocketConnected() { emit connected(); }
@@ -118,6 +129,15 @@ void NetworkManager::onReadyRead() {
       } else if (pkt.type() == wizz::PacketType::Nudge) {
         QString sender = QString::fromStdString(pkt.readString());
         emit nudgeReceived(sender);
+      } else if (pkt.type() == wizz::PacketType::VoiceMessage) {
+        QString sender = QString::fromStdString(pkt.readString());
+        uint16_t duration = static_cast<uint16_t>(pkt.readInt());
+        uint32_t len = pkt.readInt();
+        // Safety / Sanity check
+        if (len < 50 * 1024 * 1024) { // Limit to 50MB (arbitrary large for MVP)
+          std::vector<uint8_t> audioData = pkt.readBytes(len);
+          emit voiceMessageReceived(sender, duration, audioData);
+        }
       }
 
     } catch (...) {

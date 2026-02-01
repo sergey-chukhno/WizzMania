@@ -21,6 +21,7 @@
 ChatWindow::ChatWindow(const QString &partnerName, const QPoint &initialPos,
                        QWidget *parent)
     : QWidget(parent), m_partnerName(partnerName) {
+  m_audioManager = new AudioManager(this);
   setWindowFlags(Qt::FramelessWindowHint | Qt::Window);
   setAttribute(Qt::WA_TranslucentBackground);
   setAttribute(Qt::WA_DeleteOnClose); // Lifecycle: Destroy on close
@@ -137,6 +138,20 @@ void ChatWindow::mouseMoveEvent(QMouseEvent *event) {
   }
 }
 
+void ChatWindow::addVoiceMessage(const QString &sender, uint16_t duration,
+                                 const std::vector<uint8_t> &data,
+                                 bool isSelf) {
+  Q_UNUSED(sender);
+  QString time = QDateTime::currentDateTime().toString("HH:mm");
+  QWidget *bubble = createVoiceBubble(duration, data, time, isSelf);
+  m_chatLayout->addWidget(bubble);
+
+  QTimer::singleShot(10, [this]() {
+    m_chatArea->verticalScrollBar()->setValue(
+        m_chatArea->verticalScrollBar()->maximum());
+  });
+}
+
 void ChatWindow::addMessage(const QString &sender, const QString &text,
                             bool isSelf) {
   Q_UNUSED(sender);
@@ -233,6 +248,40 @@ void ChatWindow::onEmojiClicked() {
   // Ideally near the emoji button, but input works as anchor too.
   menu->exec(QCursor::pos());
   menu->deleteLater();
+  menu->exec(QCursor::pos());
+  menu->deleteLater();
+}
+
+void ChatWindow::onMicClicked() {
+  if (!m_audioManager->isRecording()) {
+    if (m_audioManager->startRecording()) {
+      m_micBtn->setText("⏹");
+      m_micBtn->setStyleSheet(
+          "background-color: #e53e3e; color: white; border-radius: 18px; "
+          "font-size: 16px; border: none;");
+    }
+  } else {
+    uint16_t duration = 0;
+    auto data = m_audioManager->stopRecording(duration);
+    m_micBtn->setText("🎤");
+    // Reset Style
+    m_micBtn->setStyleSheet(R"(
+            QPushButton {
+                background: rgba(255, 255, 255, 100);
+                border-radius: 18px;
+                border: 1px solid rgba(255, 255, 255, 200);
+                font-size: 16px;
+            }
+            QPushButton:hover {
+                background: rgba(255, 255, 255, 150);
+            }
+        )");
+
+    if (!data.empty()) {
+      emit sendVoiceMessage(duration, data);
+      addVoiceMessage("Me", duration, data, true);
+    }
+  }
 }
 
 QWidget *ChatWindow::createMessageBubble(const QString &text,
@@ -292,6 +341,97 @@ QWidget *ChatWindow::createMessageBubble(const QString &text,
     )");
   }
 
+  return container;
+}
+
+QWidget *ChatWindow::createVoiceBubble(uint16_t duration,
+                                       const std::vector<uint8_t> &data,
+                                       const QString &time, bool isSelf) {
+  QWidget *container = new QWidget();
+  QHBoxLayout *layout = new QHBoxLayout(container);
+  layout->setContentsMargins(0, 5, 0, 5);
+
+  QWidget *contentWidget = new QWidget();
+  QVBoxLayout *contentLayout = new QVBoxLayout(contentWidget);
+  contentLayout->setContentsMargins(0, 0, 0, 0);
+  contentLayout->setSpacing(2);
+
+  QPushButton *playBtn =
+      new QPushButton("▶ " + QString::number(duration) + "s");
+  playBtn->setFixedWidth(100);
+  playBtn->setCursor(Qt::PointingHandCursor);
+
+  // Copy data for the lambda capture
+  std::vector<uint8_t> audioData = data;
+
+  // Connection for click
+  connect(playBtn, &QPushButton::clicked, this,
+          [this, audioData, playBtn, duration]() {
+            // Disconnect previous connections if any (simple approach: rely on
+            // AudioManager single instance behavior) Ideally we track the
+            // currently playing button, but for now:
+
+            // Connect signals specifically for this playback session?
+            // Since AudioManager is shared, we should probably connect signals
+            // globally or managing state is hard. Simpler: Connect lambda to
+            // AudioManager specific signals just before playing? No,
+            // AudioManager is long-lived.
+
+            // Better approach: Pass a callback or handle state in ChatWindow.
+            // Let's use the m_audioManager directly here.
+
+            // Reset any other buttons? (Optional, skip for MVP)
+
+            // Connect specifically for this interaction
+            QMetaObject::Connection *connStop = new QMetaObject::Connection;
+            *connStop = connect(m_audioManager, &AudioManager::playbackStopped,
+                                this, [playBtn, duration, this, connStop]() {
+                                  playBtn->setText(
+                                      "▶ " + QString::number(duration) + "s");
+                                  disconnect(*connStop);
+                                  delete connStop;
+                                });
+
+            QMetaObject::Connection *connStart = new QMetaObject::Connection;
+            *connStart = connect(m_audioManager, &AudioManager::playbackStarted,
+                                 this, [playBtn, this, connStart]() {
+                                   playBtn->setText("🔊 Playing...");
+                                   disconnect(*connStart);
+                                   delete connStart;
+                                 });
+
+            m_audioManager->playAudio(audioData);
+          });
+
+  QLabel *timeLabel = new QLabel(time);
+  timeLabel->setStyleSheet("color: #718096; font-size: 10px;");
+
+  if (isSelf) {
+    layout->addStretch();
+    layout->addWidget(contentWidget);
+    contentLayout->addWidget(playBtn, 0, Qt::AlignRight);
+    contentLayout->addWidget(timeLabel, 0, Qt::AlignRight);
+    playBtn->setStyleSheet(R"(
+          QPushButton {
+              background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #4facfe, stop:1 #00f2fe);
+              color: white; border-radius: 15px; padding: 5px; border: none; font-weight: bold;
+              text-align: left; padding-left: 15px;
+          }
+      )");
+  } else {
+    layout->addWidget(contentWidget);
+    layout->addStretch();
+    contentLayout->addWidget(playBtn, 0, Qt::AlignLeft);
+    contentLayout->addWidget(timeLabel, 0, Qt::AlignLeft);
+    playBtn->setStyleSheet(R"(
+          QPushButton {
+              background-color: rgba(255, 255, 255, 180);
+              border: 1px solid rgba(255, 255, 255, 100);
+              color: #2d3748; border-radius: 15px; padding: 5px; font-weight: bold;
+              text-align: left; padding-left: 15px;
+          }
+      )");
+  }
   return container;
 }
 
@@ -464,6 +604,24 @@ void ChatWindow::setupUI() {
   )");
   connect(sendBtn, &QPushButton::clicked, this, &ChatWindow::onSendClicked);
 
+  // Mic Button
+  m_micBtn = new QPushButton("🎤", inputContainer);
+  m_micBtn->setFixedSize(36, 36);
+  m_micBtn->setCursor(Qt::PointingHandCursor);
+  m_micBtn->setStyleSheet(R"(
+      QPushButton {
+          background: rgba(255, 255, 255, 100);
+          border-radius: 18px;
+          border: 1px solid rgba(255, 255, 255, 200);
+          font-size: 16px;
+      }
+      QPushButton:hover {
+          background: rgba(255, 255, 255, 150);
+      }
+  )");
+  connect(m_micBtn, &QPushButton::clicked, this, &ChatWindow::onMicClicked);
+
+  inputLayout->addWidget(m_micBtn);
   inputLayout->addWidget(emojiBtn);
   inputLayout->addWidget(m_messageInput);
   inputLayout->addWidget(wizzBtn);

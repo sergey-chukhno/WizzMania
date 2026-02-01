@@ -19,10 +19,12 @@ ClientSession::ClientSession(SocketType socket, DatabaseManager &db,
                              OnLoginCallback onLogin,
                              OnMessageCallback onMessage,
                              OnNudgeCallback onNudge,
+                             OnVoiceMessageCallback onVoiceMessage,
                              GetStatusCallback getStatus,
                              OnStatusChangeCallback onStatusChange)
     : m_socket(socket), m_isLoggedIn(false), m_db(&db), m_onLogin(onLogin),
-      m_onMessage(onMessage), m_onNudge(onNudge), m_getStatus(getStatus),
+      m_onMessage(onMessage), m_onNudge(onNudge),
+      m_onVoiceMessage(onVoiceMessage), m_getStatus(getStatus),
       m_onStatusChange(onStatusChange) {}
 
 ClientSession::~ClientSession() {
@@ -37,6 +39,7 @@ ClientSession::ClientSession(ClientSession &&other) noexcept
       m_onLogin(std::move(other.m_onLogin)),
       m_onMessage(std::move(other.m_onMessage)),
       m_onNudge(std::move(other.m_onNudge)),
+      m_onVoiceMessage(std::move(other.m_onVoiceMessage)),
       m_getStatus(std::move(other.m_getStatus)),
       m_onStatusChange(std::move(other.m_onStatusChange)),
       m_buffer(std::move(other.m_buffer)) {
@@ -57,6 +60,7 @@ ClientSession &ClientSession::operator=(ClientSession &&other) noexcept {
     m_onLogin = std::move(other.m_onLogin);
     m_onMessage = std::move(other.m_onMessage);
     m_onNudge = std::move(other.m_onNudge);
+    m_onVoiceMessage = std::move(other.m_onVoiceMessage);
     m_getStatus = std::move(other.m_getStatus);
     m_onStatusChange = std::move(other.m_onStatusChange);
 
@@ -147,6 +151,10 @@ void ClientSession::processPacket(Packet &packet) {
 
   case PacketType::Nudge:
     handleNudge(packet);
+    break;
+
+  case PacketType::VoiceMessage:
+    handleVoiceMessage(packet);
     break;
 
   default:
@@ -389,6 +397,41 @@ void ClientSession::handleNudge(Packet &packet) {
 
   if (m_onNudge) {
     m_onNudge(this, targetUser);
+  }
+}
+
+void ClientSession::handleVoiceMessage(Packet &packet) {
+  if (!m_isLoggedIn)
+    return;
+
+  std::string targetUser;
+  uint16_t duration = 0;
+  uint32_t dataLen = 0;
+  std::vector<uint8_t> audioData;
+
+  try {
+    targetUser = packet.readString();
+    duration = static_cast<uint16_t>(packet.readInt());
+    dataLen = packet.readInt();
+
+    // Safety check on dataLen
+    if (dataLen > 10 * 1024 * 1024) { // 10MB sanity cap
+      std::cerr << "[Session] Voice Message too large: " << dataLen
+                << std::endl;
+      return;
+    }
+    audioData = packet.readBytes(dataLen);
+
+  } catch (const std::exception &e) {
+    std::cerr << "[Session] Voice Protocol Error: " << e.what() << std::endl;
+    return;
+  }
+
+  std::cout << "[Session] Voice Message: " << m_username << " -> " << targetUser
+            << " (" << duration << "s, " << dataLen << " bytes)" << std::endl;
+
+  if (m_onVoiceMessage) {
+    m_onVoiceMessage(this, targetUser, duration, audioData);
   }
 }
 
