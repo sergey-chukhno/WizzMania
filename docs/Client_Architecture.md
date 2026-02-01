@@ -117,3 +117,23 @@ The Wizz feature demonstrates the tight integration of Networking and UI Animati
     *   **Animation**: `QTimer` moves the window randomly by +/- 8 pixels for 600ms.
     *   **Visuals**: `QPainter` draws a Red overlay (`QColor(255,0,0,120)`).
     *   **Audio**: `QSoundEffect` plays `wizz.wav`.
+
+## 5. Voice Messaging Architecture
+Voice messaging introduces binary data handling and multimedia streams to the client.
+
+### Component: `AudioManager`
+Wraps **Qt Multimedia** to handle cross-platform audio IO.
+*   **Recording**:
+    *   Uses `QAudioSource` (Input).
+    *   **Strategy**: Records raw PCM data to a `QBuffer` in memory.
+    *   **Format Handling**: Defaults to the device's **Preferred Format** (e.g., 44.1kHz Float or Int16) to avoid hardware incompatibility (Silence issues).
+    *   **Encoding**: On stop, prepends a standard **WAV Header** to the raw PCM data. This makes the payload self-describing and playable by any standard player.
+*   **Playback**:
+    *   Uses `QAudioSink` (Output).
+    *   **Dynamic Format**: Parses the WAV Header from the received byte vector to configure the Sink. This allows playing messages from users with different microphone sample rates (16k vs 44.1k).
+
+### Visual Integration
+*   **Mic Button**: Toggles recording state. Changes style (Red) to indicate active recording.
+*   **Voice Bubble**: A custom widget (`QPushButton` + Stylesheet) that renders a "Pill" shape.
+    *   **Interaction**: Click triggers `AudioManager::playAudio()`.
+    *   **Feedback**: Text updates to "🔊 Playing..." during playback via `AudioManager` signals (`playbackStarted`, `playbackStopped`).

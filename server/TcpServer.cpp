@@ -354,7 +354,26 @@ void TcpServer::run() {
                                       false);
                   }
                 },
-                // 5. GetStatus Callback
+                // 5. OnTypingIndicator Callback
+                [this](ClientSession *sender, const std::string &target,
+                       bool isTyping) {
+                  // Lookup Target
+                  auto it = m_onlineUsers.find(target);
+                  if (it != m_onlineUsers.end()) {
+                    ClientSession *targetSession = it->second;
+
+                    // Forward Packet: Rewrap to include SENDER name
+                    // Payload: [SenderName][IsTyping]
+                    Packet p(PacketType::TypingIndicator);
+                    p.writeString(sender->getUsername());
+                    p.writeInt(isTyping ? 1 : 0);
+                    targetSession->sendPacket(p);
+                  }
+                  // If offline, ignore.
+                  // If offline, ignore.
+                },
+
+                // 6. GetStatus Callback
                 [this](const std::string &username) -> int {
                   if (m_userStatuses.find(username) != m_userStatuses.end()) {
                     return m_userStatuses[username];
@@ -366,7 +385,7 @@ void TcpServer::run() {
                   }
                   return 3; // Offline
                 },
-                // 5. OnStatusChange Callback
+                // 7. OnStatusChange Callback
                 [this](ClientSession *sender, int newStatus) {
                   std::string username = sender->getUsername();
                   m_userStatuses[username] = newStatus; // Store Status
