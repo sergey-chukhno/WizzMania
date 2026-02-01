@@ -1,4 +1,5 @@
 #include "ChatWindow.h"
+#include "NetworkManager.h"
 #include <QApplication>
 #include <QDateTime>
 #include <QDebug>
@@ -83,7 +84,30 @@ ChatWindow::ChatWindow(const QString &partnerName, const QPoint &initialPos,
     move(m_originalPos + QPoint(x, y));
 
     m_vibrationSteps--;
+    m_vibrationSteps--;
   });
+
+  // Init Typing Logic
+  m_typingStopTimer = new QTimer(this);
+  m_typingStopTimer->setSingleShot(true);
+
+  // Connect Stop Timer
+  connect(m_typingStopTimer, &QTimer::timeout, this, [this]() {
+    m_isTyping = false;
+    NetworkManager::instance().sendTypingPacket(m_partnerName, false);
+  });
+
+  // Listen for Incoming Typing Indicators
+  connect(&NetworkManager::instance(), &NetworkManager::userTyping, this,
+          [this](const QString &sender, bool isTyping) {
+            if (sender == m_partnerName) {
+              if (isTyping) {
+                m_typingLabel->setText(sender + " is typing...");
+              } else {
+                m_typingLabel->setText("");
+              }
+            }
+          });
 }
 
 ChatWindow::~ChatWindow() {}
@@ -199,6 +223,13 @@ void ChatWindow::onSendClicked() {
   emit sendMessage(text);
   addMessage("Me", text, true);
   m_messageInput->clear();
+
+  // Stop Typing immediately
+  if (m_isTyping) {
+    m_isTyping = false;
+    m_typingStopTimer->stop();
+    NetworkManager::instance().sendTypingPacket(m_partnerName, false);
+  }
 }
 
 void ChatWindow::onWizzClicked() {
@@ -563,9 +594,28 @@ void ChatWindow::setupUI() {
           background-color: white;
           border: 2px solid #4facfe;
       }
+      }
   )");
   connect(m_messageInput, &QLineEdit::returnPressed, this,
           &ChatWindow::onSendClicked);
+
+  // Trigger Typing Start
+  connect(m_messageInput, &QLineEdit::textChanged, this,
+          [this](const QString &text) {
+            if (text.isEmpty()) {
+              // Should we stop immediately if empty? Maybe let timer expire?
+              // Let's stick to timer for smoother UX, or maybe stop if empty?
+              // Standard approach: Typing while text exists.
+              return;
+            }
+
+            if (!m_isTyping) {
+              m_isTyping = true;
+              NetworkManager::instance().sendTypingPacket(m_partnerName, true);
+            }
+            // Restart timeout (debounce)
+            m_typingStopTimer->start(3000);
+          });
 
   // Wizz Button
   QPushButton *wizzBtn = new QPushButton(inputContainer);
@@ -635,10 +685,10 @@ void ChatWindow::setupUI() {
   bottomLayout->addWidget(inputContainer);
 
   // Typing Label
-  QLabel *typingLabel = new QLabel("", this);
-  typingLabel->setStyleSheet("font-size: 10px; color: #4a5568; font-style: "
-                             "italic; margin-left: 50px;");
-  bottomLayout->addWidget(typingLabel);
+  m_typingLabel = new QLabel("", this);
+  m_typingLabel->setStyleSheet("font-size: 10px; color: #4a5568; font-style: "
+                               "italic; margin-left: 50px;");
+  bottomLayout->addWidget(m_typingLabel);
 
   mainLayout->addLayout(bottomLayout);
 }

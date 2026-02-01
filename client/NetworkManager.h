@@ -20,6 +20,7 @@ public:
   void sendPacket(const wizz::Packet &packet);
   void sendVoiceMessage(const QString &target, uint16_t duration,
                         const std::vector<uint8_t> &data);
+  void sendTypingPacket(const QString &target, bool isTyping);
 
 signals:
   // Status Signals
@@ -35,6 +36,7 @@ signals:
   void nudgeReceived(const QString &sender);
   void voiceMessageReceived(const QString &sender, uint16_t duration,
                             const std::vector<uint8_t> &data);
+  void userTyping(const QString &sender, bool isTyping);
 
 private slots:
   void onSocketConnected();

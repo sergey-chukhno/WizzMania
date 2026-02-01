@@ -20,12 +20,13 @@ ClientSession::ClientSession(SocketType socket, DatabaseManager &db,
                              OnMessageCallback onMessage,
                              OnNudgeCallback onNudge,
                              OnVoiceMessageCallback onVoiceMessage,
+                             OnTypingIndicatorCallback onTypingIndicator,
                              GetStatusCallback getStatus,
                              OnStatusChangeCallback onStatusChange)
     : m_socket(socket), m_isLoggedIn(false), m_db(&db), m_onLogin(onLogin),
       m_onMessage(onMessage), m_onNudge(onNudge),
-      m_onVoiceMessage(onVoiceMessage), m_getStatus(getStatus),
-      m_onStatusChange(onStatusChange) {}
+      m_onVoiceMessage(onVoiceMessage), m_onTypingIndicator(onTypingIndicator),
+      m_getStatus(getStatus), m_onStatusChange(onStatusChange) {}
 
 ClientSession::~ClientSession() {
   if (m_socket != INVALID_SOCKET_VAL) {
@@ -40,6 +41,7 @@ ClientSession::ClientSession(ClientSession &&other) noexcept
       m_onMessage(std::move(other.m_onMessage)),
       m_onNudge(std::move(other.m_onNudge)),
       m_onVoiceMessage(std::move(other.m_onVoiceMessage)),
+      m_onTypingIndicator(std::move(other.m_onTypingIndicator)),
       m_getStatus(std::move(other.m_getStatus)),
       m_onStatusChange(std::move(other.m_onStatusChange)),
       m_buffer(std::move(other.m_buffer)) {
@@ -61,6 +63,7 @@ ClientSession &ClientSession::operator=(ClientSession &&other) noexcept {
     m_onMessage = std::move(other.m_onMessage);
     m_onNudge = std::move(other.m_onNudge);
     m_onVoiceMessage = std::move(other.m_onVoiceMessage);
+    m_onTypingIndicator = std::move(other.m_onTypingIndicator);
     m_getStatus = std::move(other.m_getStatus);
     m_onStatusChange = std::move(other.m_onStatusChange);
 
@@ -155,6 +158,22 @@ void ClientSession::processPacket(Packet &packet) {
 
   case PacketType::VoiceMessage:
     handleVoiceMessage(packet);
+    break;
+
+  case PacketType::TypingIndicator:
+    // Inline handling for simplicity as it's small
+    {
+      if (!m_isLoggedIn)
+        break;
+      std::string targetUser = packet.readString();
+      // We expect an Int (0 or 1) for visibility
+      // Read as Int, cast to bool
+      bool isTyping = (packet.readInt() != 0);
+
+      if (m_onTypingIndicator) {
+        m_onTypingIndicator(this, targetUser, isTyping);
+      }
+    }
     break;
 
   default:

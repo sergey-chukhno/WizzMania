@@ -1,15 +1,21 @@
-#pragma once
+#ifndef CHATWINDOW_H
+#define CHATWINDOW_H
 
-#include <QFrame>
-#include <QLineEdit>
-#include <QScrollArea>
+#include <QColor>
+#include <QMouseEvent>
+#include <QPixmap>
+#include <QPoint>
 #include <QSoundEffect>
 #include <QTimer>
-#include <QVBoxLayout>
-#include <QWidget>
+#include <QtWidgets/QFrame>
+#include <QtWidgets/QLabel>
+#include <QtWidgets/QLineEdit>
+#include <QtWidgets/QPushButton>
+#include <QtWidgets/QScrollArea>
+#include <QtWidgets/QVBoxLayout>
+#include <QtWidgets/QWidget>
 
 #include "AudioManager.h"
-#include <QPushButton>
 
 class ChatWindow : public QWidget {
   Q_OBJECT
@@ -21,8 +27,8 @@ public:
   void addMessage(const QString &sender, const QString &text, bool isSelf);
   void addVoiceMessage(const QString &sender, uint16_t duration,
                        const std::vector<uint8_t> &data, bool isSelf);
-  void flash(const QColor &color); // Visual alert
-  void shake();                    // Nudge effect
+  void flash(const QColor &color);
+  void shake();
   QString getPartnerName() const { return m_partnerName; }
 
 signals:
@@ -41,7 +47,7 @@ private slots:
   void onSendClicked();
   void onWizzClicked();
   void onEmojiClicked();
-  void onMicClicked(); // Toggle recording
+  void onMicClicked();
 
 private:
   void setupUI();
@@ -59,8 +65,13 @@ private:
   QWidget *m_chatContainer;
   QVBoxLayout *m_chatLayout;
   QLineEdit *m_messageInput;
-  QPushButton *m_micBtn; // New Mic Button
+  QPushButton *m_micBtn;
   QPixmap m_background;
+  QLabel *m_typingLabel;
+
+  // Typing Logic
+  bool m_isTyping = false;
+  QTimer *m_typingStopTimer;
 
   // Audio Logic
   AudioManager *m_audioManager;
@@ -70,7 +81,7 @@ private:
   int m_flashCount = 0;
   QTimer *m_flashTimer;
   QColor m_overlayColor = Qt::transparent;
-  QColor m_flashTargetColor = QColor(255, 0, 0, 120); // Default Red
+  QColor m_flashTargetColor = QColor(255, 0, 0, 120);
 
   // Sound
   QSoundEffect *m_soundEffect;
@@ -80,3 +91,5 @@ private:
   int m_vibrationSteps;
   QPoint m_originalPos;
 };
+
+#endif // CHATWINDOW_H

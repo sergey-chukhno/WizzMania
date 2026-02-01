@@ -28,9 +28,10 @@ enum class PacketType : uint32_t {
 
   // Messaging
   DirectMessage = 300,
-  MessageSent = 301,  // Acknowledge
-  Nudge = 302,        // Wizz/Nudge
-  VoiceMessage = 303, // Voice Message (Binary Blob)
+  MessageSent = 301,     // Acknowledge
+  Nudge = 302,           // Wizz/Nudge
+  VoiceMessage = 303,    // Voice Message (Binary Blob)
+  TypingIndicator = 304, // Typing Status (Sender -> Server -> Target)
 
   // Errors
 

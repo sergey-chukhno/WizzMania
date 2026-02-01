@@ -184,6 +184,24 @@ The Wizz feature introduces a "Stateful" check before routing.
     4.  If Status == `Online`: Server routes `Nudge` to Recipient.
 *   This illustrates **Server-Side Validation**. The client UI also disables the button, but the Server enforces the rule (anti-cheat).
 
+## 15. Voice Messaging Architecture (Binary & Storage)
+Voice messages (PacketType `301`) require handling large binary payloads (10KB - 500KB).
+
+### Protocol Handling for Voice
+*   **Packet Structure**: `[Header][TargetUsername][Duration(2)][WavData...]`.
+*   **Routing**: Same "Hub Pattern" as text messages.
+    *   If Target is **Online**: The large packet is forwarded directly.
+    *   If Target is **Offline**: The server **must store the audio**.
+
+### File-Based Storage Strategy (The `server/storage/` Directory)
+Instead of storing 500KB blobs in the SQLite `messages` table (which bloats the DB), we use a **Hybrid Approach**:
+1.  **File System**: The WAV data is saved to disk: `server/storage/voice_SENDER_TIMESTAMP.wav`.
+2.  **Database**: We insert a "Reference Message" into SQLite.
+    *   Body Text: `[VOICE:server/storage/voice_Sergey_123456.wav]` (Special Marker).
+    *   Type: We treat it as a text message with a special prefix.
+3.  ** retrieval**: When the offline user logs in, the Client receives the text message.
+    *   *Implementation Note*: Currently, offline retrieval sends the *path*. In a full production version, the client would request a separate file download (HTTP/FTP) for that path. For this MVP (Localhost), the path serves as a proof of concept.
+
 ## 14. Database Integration (SQLite) - `DatabaseManager`
 The `DatabaseManager` class abstracts all SQL logic.
 *   **Schema**:

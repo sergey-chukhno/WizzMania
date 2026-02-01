@@ -26,6 +26,9 @@ using OnNudgeCallback =
 using OnVoiceMessageCallback =
     std::function<void(ClientSession *, const std::string &, uint16_t,
                        const std::vector<uint8_t> &)>;
+
+using OnTypingIndicatorCallback =
+    std::function<void(ClientSession *, const std::string &, bool)>;
 // Callback for Status: (Username) -> Status Int
 using GetStatusCallback = std::function<int(const std::string &)>;
 // Callback for Status Change: (Sender, NewStatus)
@@ -38,6 +41,7 @@ public:
                          OnLoginCallback onLogin, OnMessageCallback onMessage,
                          OnNudgeCallback onNudge,
                          OnVoiceMessageCallback onVoiceMessage,
+                         OnTypingIndicatorCallback onTypingIndicator,
                          GetStatusCallback getStatus,
                          OnStatusChangeCallback onStatusChange);
   ~ClientSession(); // Closes socket if owned
@@ -89,6 +93,7 @@ private:
   OnMessageCallback m_onMessage;
   OnNudgeCallback m_onNudge;
   OnVoiceMessageCallback m_onVoiceMessage;
+  OnTypingIndicatorCallback m_onTypingIndicator;
   GetStatusCallback m_getStatus;
   OnStatusChangeCallback m_onStatusChange;
 

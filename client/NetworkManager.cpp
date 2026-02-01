@@ -64,6 +64,15 @@ void NetworkManager::sendVoiceMessage(const QString &target, uint16_t duration,
   sendPacket(p);
 }
 
+void NetworkManager::sendTypingPacket(const QString &target, bool isTyping) {
+  if (!isConnected())
+    return;
+  wizz::Packet p(wizz::PacketType::TypingIndicator);
+  p.writeString(target.toStdString());
+  p.writeInt(isTyping ? 1 : 0);
+  sendPacket(p);
+}
+
 // --- Slots ---
 
 void NetworkManager::onSocketConnected() { emit connected(); }
@@ -138,6 +147,10 @@ void NetworkManager::onReadyRead() {
           std::vector<uint8_t> audioData = pkt.readBytes(len);
           emit voiceMessageReceived(sender, duration, audioData);
         }
+      } else if (pkt.type() == wizz::PacketType::TypingIndicator) {
+        QString sender = QString::fromStdString(pkt.readString());
+        bool isTyping = (pkt.readInt() != 0);
+        emit userTyping(sender, isTyping);
       }
 
     } catch (...) {
