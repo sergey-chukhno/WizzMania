@@ -80,7 +80,7 @@ MainWindow::MainWindow(const QString &username, const QPoint &initialPos,
               onContactDoubleClicked(sender); // Open window
             }
             if (m_openChats.contains(sender)) {
-              m_openChats[sender]->addMessage(sender, "sent you a Wizz!",
+              m_openChats[sender]->addMessage(sender, sender + " sent a Wizz!",
                                               false);
               m_openChats[sender]->shake();
               m_openChats[sender]->show();

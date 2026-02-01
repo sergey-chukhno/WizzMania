@@ -16,8 +16,8 @@ public:
   ~ChatWindow();
 
   void addMessage(const QString &sender, const QString &text, bool isSelf);
-  void flash(); // Visual alert
-  void shake(); // Nudge effect
+  void flash(const QColor &color); // Visual alert
+  void shake();                    // Nudge effect
   QString getPartnerName() const { return m_partnerName; }
 
 signals:
@@ -37,7 +37,8 @@ private slots:
 
 private:
   void setupUI();
-  QWidget *createMessageBubble(const QString &text, bool isSelf);
+  QWidget *createMessageBubble(const QString &text, const QString &time,
+                               bool isSelf);
 
   QString m_partnerName;
   QPoint m_dragPosition;
@@ -54,6 +55,7 @@ private:
   int m_flashCount = 0;
   QTimer *m_flashTimer;
   QColor m_overlayColor = Qt::transparent;
+  QColor m_flashTargetColor = QColor(255, 0, 0, 120); // Default Red
 
   // Sound
   QSoundEffect *m_soundEffect;

@@ -1,5 +1,6 @@
 #include "ChatWindow.h"
 #include <QApplication>
+#include <QDateTime>
 #include <QDebug>
 #include <QGraphicsDropShadowEffect>
 #include <QHBoxLayout>
@@ -47,7 +48,7 @@ ChatWindow::ChatWindow(const QString &partnerName, const QPoint &initialPos,
     // Toggle color (Blink effect)
     m_flashCount++;
     if (m_flashCount % 2 == 0) {
-      m_overlayColor = QColor(255, 0, 0, 120); // RED flash!
+      m_overlayColor = m_flashTargetColor;
     } else {
       m_overlayColor = Qt::transparent;
     }
@@ -136,7 +137,8 @@ void ChatWindow::mouseMoveEvent(QMouseEvent *event) {
 void ChatWindow::addMessage(const QString &sender, const QString &text,
                             bool isSelf) {
   Q_UNUSED(sender);
-  QWidget *bubble = createMessageBubble(text, isSelf);
+  QString time = QDateTime::currentDateTime().toString("HH:mm");
+  QWidget *bubble = createMessageBubble(text, time, isSelf);
   m_chatLayout->addWidget(bubble);
 
   // Auto-scroll to bottom
@@ -144,18 +146,14 @@ void ChatWindow::addMessage(const QString &sender, const QString &text,
     m_chatArea->verticalScrollBar()->setValue(
         m_chatArea->verticalScrollBar()->maximum());
   });
-
-  // Only flash if window is NOT active
-  if (!isActiveWindow() && !isSelf) {
-    flash();
-  }
 }
 
-void ChatWindow::flash() {
+void ChatWindow::flash(const QColor &color) {
+  m_flashTargetColor = color;
   m_flashing = true;
   m_flashCount = 0;
-  m_flashTimer->start(400);  // Blink every 400ms
-  QApplication::alert(this); // OS-level flash
+  m_flashTimer->start(400);         // Blink every 400ms
+  m_overlayColor = Qt::transparent; // Reset first
 }
 
 void ChatWindow::shake() {
@@ -172,7 +170,7 @@ void ChatWindow::shake() {
       15); // Update every 15ms (approx 60fps) for staccato feel
 
   // Trigger Red Flash
-  flash();
+  flash(QColor(255, 0, 0, 120));
 }
 
 void ChatWindow::onSendClicked() {
@@ -190,20 +188,33 @@ void ChatWindow::onWizzClicked() {
   addMessage("Me", "You sent a Wizz!", true); // Local echo
 }
 
-QWidget *ChatWindow::createMessageBubble(const QString &text, bool isSelf) {
+QWidget *ChatWindow::createMessageBubble(const QString &text,
+                                         const QString &time, bool isSelf) {
   QWidget *container = new QWidget();
   QHBoxLayout *layout = new QHBoxLayout(container);
   layout->setContentsMargins(0, 5, 0, 5);
+
+  QWidget *contentWidget = new QWidget();
+  QVBoxLayout *contentLayout = new QVBoxLayout(contentWidget);
+  contentLayout->setContentsMargins(0, 0, 0, 0);
+  contentLayout->setSpacing(2);
 
   QLabel *bubble = new QLabel(text);
   bubble->setWordWrap(true);
   bubble->setTextInteractionFlags(Qt::TextSelectableByMouse);
   bubble->setMaximumWidth(250); // Max width of bubble
 
+  QLabel *timeLabel = new QLabel(time);
+  timeLabel->setStyleSheet("color: #718096; font-size: 10px;");
+
   // Style based on sender
   if (isSelf) {
     layout->addStretch();
-    layout->addWidget(bubble);
+    layout->addWidget(contentWidget);
+
+    contentLayout->addWidget(bubble, 0, Qt::AlignRight);
+    contentLayout->addWidget(timeLabel, 0, Qt::AlignRight);
+
     bubble->setStyleSheet(R"(
         QLabel {
             background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #4facfe, stop:1 #00f2fe);
@@ -215,8 +226,12 @@ QWidget *ChatWindow::createMessageBubble(const QString &text, bool isSelf) {
     )");
   } else {
     // Received
-    layout->addWidget(bubble);
+    layout->addWidget(contentWidget);
     layout->addStretch();
+
+    contentLayout->addWidget(bubble, 0, Qt::AlignLeft);
+    contentLayout->addWidget(timeLabel, 0, Qt::AlignLeft);
+
     // Glassy gray style
     bubble->setStyleSheet(R"(
         QLabel {
@@ -378,7 +393,7 @@ void ChatWindow::setupUI() {
           border: 1px solid rgba(255, 255, 255, 200);
       }
       QPushButton:hover {
-           background: rgba(255, 255, 255, 180);
+          background: rgba(255, 255, 255, 180);
            border: 1px solid #a1c4fd;
       }
   )");
