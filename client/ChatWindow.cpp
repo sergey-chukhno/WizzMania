@@ -3,14 +3,17 @@
 #include <QDateTime>
 #include <QDebug>
 #include <QGraphicsDropShadowEffect>
+#include <QGridLayout>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QMenu>
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPainterPath>
 #include <QPropertyAnimation>
 #include <QPushButton>
 #include <QScrollBar>
+#include <QWidgetAction>
 
 #include <QRandomGenerator>
 #include <QUrl>
@@ -188,6 +191,50 @@ void ChatWindow::onWizzClicked() {
   addMessage("Me", "You sent a Wizz!", true); // Local echo
 }
 
+void ChatWindow::onEmojiClicked() {
+  QMenu *menu = new QMenu(this);
+  menu->setStyleSheet("background: white; border-radius: 10px; border: 1px "
+                      "solid #cbd5e0;");
+
+  QWidget *container = new QWidget();
+  QGridLayout *layout = new QGridLayout(container);
+  layout->setSpacing(5);
+  layout->setContentsMargins(10, 10, 10, 10);
+
+  QStringList emojis = {"😀", "😂", "🥰", "😎", "🤔", "😴", "😭", "😡",
+                        "👍", "👎", "❤️",  "🦋", "🚀", "⚡", "🎉", "🔥"};
+
+  int row = 0, col = 0;
+  for (const QString &emoji : emojis) {
+    QPushButton *btn = new QPushButton(emoji);
+    btn->setFixedSize(32, 32);
+    btn->setFlat(true);
+    btn->setCursor(Qt::PointingHandCursor);
+    btn->setStyleSheet("font-size: 20px; border: none;"); // Clean look
+
+    connect(btn, &QPushButton::clicked, menu, [this, menu, emoji]() {
+      m_messageInput->insert(emoji);
+      menu->close();
+    });
+
+    layout->addWidget(btn, row, col);
+    col++;
+    if (col > 3) { // 4 columns
+      col = 0;
+      row++;
+    }
+  }
+
+  QWidgetAction *action = new QWidgetAction(menu);
+  action->setDefaultWidget(container);
+  menu->addAction(action);
+
+  // Show above the button
+  // Ideally near the emoji button, but input works as anchor too.
+  menu->exec(QCursor::pos());
+  menu->deleteLater();
+}
+
 QWidget *ChatWindow::createMessageBubble(const QString &text,
                                          const QString &time, bool isSelf) {
   QWidget *container = new QWidget();
@@ -353,6 +400,7 @@ void ChatWindow::setupUI() {
           background: rgba(255, 255, 255, 150);
       }
   )");
+  connect(emojiBtn, &QPushButton::clicked, this, &ChatWindow::onEmojiClicked);
 
   m_messageInput = new QLineEdit(inputContainer);
   m_messageInput->setPlaceholderText("Type a message...");
