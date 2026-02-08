@@ -1,9 +1,12 @@
 #include "AuthWindow.h"
 #include "../common/Packet.h"
 #include "NetworkManager.h"
+#include <QBuffer>
+#include <QFileDialog>
 #include <QGraphicsDropShadowEffect>
 #include <QMessageBox>
 #include <QPaintEvent>
+#include <QPainterPath>
 #include <QRandomGenerator>
 #include <QTimer>
 
@@ -307,7 +310,7 @@ QFrame *AuthWindow::createLoginCard() {
 QFrame *AuthWindow::createRegisterCard() {
   QFrame *glassCard = new QFrame();
   glassCard->setObjectName("glassCard");
-  glassCard->setFixedSize(500, 540);
+  glassCard->setFixedSize(500, 650); // Increased from 540 to 650
   glassCard->setStyleSheet(R"(
         #glassCard {
             background-color: rgba(255, 255, 255, 35);
@@ -355,7 +358,8 @@ QFrame *AuthWindow::createRegisterCard() {
 
   // Inner Glass Frame
   QFrame *innerFrame = new QFrame(glassCard);
-  innerFrame->setFixedSize(420, 310);
+  innerFrame->setFixedSize(420,
+                           450); // Increased from 310 to 450 to avoid overlap
   innerFrame->setStyleSheet(R"(
         background-color: rgba(255, 255, 255, 25);
         border: 2px solid rgba(200, 230, 255, 150);
@@ -364,7 +368,7 @@ QFrame *AuthWindow::createRegisterCard() {
 
   QVBoxLayout *innerLayout = new QVBoxLayout(innerFrame);
   innerLayout->setContentsMargins(25, 25, 25, 25);
-  innerLayout->setSpacing(12);
+  innerLayout->setSpacing(15); // Match Login Spacing (was 12)
 
   QString inputStyle = R"(
         background-color: rgba(255, 255, 255, 50);
@@ -421,6 +425,52 @@ QFrame *AuthWindow::createRegisterCard() {
   confirmRow->addWidget(confirmIcon, 0, Qt::AlignVCenter);
   confirmRow->addWidget(m_regConfirmPassword);
   innerLayout->addLayout(confirmRow);
+
+  // Avatar Selection
+  QVBoxLayout *avatarLayout = new QVBoxLayout();
+  m_avatarPreview = new ClickableLabel(innerFrame);
+  m_avatarPreview->setFixedSize(80, 80);
+  m_avatarPreview->setStyleSheet(
+      "background-color: rgba(255, 255, 255, 50); border-radius: 40px; border: "
+      "2px dashed rgba(255, 255, 255, 150);");
+  m_avatarPreview->setAlignment(Qt::AlignCenter);
+  m_avatarPreview->setText("Add\nPhoto");
+  m_avatarPreview->setCursor(Qt::PointingHandCursor);
+
+  connect(reinterpret_cast<ClickableLabel *>(m_avatarPreview),
+          &ClickableLabel::clicked, this, [this]() {
+            QString fileName = QFileDialog::getOpenFileName(
+                this, "Select Avatar", "", "Images (*.png *.jpg *.jpeg)");
+            if (!fileName.isEmpty()) {
+              QPixmap pix(fileName);
+              if (!pix.isNull()) {
+                // Scale and set circular mask
+                QPixmap scaled =
+                    pix.scaled(80, 80, Qt::KeepAspectRatioByExpanding,
+                               Qt::SmoothTransformation);
+                QPixmap circular(80, 80);
+                circular.fill(Qt::transparent);
+                QPainter painter(&circular);
+                painter.setRenderHint(QPainter::Antialiasing);
+                QPainterPath path;
+                path.addEllipse(0, 0, 80, 80);
+                painter.setClipPath(path);
+                painter.drawPixmap(0, 0, scaled);
+                m_avatarPreview->setPixmap(circular);
+
+                // Save data for later upload
+                QByteArray bytes;
+                QBuffer buffer(&bytes);
+                buffer.open(QIODevice::WriteOnly);
+                pix.save(&buffer, "PNG");
+                m_pendingAvatarData = bytes;
+              }
+            }
+          });
+
+  avatarLayout->addWidget(m_avatarPreview, 0, Qt::AlignCenter);
+  innerLayout->addLayout(avatarLayout);
+  innerLayout->addSpacing(10);
 
   innerLayout->addSpacing(8);
 
@@ -530,6 +580,15 @@ void AuthWindow::onLoginPacketReceived(const wizz::Packet &constPkt) {
     m_loginStatus->setText("Login successful!");
     m_loginStatus->setStyleSheet(
         "color: #27ae60; font-weight: bold; background: transparent;");
+
+    // Auto-Upload Avatar if pending
+    if (!m_pendingAvatarData.isEmpty() &&
+        m_loginUsername->text() == m_pendingAvatarUser) {
+      NetworkManager::instance().sendUpdateAvatar(m_pendingAvatarData);
+      m_pendingAvatarData.clear();
+      m_pendingAvatarUser.clear();
+    }
+
     emit loginSuccessful();
   } else if (pkt.type() == wizz::PacketType::LoginFailed) {
     std::string reason = pkt.readString();
@@ -597,6 +656,10 @@ void AuthWindow::onRegisterConnected() {
   wizz::Packet regPkt(wizz::PacketType::Register);
   regPkt.writeString(m_regUsername->text().toStdString());
   regPkt.writeString(m_regPassword->text().toStdString());
+
+  // Store username for potential avatar upload later
+  m_pendingAvatarUser = m_regUsername->text();
+
   NetworkManager::instance().sendPacket(regPkt);
 }
 
