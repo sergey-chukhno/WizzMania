@@ -21,6 +21,8 @@ public:
   void sendVoiceMessage(const QString &target, uint16_t duration,
                         const std::vector<uint8_t> &data);
   void sendTypingPacket(const QString &target, bool isTyping);
+  void sendUpdateAvatar(const QByteArray &data);
+  void requestAvatar(const QString &username);
 
 signals:
   // Status Signals
@@ -37,6 +39,7 @@ signals:
   void voiceMessageReceived(const QString &sender, uint16_t duration,
                             const std::vector<uint8_t> &data);
   void userTyping(const QString &sender, bool isTyping);
+  void avatarReceived(const QString &username, const QByteArray &data);
 
 private slots:
   void onSocketConnected();

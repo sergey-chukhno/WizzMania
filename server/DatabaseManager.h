@@ -23,6 +23,11 @@ public:
   bool checkCredentials(const std::string &username,
                         const std::string &password);
 
+  // Avatar Management
+  bool updateUserAvatar(const std::string &username,
+                        const std::string &avatarPath);
+  std::string getUserAvatar(const std::string &username);
+
   // Message Persistence
   struct StoredMessage {
     int id;

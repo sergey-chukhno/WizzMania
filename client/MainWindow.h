@@ -7,6 +7,7 @@
 #include <QLineEdit>
 #include <QListWidget>
 #include <QPainter>
+#include <QProcess>
 #include <QPushButton>
 #include <QScrollArea>
 #include <QVBoxLayout>
@@ -41,6 +42,7 @@ public:
   void setContacts(const QList<ContactInfo> &contacts);
   void updateContactStatus(const QString &username, UserStatus status,
                            const QString &statusMessage = "");
+  void updateContactAvatar(const QString &username, const QPixmap &avatar);
 
 signals:
   void contactDoubleClicked(const QString &username);
@@ -48,7 +50,11 @@ signals:
   void statusChanged(UserStatus status, const QString &statusMessage);
 
 protected:
+  // Paint Event for background
   void paintEvent(QPaintEvent *event) override;
+
+  // Event Filter for hover effects
+  bool eventFilter(QObject *obj, QEvent *event) override;
 
 private slots:
   void onStatusChanged(int index);
@@ -57,6 +63,10 @@ private slots:
   void onRemoveFriendClicked();
   void onChatWindowClosed(const QString &partnerName);
   void onContactDoubleClicked(const QString &username);
+
+  // Avatar Slots
+  void onAvatarClicked();
+  void onAvatarReceived(const QString &username, const QByteArray &data);
 
 private:
   void setupUI();
@@ -78,11 +88,11 @@ private:
   QLineEdit *m_statusMessageInput;
   QListWidget *m_contactList;
 
-  // Chat preview
-  QFrame *m_chatPreviewFrame;
-  QLabel *m_chatPreviewLabel;
-  QLineEdit *m_messageInput;
-  QPushButton *m_sendButton;
+  // Game Panel
+  QFrame *m_gamePanelFrame;
+  QHBoxLayout *m_gamesLayout;
+  void setupGamePanel(QVBoxLayout *parentLayout);
+  void addGameIcon(const QString &name, const QString &iconPath);
 
   // Dialogs
   AddFriendDialog *m_addFriendDialog = nullptr;

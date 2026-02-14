@@ -65,4 +65,27 @@ private:
   QLineEdit *m_regConfirmPassword;
   QPushButton *m_registerButton;
   QLabel *m_regStatus;
+
+  // Avatar Upload Logic
+  QByteArray m_pendingAvatarData;
+  QString m_pendingAvatarUser;
+  QLabel *m_avatarPreview; // On Register Page
+};
+
+// Helper for clickable avatar
+class ClickableLabel : public QLabel {
+  Q_OBJECT
+public:
+  explicit ClickableLabel(QWidget *parent = nullptr,
+                          Qt::WindowFlags f = Qt::WindowFlags())
+      : QLabel(parent, f) {}
+
+signals:
+  void clicked();
+
+protected:
+  void mousePressEvent(QMouseEvent *event) override {
+    emit clicked();
+    QLabel::mousePressEvent(event);
+  }
 };

@@ -1,0 +1,322 @@
+# C++/SFML Cyberpunk Cannon Shooter - .gitignore
+
+# ============================================
+# Documentation and Project-Specific Files
+# ============================================
+docs/
+.cursorrules
+
+# But keep ROADMAP.md in root directory (it's tracked)
+!ROADMAP.md
+
+# ============================================
+# Build Directories
+# ============================================
+build/
+Build/
+BUILD/
+out/
+Out/
+bin/
+Bin/
+lib/
+Lib/
+obj/
+Obj/
+
+# CMake
+cmake-build-*/
+CMakeCache.txt
+CMakeFiles/
+CMakeScripts/
+Testing/
+Makefile
+cmake_install.cmake
+install_manifest.txt
+compile_commands.json
+CTestTestfile.cmake
+_deps/
+*.cmake
+!CMakeLists.txt
+
+# ============================================
+# Compiled Object files
+# ============================================
+*.o
+*.obj
+*.ko
+*.elf
+
+# ============================================
+# Precompiled Headers
+# ============================================
+*.gch
+*.pch
+
+# ============================================
+# Compiled Dynamic libraries
+# ============================================
+*.so
+*.dylib
+*.dll
+
+# ============================================
+# Fortran module files
+# ============================================
+*.mod
+*.smod
+
+# ============================================
+# Compiled Static libraries
+# ============================================
+*.lai
+*.la
+*.a
+*.lib
+
+# ============================================
+# Executables
+# ============================================
+*.exe
+*.out
+*.app
+*.i*86
+*.x86_64
+*.hex
+
+# ============================================
+# Debug files
+# ============================================
+*.dSYM/
+*.su
+*.idb
+*.pdb
+*.ilk
+
+# ============================================
+# Kernel Module Compile Results
+# ============================================
+*.mod*
+*.cmd
+.tmp_versions/
+modules.order
+Module.symvers
+Mkfile.old
+dkms.conf
+
+# ============================================
+# IDE and Editor Files
+# ============================================
+
+# Visual Studio Code
+.vscode/
+*.code-workspace
+
+# Visual Studio
+.vs/
+*.vcxproj
+*.vcxproj.filters
+*.vcxproj.user
+*.sln
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Xcode
+*.xcodeproj/
+*.xcworkspace/
+xcuserdata/
+*.xcuserstate
+project.xcworkspace/
+
+# CLion
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# Code::Blocks
+*.depend
+*.layout
+*.cbp
+
+# Qt Creator
+*.pro.user
+*.pro.user.*
+
+# Eclipse
+.project
+.cproject
+.settings/
+
+# NetBeans
+nbproject/
+nbbuild/
+dist/
+nbdist/
+.nb-gradle/
+
+# ============================================
+# SFML Specific
+# ============================================
+# SFML libraries (if copied locally)
+SFML/
+sfml/
+
+# ============================================
+# Asset Files (Optional - uncomment if assets are large)
+# ============================================
+# assets/textures/*.png
+# assets/textures/*.jpg
+# assets/sounds/*.ogg
+# assets/sounds/*.wav
+# assets/music/*.ogg
+# assets/music/*.mp3
+# assets/fonts/*.ttf
+# assets/fonts/*.otf
+
+# But keep asset directory structure
+!assets/
+!assets/**/
+!assets/**/.gitkeep
+
+# ============================================
+# Configuration Files (Optional - uncomment if sensitive)
+# ============================================
+# config/settings.json
+# config/user_settings.json
+
+# But keep config directory structure
+!config/
+!config/**/
+!config/**/.gitkeep
+
+# ============================================
+# OS Specific Files
+# ============================================
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+.Spotlight-V100
+.Trashes
+.AppleDB
+.AppleDesktop
+Network Trash Folder
+Temporary Items
+.apdisk
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+*.stackdump
+[Dd]esktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msix
+*.msm
+*.msp
+*.lnk
+
+# Linux
+*~
+.directory
+.Trash-*
+.nfs*
+
+# ============================================
+# Temporary Files
+# ============================================
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+*.bak
+*.backup
+*.orig
+
+# ============================================
+# Log Files
+# ============================================
+*.log
+logs/
+
+# ============================================
+# Game Data Files
+# ============================================
+highscore.txt
+*.save
+*.score
+
+# ============================================
+# Package Files
+# ============================================
+*.7z
+*.dmg
+*.gz
+*.iso
+*.jar
+*.rar
+*.tar
+*.zip
+
+# ============================================
+# Testing
+# ============================================
+test-results/
+*.test
+coverage/
+*.gcov
+*.gcda
+*.gcno
+
+# ============================================
+# Dependencies (if using package managers)
+# ============================================
+# Conan
+conanbuildinfo.*
+conaninfo.txt
+
+# vcpkg
+vcpkg_installed/
+
+# ============================================
+# Profiling
+# ============================================
+*.prof
+gmon.out
+callgrind.out.*
+perf.data*
+
+# ============================================
+# Documentation Build
+# ============================================
+docs/_build/
+docs/.doctrees/
+docs/html/
+docs/latex/
+
+# ============================================
+# Miscellaneous
+# ============================================
+*.class
+*.pyc
+*.pyo
+*.pyd
+__pycache__/
+*.so
+
+# Keep important files
+!README.md
+!LICENSE
+!CMakeLists.txt
+!.gitignore
+

@@ -30,7 +30,8 @@ bool DatabaseManager::init() {
                          "ID INTEGER PRIMARY KEY AUTOINCREMENT,"
                          "USERNAME TEXT NOT NULL UNIQUE,"
                          "PASSWORD_HASH TEXT NOT NULL,"
-                         "SALT TEXT NOT NULL);";
+                         "SALT TEXT NOT NULL,"
+                         "AVATAR_PATH TEXT);";
 
   char *errMsg = nullptr;
   if (sqlite3_exec(m_db, sqlUsers, nullptr, 0, &errMsg) != SQLITE_OK) {
@@ -269,8 +270,9 @@ bool DatabaseManager::createUser(const std::string &username,
   std::string hash = hashPassword(password, salt);
 
   // Prepare Statement (PREVENT SQL INJECTION)
-  const char *sql =
-      "INSERT INTO users (USERNAME, PASSWORD_HASH, SALT) VALUES (?, ?, ?);";
+  // Prepare Statement (PREVENT SQL INJECTION)
+  const char *sql = "INSERT INTO users (USERNAME, PASSWORD_HASH, SALT, "
+                    "AVATAR_PATH) VALUES (?, ?, ?, ?);";
   sqlite3_stmt *stmt;
 
   if (sqlite3_prepare_v2(m_db, sql, -1, &stmt, nullptr) != SQLITE_OK) {
@@ -282,6 +284,7 @@ bool DatabaseManager::createUser(const std::string &username,
   sqlite3_bind_text(stmt, 1, username.c_str(), -1, SQLITE_STATIC);
   sqlite3_bind_text(stmt, 2, hash.c_str(), -1, SQLITE_STATIC);
   sqlite3_bind_text(stmt, 3, salt.c_str(), -1, SQLITE_STATIC);
+  sqlite3_bind_text(stmt, 4, "", -1, SQLITE_STATIC); // Default empty avatar
 
   bool success = false;
   if (sqlite3_step(stmt) == SQLITE_DONE) {
@@ -327,6 +330,39 @@ bool DatabaseManager::checkCredentials(const std::string &username,
 
   sqlite3_finalize(stmt);
   return valid;
+}
+
+bool DatabaseManager::updateUserAvatar(const std::string &username,
+                                       const std::string &avatarPath) {
+  const char *sql = "UPDATE users SET AVATAR_PATH = ? WHERE USERNAME = ?;";
+  sqlite3_stmt *stmt;
+  if (sqlite3_prepare_v2(m_db, sql, -1, &stmt, nullptr) != SQLITE_OK)
+    return false;
+
+  sqlite3_bind_text(stmt, 1, avatarPath.c_str(), -1, SQLITE_STATIC);
+  sqlite3_bind_text(stmt, 2, username.c_str(), -1, SQLITE_STATIC);
+
+  bool success = (sqlite3_step(stmt) == SQLITE_DONE);
+  sqlite3_finalize(stmt);
+  return success;
+}
+
+std::string DatabaseManager::getUserAvatar(const std::string &username) {
+  const char *sql = "SELECT AVATAR_PATH FROM users WHERE USERNAME = ?;";
+  sqlite3_stmt *stmt;
+  if (sqlite3_prepare_v2(m_db, sql, -1, &stmt, nullptr) != SQLITE_OK)
+    return "";
+
+  sqlite3_bind_text(stmt, 1, username.c_str(), -1, SQLITE_STATIC);
+
+  std::string path;
+  if (sqlite3_step(stmt) == SQLITE_ROW) {
+    const unsigned char *text = sqlite3_column_text(stmt, 0);
+    if (text)
+      path = reinterpret_cast<const char *>(text);
+  }
+  sqlite3_finalize(stmt);
+  return path;
 }
 
 // --- Helpers ---

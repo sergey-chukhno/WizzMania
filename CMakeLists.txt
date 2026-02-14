@@ -19,6 +19,16 @@ add_subdirectory(common)
 add_subdirectory(server)
 add_subdirectory(client)
 
+# Games Integration
+# We check if the directories exist to avoid errors if games are not present
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/games/TileTwister/CMakeLists.txt")
+    add_subdirectory(games/TileTwister)
+endif()
+
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/games/BrickBreaker/CMakeLists.txt")
+    add_subdirectory(games/BrickBreaker)
+endif()
+
 # Testing
 enable_testing()
 add_subdirectory(tests)
