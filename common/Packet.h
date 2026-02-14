@@ -33,7 +33,10 @@ enum class PacketType : uint32_t {
   VoiceMessage = 303,    // Voice Message (Binary Blob)
   TypingIndicator = 304, // Typing Status (Sender -> Server -> Target)
 
-  // Errors
+  // Avatars
+  UpdateAvatar = 400, // Client -> Server (Upload)
+  GetAvatar = 401,    // Client -> Server (Request)
+  AvatarData = 402,   // Server -> Client (Download)
 
   // Errors
   Error = 999

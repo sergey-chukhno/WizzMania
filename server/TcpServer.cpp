@@ -172,9 +172,6 @@ void TcpServer::run() {
                       notify.writeInt(1); // Online
                       notify.writeString(username);
                       it->second->sendPacket(notify);
-
-                      // 2. Friend is Online, so I should know?
-                      // (Already handled by my initial ContactList sync)
                     }
                   }
 
@@ -186,8 +183,7 @@ void TcpServer::run() {
                               << std::endl;
                     for (const auto &msg : pending) {
                       if (msg.body.rfind("VOICE:", 0) == 0) {
-                        // It's a voice message! Format:
-                        // VOICE:<duration>:<filename>
+                        // It's a voice message!
                         std::vector<std::string> parts;
                         std::stringstream ss(msg.body);
                         std::string item;
@@ -200,7 +196,6 @@ void TcpServer::run() {
                               static_cast<uint16_t>(std::stoi(parts[1]));
                           std::string filename = parts[2];
 
-                          // Load file
                           std::ifstream infile(filename, std::ios::binary |
                                                              std::ios::ate);
                           if (infile.is_open()) {
@@ -219,10 +214,6 @@ void TcpServer::run() {
                               outPacket.writeData(buffer.data(), buffer.size());
                               session->sendPacket(outPacket);
                             }
-                          } else {
-                            std::cerr << "[Server] Failed to load offline "
-                                         "voice file: "
-                                      << filename << std::endl;
                           }
                         }
                       } else {
@@ -232,8 +223,6 @@ void TcpServer::run() {
                         outPacket.writeString(msg.body);
                         session->sendPacket(outPacket);
                       }
-
-                      // Mark as Delivered
                       m_db.markAsDelivered(msg.id);
                     }
                   }
@@ -242,19 +231,14 @@ void TcpServer::run() {
                 [this](ClientSession *sender, const std::string &target,
                        const std::string &msg) {
                   bool delivered = false;
-
                   auto it = m_onlineUsers.find(target);
                   if (it != m_onlineUsers.end()) {
                     ClientSession *targetSession = it->second;
-
-                    // Forward Message
                     Packet outPacket(PacketType::DirectMessage);
                     outPacket.writeString(sender->getUsername());
                     outPacket.writeString(msg);
-
                     targetSession->sendPacket(outPacket);
                     delivered = true;
-
                     std::cout << "[Router] Routed msg from "
                               << sender->getUsername() << " to " << target
                               << std::endl;
@@ -262,34 +246,24 @@ void TcpServer::run() {
                     std::cout << "[Router] User " << target
                               << " not found (Offline). Storing." << std::endl;
                   }
-
-                  // Store in DB (History + Offline)
                   m_db.storeMessage(sender->getUsername(), target, msg,
                                     delivered);
                 },
                 // 3. OnNudge Callback
                 [this](ClientSession *sender, const std::string &target) {
-                  // Check Status in Registry
                   int status = 3; // Default Offline
                   if (m_userStatuses.find(target) != m_userStatuses.end()) {
                     status = m_userStatuses[target];
                   }
-
-                  // Rule: Cannot Nudge if Busy (2) or Offline (3)
-                  // Note: If user is in m_onlineUsers but status is Busy, we
-                  // block. If user is NOT in m_onlineUsers, they are Offline.
-
                   bool isOnline =
                       m_onlineUsers.find(target) != m_onlineUsers.end();
 
                   if (!isOnline) {
-                    // Target Offline
                     Packet err(PacketType::Error);
                     err.writeString("User " + target + " is offline.");
                     sender->sendPacket(err);
                     return;
                   }
-
                   if (status == 2) { // Busy
                     Packet err(PacketType::Error);
                     err.writeString("User " + target +
@@ -297,8 +271,6 @@ void TcpServer::run() {
                     sender->sendPacket(err);
                     return;
                   }
-
-                  // Forward Nudge
                   ClientSession *targetSession = m_onlineUsers[target];
                   Packet p(PacketType::Nudge);
                   p.writeString(sender->getUsername());
@@ -307,37 +279,24 @@ void TcpServer::run() {
                             << sender->getUsername() << " to " << target
                             << std::endl;
                 },
-
                 // 4. OnVoiceMessage Callback
                 [this](ClientSession *sender, const std::string &target,
                        uint16_t duration, const std::vector<uint8_t> &data) {
-                  std::cout << "[Server] Processing Voice Msg for " << target
-                            << " (" << data.size() << " bytes)" << std::endl;
-
-                  // 1. Save to Disk
                   long long timestamp = std::time(nullptr);
                   std::stringstream ss;
                   ss << "server/storage/voice_" << sender->getUsername() << "_"
                      << timestamp << ".wav";
                   std::string filepath = ss.str();
 
-                  // Ensure the file is written
                   std::ofstream outfile(filepath, std::ios::binary);
                   if (outfile.is_open()) {
                     outfile.write(reinterpret_cast<const char *>(data.data()),
                                   data.size());
                     outfile.close();
-                    std::cout << "[Server] Saved to " << filepath << std::endl;
-                  } else {
-                    std::cerr
-                        << "[Server] Failed to write voice file: " << filepath
-                        << std::endl;
                   }
 
-                  // 2. Relay or Notify
                   auto it = m_onlineUsers.find(target);
                   if (it != m_onlineUsers.end()) {
-                    // Target Online: Relay full blob for instant playback
                     ClientSession *targetSession = it->second;
                     Packet p(PacketType::VoiceMessage);
                     p.writeString(sender->getUsername());
@@ -346,8 +305,6 @@ void TcpServer::run() {
                     p.writeData(data.data(), data.size());
                     targetSession->sendPacket(p);
                   } else {
-                    // Target Offline: Store metadata in DB with file reference
-                    // Format: VOICE:<duration>:<filepath>
                     std::string proxyMsg =
                         "VOICE:" + std::to_string(duration) + ":" + filepath;
                     m_db.storeMessage(sender->getUsername(), target, proxyMsg,
@@ -357,29 +314,20 @@ void TcpServer::run() {
                 // 5. OnTypingIndicator Callback
                 [this](ClientSession *sender, const std::string &target,
                        bool isTyping) {
-                  // Lookup Target
                   auto it = m_onlineUsers.find(target);
                   if (it != m_onlineUsers.end()) {
                     ClientSession *targetSession = it->second;
-
-                    // Forward Packet: Rewrap to include SENDER name
-                    // Payload: [SenderName][IsTyping]
                     Packet p(PacketType::TypingIndicator);
                     p.writeString(sender->getUsername());
                     p.writeInt(isTyping ? 1 : 0);
                     targetSession->sendPacket(p);
                   }
-                  // If offline, ignore.
-                  // If offline, ignore.
                 },
-
                 // 6. GetStatus Callback
                 [this](const std::string &username) -> int {
                   if (m_userStatuses.find(username) != m_userStatuses.end()) {
                     return m_userStatuses[username];
                   }
-                  // Fallback logic if needed, but userStatuses should track
-                  // online users
                   if (m_onlineUsers.find(username) != m_onlineUsers.end()) {
                     return 1; // Online default
                   }
@@ -388,9 +336,7 @@ void TcpServer::run() {
                 // 7. OnStatusChange Callback
                 [this](ClientSession *sender, int newStatus) {
                   std::string username = sender->getUsername();
-                  m_userStatuses[username] = newStatus; // Store Status
-
-                  // Broadcast to friends
+                  m_userStatuses[username] = newStatus;
                   std::vector<std::string> friends = m_db.getFriends(username);
                   for (const auto &friendName : friends) {
                     auto it = m_onlineUsers.find(friendName);
@@ -400,6 +346,100 @@ void TcpServer::run() {
                       notify.writeString(username);
                       it->second->sendPacket(notify);
                     }
+                  }
+                },
+                // 8. OnUpdateAvatar Callback
+                [this](ClientSession *sender,
+                       const std::vector<uint8_t> &data) {
+                  std::string username = sender->getUsername();
+                  long long timestamp = std::time(nullptr);
+                  std::stringstream ss;
+                  ss << "server/storage/avatars/avatar_" << username << "_"
+                     << timestamp << ".png";
+                  std::string filepath = ss.str();
+
+                  if (!fs::exists("server/storage/avatars")) {
+                    fs::create_directories("server/storage/avatars");
+                  }
+
+                  std::ofstream outfile(filepath, std::ios::binary);
+                  if (outfile.is_open()) {
+                    outfile.write(reinterpret_cast<const char *>(data.data()),
+                                  data.size());
+                    outfile.close();
+                    std::cout << "[Server] Saved Avatar: " << filepath
+                              << std::endl;
+                    if (m_db.updateUserAvatar(username, filepath)) {
+                      std::cout << "[Server] DB Updated for " << username
+                                << std::endl;
+
+                      // BROADCAST TO FRIENDS
+                      std::vector<std::string> friends =
+                          m_db.getFriends(username);
+                      for (const auto &friendName : friends) {
+                        auto it = m_onlineUsers.find(friendName);
+                        if (it != m_onlineUsers.end()) {
+                          // Send AvatarData to friend
+                          Packet resp(PacketType::AvatarData);
+                          resp.writeString(username);
+                          resp.writeInt(static_cast<uint32_t>(data.size()));
+                          resp.writeData(data.data(), data.size());
+                          it->second->sendPacket(resp);
+                          std::cout << "[Server] Broadcasted avatar to "
+                                    << friendName << std::endl;
+                        }
+                      }
+                      // Also reflect back to sender to confirm? (Client handles
+                      // local update, but good for consistency)
+                    } else {
+                      std::cerr << "[Server] DB Update Failed for " << username
+                                << std::endl;
+                    }
+                  } else {
+                    std::cerr << "[Server] Failed to write file: " << filepath
+                              << std::endl;
+                  }
+                },
+                // 9. OnGetAvatar Callback
+                [this](ClientSession *sender, const std::string &target) {
+                  std::string filepath = m_db.getUserAvatar(target);
+                  // Debug Logs
+                  std::cout << "[Server] GetAvatar req for " << target
+                            << ". Path: " << filepath << std::endl;
+
+                  if (filepath.empty()) {
+                    std::cout << "[Server] No avatar path in DB for " << target
+                              << std::endl;
+                    return;
+                  }
+
+                  if (!fs::exists(filepath)) {
+                    std::cout << "[Server] File not found: " << filepath
+                              << std::endl;
+                    return;
+                  }
+
+                  std::ifstream infile(filepath,
+                                       std::ios::binary | std::ios::ate);
+                  if (infile.is_open()) {
+                    std::streamsize size = infile.tellg();
+                    infile.seekg(0, std::ios::beg);
+                    std::vector<uint8_t> buffer(size);
+                    if (infile.read(reinterpret_cast<char *>(buffer.data()),
+                                    size)) {
+                      Packet resp(PacketType::AvatarData);
+                      resp.writeString(target);
+                      resp.writeInt(static_cast<uint32_t>(buffer.size()));
+                      resp.writeData(buffer.data(), buffer.size());
+                      sender->sendPacket(resp);
+                      std::cout << "[Server] Sent avatar (" << size
+                                << " bytes) to " << sender->getUsername()
+                                << std::endl;
+                    }
+                  } else {
+                    std::cerr
+                        << "[Server] Failed to open file for read: " << filepath
+                        << std::endl;
                   }
                 }));
       }

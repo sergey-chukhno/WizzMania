@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tile Twister - Project Presentation</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;700;900&display=swap" rel="stylesheet">
+</head>
+
+<body>
+
+    <div class="slides-container">
+
+        <!-- Slide 1: Title & Animated Grid -->
+        <section class="slide active" id="slide-title">
+            <div class="content-center title-layout">
+                <div class="logo-container">
+                    <img src="assets/logo.png" alt="Tile Twister Logo" class="main-logo">
+                    <p class="subtitle">A Modern C++ Implementation of 2048</p>
+                    <div class="audio-hint">🔊 Turn Volume Up</div>
+                </div>
+
+                <div class="grid-perspective">
+                    <div class="demo-grid" id="demo-grid">
+                        <!-- JS will populate animations here -->
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Slide 2: Team -->
+        <section class="slide" id="slide-team">
+            <h2>The Team</h2>
+            <div class="team-cards">
+                <div class="card glass">
+                    <img src="assets/avatar_elodie.png" alt="Elodie" class="avatar-img">
+                    <h3>Elodie</h3>
+                    <p class="role">Gameplay Engineer</p>
+                    <p class="desc">Core Logic & Mechanics</p>
+                </div>
+                <div class="card glass">
+                    <img src="assets/avatar_sergey.png" alt="Sergey" class="avatar-img highlight">
+                    <h3>Sergey</h3>
+                    <p class="role">Lead Architect</p>
+                    <p class="desc">System Design & Integration</p>
+                </div>
+                <div class="card glass">
+                    <img src="assets/avatar_louis.png" alt="Louis" class="avatar-img">
+                    <h3>Louis</h3>
+                    <p class="role">Engine Specialist</p>
+                    <p class="desc">Rendering & Optimization</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Slide 3: Architecture -->
+        <section class="slide" id="slide-arch">
+            <h2>Architecture: The Clean Approach</h2>
+            <div class="split-layout wide">
+                <div class="text-block expanded">
+                    <blockquote>
+                        "Source code dependencies must only point inward."
+                        <footer>— Robert C. Martin (Uncle Bob)</footer>
+                    </blockquote>
+
+                    <p>We implemented a modular <strong>MVC-like Onion Architecture</strong>:</p>
+                    <ul class="module-list">
+                        <li>
+                            <span class="dot core"></span> <strong>Core (Model) - The Brain</strong><br>
+                            Pure C++ logic (Grid, Tiles). Knows <em>nothing</em> about graphics or files. <br>
+                            <em>Role:</em> Enforces game rules and maintains state integrity.
+                        </li>
+                        <li>
+                            <span class="dot engine"></span> <strong>Engine (View) - The Senses</strong><br>
+                            Wraps SDL2 (Graphics, Audio, Input). Knows <em>nothing</em> about 2048 rules.<br>
+                            <em>Role:</em> Handles rendering and raw I/O events.
+                        </li>
+                        <li>
+                            <span class="dot game"></span> <strong>Game (Controller) - The Glue</strong><br>
+                            Orchestrates the loop. Connects Inputs (Engine) to Actions (Core).<br>
+                            <em>Role:</em> Manages Application State (Menu, Playing, GameOver).
+                        </li>
+                    </ul>
+
+                    <div class="comparison-box glass">
+                        <div class="comp-col clean">
+                            <h4>✅ Why Clean?</h4>
+                            <p><strong>Testable:</strong> Core logic Verified in isolation.</p>
+                            <p><strong>Portable:</strong> Swap SDL2 for OpenGL without breaking rules.</p>
+                        </div>
+                        <div class="comp-col dirty">
+                            <h4>❌ vs "Dirty"</h4>
+                            <p><strong>Spaghetti:</strong> Game Logic calling <code>SDL_RenderCopy</code>.</p>
+                            <p><strong>Rigid:</strong> Impossible to unit test logic without a window.</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="image-block glass scale-up">
+                    <a href="assets/class_diagram.png" target="_blank">
+                        <!-- Updated path for self-contained server -->
+                        <img src="assets/class_diagram.png" alt="Class Diagram">
+                    </a>
+                    <p class="caption">Click to enlarge diagram</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Slide 4: GameLogic Algorithm -->
+        <section class="slide" id="slide-core">
+            <h2>Game Logic: The 3-Step Shuffle</h2>
+            <div class="split-layout">
+                <div class="text-block">
+                    <h3>Algorithm Steps</h3>
+                    <p>We solve 2048 using a deterministic row transformation:</p>
+                    <ol class="algo-steps">
+                        <li><strong>Compress:</strong> Remove all zeros (gaps).</li>
+                        <li><strong>Merge:</strong> Combine adjacent identical values.</li>
+                        <li><strong>Pad:</strong> Fill remaining space with zeros.</li>
+                    </ol>
+
+                    <div class="complexity-box glass">
+                        <h4>Complexity Analysis</h4>
+                        <div class="metrics">
+                            <div class="metric">
+                                <span class="label">Time</span>
+                                <span class="value">O(W*H)</span>
+                            </div>
+                            <div class="metric">
+                                <span class="label">Space</span>
+                                <span class="value">O(W)</span>
+                            </div>
+                        </div>
+                        <p class="note">Efficient single-pass processing per row.</p>
+                    </div>
+                </div>
+
+                <div class="code-block-wide">
+                    <pre><code class="language-cpp">
+// src/core/GameLogic.cpp
+std::tuple<bool, int> GameLogic::slideAndMergeRow(Row& row) {
+    // 1. Compress (Filter Zeros)
+    std::vector<BufferedTile> buffer;
+    for (auto& t : row) 
+        if (!t.isEmpty()) buffer.push_back({t.getValue(), ...});
+
+    // 2. Merge (Scan Pairwise)
+    std::vector<Tile> result;
+    for (size_t i = 0; i < buffer.size(); ++i) {
+        if (i < buffer.size()-1 && buffer[i].val == buffer[i+1].val) {
+            result.push_back(Tile(buffer[i].val * 2)); // Merge
+            i++; // Skip next
+        } else {
+            result.push_back(Tile(buffer[i].val)); // Keep
+        }
+    }
+
+    // 3. Pad (Fill Zeros)
+    while (result.size() < 4) result.push_back(Tile(0));
+    
+    return { changed, score };
+}
+                    </code></pre>
+                </div>
+            </div>
+        </section>
+
+        <!-- Slide 5: System Integration -->
+        <section class="slide" id="slide-systems">
+            <h2>System Modules: Engine & Game</h2>
+            <div class="two-col-layout">
+                <!-- Engine (View) -->
+                <div class="col-half glass-panel">
+                    <h3 class="col-header"><span class="dot engine"></span> Engine (View)</h3>
+                    <p class="summary">
+                        Wraps low-level C SDL2 APIs into safe C++ Classes using <strong>RAII</strong>.<br>
+                        Handles <strong>Texture Management</strong>, <strong>Audio Mixing</strong>, <strong>Font
+                            Rendering</strong>, and Window Lifecycle.
+                    </p>
+                    <pre class="code-small"><code class="language-cpp">
+// src/engine/Context.hpp
+class Context {
+public:
+    Context() { // RAII: Acquire
+        SDL_Init(SDL_INIT_VIDEO);
+        TTF_Init();
+    }
+    ~Context() { // RAII: Release
+        TTF_Quit();
+        SDL_Quit();
+    }
+    // Delete Copy to prevent double-free
+    Context(const Context&) = delete; 
+};
+                    </code></pre>
+                </div>
+
+                <!-- Game (Controller) -->
+                <div class="col-half glass-panel">
+                    <h3 class="col-header"><span class="dot game"></span> Game (Controller)</h3>
+                    <p class="summary">
+                        The central "Glue" that manages <strong>Application Flow</strong> and
+                        <strong>Persistence</strong>.<br>
+                        Controls <strong>Scene Switching</strong>, tracks <strong>Score</strong>, and uses
+                        <code>PersistenceManager</code> to Save/Load state to disk.
+                    </p>
+                    <pre class="code-small"><code class="language-cpp">
+// src/game/Game.hpp
+void Game::handleInput() {
+    switch (m_state) {
+        case GameState::Playing:
+            if (key == UP) m_logic.move(Up);
+            // Persistence Integration
+            if (key == 'S') 
+                PersistenceManager::saveGame(m_grid, m_score);
+            break;
+        case GameState::MainMenu:
+            if (btn == LOAD) 
+                PersistenceManager::loadGame(m_grid, m_score);
+            break;
+    }
+}
+                    </code></pre>
+                </div> <!-- Close Game col -->
+            </div> <!-- Close two-col-layout -->
+        </section> <!-- Close Slide 5 -->
+
+        <!-- Slide 6: Validation & Testing -->
+        <section class="slide" id="slide-tests">
+            <h2>Validation & Testing</h2>
+
+            <div class="slide-content-wrapper"
+                style="width: 100%; height: 80%; max-width: 1400px; display: flex; flex-direction: column; gap: 2rem;">
+
+                <!-- Row 1: Tests -->
+                <div class="two-col-layout" style="flex: 2; min-height: 0; align-items: stretch;">
+                    <div class="col-half glass-panel">
+                        <h3 class="col-header">Unit Tests (GoogleTest)</h3>
+                        <p class="summary">Isolates <strong>Core Logic</strong>. Verifies Rules (Move, Merge, Win/Loss).
+                        </p>
+                        <div class="scroll-container" style="overflow-y: auto; max-height: 220px; padding-right: 5px;">
+                            <!-- 1. Movement & Merging -->
+                            <pre class="code-small" style="font-size:0.75em; margin-bottom: 0.5rem;"><code class="language-cpp">
+TEST_F(GameLogicTest, SlideLeft_Merge) {
+  setRow(grid, 0, {2, 2, 0, 0});
+  auto res = logic.move(grid, Left);
+  EXPECT_TRUE(res.moved);
+  EXPECT_EQ(grid.getTile(0,0), 4);
+}
+                            </code></pre>
+                            <!-- 2. Scoring -->
+                            <pre class="code-small" style="font-size:0.75em; margin-bottom: 0.5rem;"><code class="language-cpp">
+TEST_F(GameLogicTest, ScoreUpdatesOnMerge) {
+  // Merge 4 + 4 -> 8 (Score +8)
+  setRow(grid, 0, {4, 4, 0, 0});
+  auto res = logic.move(grid, Right);
+  EXPECT_EQ(res.scoreAdded, 8);
+}
+                            </code></pre>
+                            <!-- 3. Game Over -->
+                            <pre class="code-small" style="font-size:0.75em; margin-bottom: 0.5rem;"><code class="language-cpp">
+TEST_F(GameLogicTest, GameOver_NoMoves) {
+  fillGridCheckerboard(grid); // Full, no merges
+  EXPECT_TRUE(logic.checkGameOver(grid));
+}
+                            </code></pre>
+                            <!-- 4. Win Condition -->
+                            <pre class="code-small" style="font-size:0.75em; margin-bottom: 0.5rem;"><code class="language-cpp">
+TEST_F(GameLogicTest, Win_2048_Detect) {
+  grid.setTile(3, 3, 2048);
+  EXPECT_TRUE(logic.checkWin(grid));
+}
+                            </code></pre>
+                        </div>
+                    </div>
+
+                    <div class="col-half glass-panel">
+                        <h3 class="col-header">Integration Scenarios</h3>
+                        <ul class="check-list">
+                            <li>1. Persistence: Save/Load Cycle.</li>
+                            <li>2. Gameplay: Input -> State.</li>
+                            <li>3. Leaderboard: Sorting.</li>
+                            <li>4. Achievements: Unlock Checks.</li>
+                        </ul>
+                        <div class="scroll-container" style="overflow-y: auto; max-height: 220px; padding-right: 5px;">
+                            <!-- 1. Persistence -->
+                            <pre class="code-small" style="font-size:0.75em; margin-bottom: 0.5rem;"><code class="language-cpp">
+TEST_F(Integration, PersistenceRoundTrip) {
+  PersistenceManager::saveGame(grid, 12345);
+  PersistenceManager::loadGame(loaded, s);
+  ASSERT_EQ(s, 12345);
+}
+                            </code></pre>
+                            <!-- 2. Gameplay -->
+                            <pre class="code-small" style="font-size:0.75em; margin-bottom: 0.5rem;"><code class="language-cpp">
+TEST_F(Integration, InputReflectsState) {
+  // [2, 0] -> RIGHT -> [0, 2]
+  game.handleInput(SDLK_RIGHT);
+  EXPECT_EQ(grid.getTile(0, 3), 2);
+}
+                            </code></pre>
+                            <!-- 3. Leaderboard -->
+                            <pre class="code-small" style="font-size:0.75em; margin-bottom: 0.5rem;"><code class="language-cpp">
+TEST_F(Integration, LeaderboardSort) {
+  scores.add(100); scores.add(500);
+  // Verify 500 is #1
+  EXPECT_EQ(scores.getTop(1), 500);
+}
+                            </code></pre>
+                            <!-- 4. Achievements -->
+                            <pre class="code-small" style="font-size:0.75em; margin-bottom: 0.5rem;"><code class="language-cpp">
+TEST_F(Integration, Unlock2048) {
+  grid.setTile(0, 0, 2048);
+  game.checkAchievements();
+  EXPECT_TRUE(achievements.has("WIN_2048"));
+}
+                            </code></pre>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Row 2: Coverage -->
+                <div class="glass-panel"
+                    style="flex: 1; min-height: 0; width: 100%; display: flex; align-items: center; justify-content: space-around;">
+                    <div style="flex: 2; margin-right: 2rem;">
+                        <h3 class="col-header" style="margin-top:0;">Coverage Report</h3>
+                        <table class="simple-table" style="width: 100%;">
+                            <thead>
+                                <tr>
+                                    <th>Feature</th>
+                                    <th>Type</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td>Core Logic</td>
+                                    <td>Unit</td>
+                                    <td><span class="badge clean">100%</span></td>
+                                </tr>
+                                <tr>
+                                    <td>Persistence</td>
+                                    <td>Integ</td>
+                                    <td><span class="badge clean">100%</span></td>
+                                </tr>
+                                <tr>
+                                    <td>Ranking</td>
+                                    <td>Integ</td>
+                                    <td><span class="badge clean">100%</span></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="stat-box-wide"
+                        style="flex: 1; height: 100%; border: none; background: none; display: flex; flex-direction: column; justify-content: center; align-items: center;">
+                        <span class="val" style="font-size: 4rem; font-weight: bold; color: var(--accent);">85%</span>
+                        <span class="lbl" style="color: #aaa; text-transform: uppercase;">Total Code Coverage</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Slide 7: Demo & Launch -->
+        <section class="slide" id="slide-demo">
+            <div class="content-center">
+                <h2 class="glow-text">Experience the Game</h2>
+
+                <div class="demo-showcase glass">
+                    <!-- 3D Image Placeholder (CSS styled) -->
+                    <div class="demo-preview-3d">
+                        <div class="preview-overlay">
+                            <button id="launchBtn" class="launch-button" onclick="launchGame()">
+                                <span class="btn-icon">▶</span> Launch Tile Twister
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Slide 8: Random Sampling (Monte Carlo) -->
+        <section class="slide" id="slide-mc">
+            <h2>Optimization: Monte Carlo AI</h2>
+            <div class="split-layout">
+                <div class="text-block">
+                    <h3>Concept: Random Sampling</h3>
+                    <p>Since 2048 involves randomness (spawns), we cannot use deterministic solvers like Minimax easily.
+                    </p>
+                    <p><strong>The Strategy:</strong> Simulate the future 1,000 times per move.</p>
+
+                    <div class="glass-panel" style="margin-top: 1rem;">
+                        <h4 style="margin-top:0;">The Algorithm</h4>
+                        <ol class="algo-steps">
+                            <li><span><strong>Clone</strong> current board.</span></li>
+                            <li><span><strong>Move</strong> (e.g., UP).</span></li>
+                            <li><span><strong>Simulate</strong> random moves until Death.</span></li>
+                            <li><span><strong>Record</strong> final score.</span></li>
+                            <li><span><strong>Repeat</strong> 1,000x and pick best average.</span></li>
+                        </ol>
+                    </div>
+                </div>
+
+                <div class="code-block-wide">
+                    <pre><code class="language-cpp">
+Direction getBestMove(Grid startGrid) {
+    long bestTotal = -1;
+    Direction bestDir = None;
+
+    for (auto dir : moves) {
+        long totalScore = 0;
+        for (int i=0; i<1000; ++i) {
+            Grid sim = startGrid;
+            sim.move(dir);
+            
+            // Random Walk to Death
+            while (!sim.isGameOver()) {
+                sim.spawnRandom();
+                sim.move(pickRandomDir());
+            }
+            totalScore += sim.getScore();
+        }
+        if (totalScore > bestTotal) ...
+    }
+    return bestDir;
+}
+                    </code></pre>
+                </div>
+            </div>
+        </section>
+
+        <!-- Slide 9: Speed w/ Bitboards -->
+        <section class="slide" id="slide-bitboard">
+            <h2>High Performance: Bitboards</h2>
+            <div class="split-layout">
+                <div class="text-block">
+                    <h3>The Need for Speed</h3>
+                    <p>To run 10,000 simulations per second, a <code>std::vector&lt;Tile&gt;</code> is too slow.</p>
+                    <p><strong>Solution:</strong> Pack the entire 4x4 grid into a single <strong>64-bit
+                            integer</strong>.</p>
+
+                    <ul class="module-list">
+                        <li><span class="dot core"></span> <strong>1 Tile = 4 Bits</strong> (Stores power of 2, e.g.,
+                            '14' = 16384).</li>
+                        <li><span class="dot engine"></span> <strong>1 Row = 16 Bits</strong> (4 tiles).</li>
+                        <li><span class="dot game"></span> <strong>Pre-computed Moves:</strong> We don't calculate moves
+                            at runtime. We use a 65,536 entry <strong>Lookup Table</strong>.</li>
+                    </ul>
+
+                    <div class="stat-box-wide" style="margin-top: 2rem;">
+                        <span class="val">15,000,000</span>
+                        <span class="lbl">Moves / Second</span>
+                    </div>
+                </div>
+
+                <div class="code-block-wide">
+                    <pre><code class="language-cpp">
+// The "State" is just a number
+typedef uint64_t BitBoard;
+
+// Move Logic is an array look-up
+// ROW_TABLE[65536] pre-calculates every possible row slide
+BitBoard moveLeft(BitBoard board) {
+    BitBoard newBoard = 0;
+    
+    // Process each 16-bit row
+    newBoard |= (BitBoard)ROW_TABLE[(board >>  0) & 0xFFFF] <<  0;
+    newBoard |= (BitBoard)ROW_TABLE[(board >> 16) & 0xFFFF] << 16;
+    newBoard |= (BitBoard)ROW_TABLE[(board >> 32) & 0xFFFF] << 32;
+    newBoard |= (BitBoard)ROW_TABLE[(board >> 48) & 0xFFFF] << 48;
+    
+    return newBoard;
+}
+                    </code></pre>
+                </div>
+            </div>
+        </section>
+
+    </div>
+
+    <!-- Navigation Controls -->
+    <div class="controls">
+        <button id="prevBtn" onclick="prevSlide()">&#10094;</button>
+        <div class="progress-bar">
+            <div class="progress" id="progress"></div>
+        </div>
+        <button id="nextBtn" onclick="nextSlide()">&#10095;</button>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+
+</html>

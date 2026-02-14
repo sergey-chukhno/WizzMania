@@ -34,6 +34,12 @@ using GetStatusCallback = std::function<int(const std::string &)>;
 // Callback for Status Change: (Sender, NewStatus)
 using OnStatusChangeCallback = std::function<void(ClientSession *, int)>;
 
+// Avatar Callbacks
+using OnUpdateAvatarCallback =
+    std::function<void(ClientSession *, const std::vector<uint8_t> &)>;
+using OnGetAvatarCallback =
+    std::function<void(ClientSession *, const std::string &)>;
+
 class ClientSession {
 public:
   // Pass DB by reference, store as pointer, and Callbacks
@@ -43,7 +49,9 @@ public:
                          OnVoiceMessageCallback onVoiceMessage,
                          OnTypingIndicatorCallback onTypingIndicator,
                          GetStatusCallback getStatus,
-                         OnStatusChangeCallback onStatusChange);
+                         OnStatusChangeCallback onStatusChange,
+                         OnUpdateAvatarCallback onUpdateAvatar,
+                         OnGetAvatarCallback onGetAvatar);
   ~ClientSession(); // Closes socket if owned
 
   // Delete copy to prevent double-close of socket
@@ -80,6 +88,10 @@ private:
   void handleAddContact(Packet &packet);
   void handleRemoveContact(Packet &packet);
 
+  // Avatar Handlers
+  void handleUpdateAvatar(Packet &packet);
+  void handleGetAvatar(Packet &packet);
+
 private:
   SocketType m_socket;
   std::string m_username;
@@ -96,6 +108,8 @@ private:
   OnTypingIndicatorCallback m_onTypingIndicator;
   GetStatusCallback m_getStatus;
   OnStatusChangeCallback m_onStatusChange;
+  OnUpdateAvatarCallback m_onUpdateAvatar;
+  OnGetAvatarCallback m_onGetAvatar;
 
   // Buffer for incoming partial data
   std::vector<uint8_t> m_buffer;

@@ -1,0 +1,42 @@
+# Prerequisites
+*.d
+*.obj
+*.o
+*.inc
+*.swp
+*.ds_store
+
+# CMake
+CMakeCache.txt
+CMakeFiles
+Makefile
+cmake_install.cmake
+install_manifest.txt
+compile_commands.json
+build/
+.cache/
+
+# IDEs
+.vscode/
+.idea/
+*.sln
+*.vcxproj
+*.vcxproj.filters
+*.vcxproj.user
+
+# Binaries
+bin/
+lib/
+TileTwister
+
+# Internal Documentation (Local only)
+TileTwister.md
+TileTwister.rules.md
+
+# Game Data (Persistence)
+savegame.txt
+leaderboard.txt
+achievements.txt
+test_savegame.txt
+test_leaderboard.txt
+test_achievements.txt

@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cyberpunk Cannon Shooter - Presentation</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;500;700&display=swap"
+        rel="stylesheet">
+</head>
+
+<body>
+    <div class="scanline"></div>
+    <div class="background-grid"></div>
+
+    <div class="presentation-container">
+        <!-- Navigation -->
+        <div class="nav-controls">
+            <button id="prevBtn" class="cyber-btn">&lt; PREV</button>
+            <div class="slide-indicator">SLIDE <span id="currentSlide">1</span> / <span id="totalSlides">6</span></div>
+            <button id="nextBtn" class="cyber-btn">NEXT &gt;</button>
+        </div>
+
+        <!-- Audio Control -->
+        <div class="audio-control">
+            <button id="audioBtn" class="cyber-btn small">SOUND OFF</button>
+        </div>
+        <audio id="bgMusic" loop>
+            <source src="assets/audio/cyberpunk_theme.wav" type="audio/wav">
+        </audio>
+
+        <!-- Slide 1: Title -->
+        <div class="slide active" id="slide-1">
+            <div class="content-center">
+                <h1 class="glitch-text" data-text="CYBERPUNK CANNON SHOOTER">CYBERPUNK CANNON SHOOTER</h1>
+                <h2 class="subtitle">PROJECT OVERVIEW</h2>
+                <div class="menu-list">
+                    <div class="menu-item active">01. TEAM INTRODUCTION</div>
+                    <div class="menu-item">02. ARCHITECTURE</div>
+                    <div class="menu-item">03. TECH STACK</div>
+                    <div class="menu-item">04. KEY FILES</div>
+                    <div class="menu-item">05. ROAD AHEAD</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 2: Team -->
+        <div class="slide" id="slide-2">
+            <h2 class="slide-title">THE SQUAD</h2>
+            <div class="team-container">
+                <div class="team-card">
+                    <div class="avatar-frame">
+                        <img src="assets/images/avatar_elodie.png" alt="Elodie">
+                    </div>
+                    <h3>ELODIE</h3>
+                    <p class="role">GAMEPLAY ENGINEER</p>
+                    <p class="desc">Physics & Mechanics Specialist</p>
+                </div>
+                <div class="team-card">
+                    <div class="avatar-frame">
+                        <img src="assets/images/avatar_louis.png" alt="Louis">
+                    </div>
+                    <h3>LOUIS</h3>
+                    <p class="role">GRAPHICS ENGINEER</p>
+                    <p class="desc">Rendering & VFX Wizard</p>
+                </div>
+                <div class="team-card">
+                    <div class="avatar-frame">
+                        <img src="assets/images/avatar_sergey.png" alt="Sergey">
+                    </div>
+                    <h3>SERGEY</h3>
+                    <p class="role">LEAD ARCHITECT</p>
+                    <p class="desc">System Design & Core Engine</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 3: Architecture -->
+        <div class="slide" id="slide-3">
+            <h2 class="slide-title">SYSTEM ARCHITECTURE</h2>
+            <div class="split-layout">
+                <div class="diagram-container">
+                    <div class="diagram-image-container">
+                        <a href="assets/images/architecture_diagram.png" target="_blank">
+                            <img src="assets/images/architecture_diagram.png" alt="System Architecture Diagram"
+                                class="architecture-diagram">
+                        </a>
+                    </div>
+                </div>
+                <div class="text-content">
+                    <h3>CORE COMPONENTS</h3>
+                    <ul class="cyber-list">
+                        <li><strong>Game Loop</strong>: Managed by <code>Game</code> class, handles update/render cycle.
+                        </li>
+                        <li><strong>State Machine</strong>: Stack-based system for seamless transitions (Menu -> Playing
+                            -> Pause).</li>
+                        <li><strong>Entity System</strong>: Object-oriented design for Cannon, Projectiles, and Blocks.
+                        </li>
+                        <li><strong>Resource Management</strong>: Centralized managers for fonts and assets.</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 4: Tech Stack -->
+        <div class="slide" id="slide-4">
+            <h2 class="slide-title">TECH STACK</h2>
+            <div class="tech-grid">
+                <div class="tech-item">
+                    <div class="tech-icon">C++17</div>
+                    <h3>CORE LANGUAGE</h3>
+                    <p>Modern C++ features including smart pointers, auto, and lambda expressions.</p>
+                </div>
+                <div class="tech-item">
+                    <div class="tech-icon">SFML 3.0</div>
+                    <h3>ENGINE</h3>
+                    <p>Simple and Fast Multimedia Library for graphics, windowing, and audio.</p>
+                </div>
+                <div class="tech-item">
+                    <div class="tech-icon">CMAKE</div>
+                    <h3>BUILD SYSTEM</h3>
+                    <p>Modern target-based build configuration for cross-platform compatibility.</p>
+                </div>
+                <div class="tech-item">
+                    <div class="tech-icon">STL</div>
+                    <h3>LIBRARIES</h3>
+                    <p>Extensive use of Standard Template Library (vector, deque, algorithm).</p>
+                </div>
+            </div>
+            <div class="code-snippet">
+                <pre><code>// Modern C++ Usage Example
+std::vector&lt;std::unique_ptr&lt;GameState&gt;&gt; stateStack;
+auto projectile = std::make_unique&lt;Projectile&gt;();
+if (auto* state = getCurrentState()) {
+    state->update(deltaTime);
+}</code></pre>
+            </div>
+        </div>
+
+        <!-- Slide 5: Key Files -->
+        <div class="slide" id="slide-5">
+            <h2 class="slide-title">PROJECT ANALYSIS</h2>
+            <div class="analysis-container">
+                <div class="analysis-card strong">
+                    <h3>KEY FILES</h3>
+                    <ul>
+                        <li><code>Game.h/cpp</code>: The heart of the engine.</li>
+                        <li><code>Cannon.h/cpp</code>: Complex player logic & physics.</li>
+                        <li><code>Block.h/cpp</code>: Procedural block generation.</li>
+                    </ul>
+                </div>
+                <div class="analysis-card strong">
+                    <h3>STRONG POINTS</h3>
+                    <ul>
+                        <li>Clean State Pattern implementation</li>
+                        <li>Modern memory management (smart pointers)</li>
+                        <li>Separation of concerns (Logic vs Rendering)</li>
+                        <li>Scalable Entity architecture</li>
+                    </ul>
+                </div>
+                <div class="analysis-card weak">
+                    <h3>AREAS TO IMPROVE</h3>
+                    <ul>
+                        <li>Collision detection optimization (Quadtree)</li>
+                        <li>Event system decoupling</li>
+                        <li>Configuration file support (JSON/Lua)</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 6: Road Ahead -->
+        <div class="slide" id="slide-6">
+            <h2 class="slide-title">THE ROAD AHEAD</h2>
+            <div class="roadmap-container">
+                <div class="roadmap-item">
+                    <div class="step-number">01</div>
+                    <h3>OPTIMIZATION</h3>
+                    <p>Implement Spatial Partitioning for collision detection to handle thousands of particles.</p>
+                </div>
+                <div class="roadmap-item">
+                    <div class="step-number">02</div>
+                    <h3>SCALABILITY</h3>
+                    <p>Data-driven level design using external configuration files.</p>
+                </div>
+                <div class="roadmap-item">
+                    <div class="step-number">03</div>
+                    <h3>POLISH</h3>
+                    <p>Advanced shader effects for neon glow and screen shake.</p>
+                </div>
+                <div class="roadmap-item">
+                    <div class="step-number">04</div>
+                    <h3>GAMEPLAY</h3>
+                    <p>Zone destruction attacks and power-up system implementation.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 7: Game Over -->
+        <div class="slide" id="slide-7">
+            <div class="game-over-container">
+                <div class="game-screenshot-frame large">
+                    <img src="assets/images/gameplay_mockup.png" alt="Gameplay Screenshot">
+                    <div class="scanline-overlay"></div>
+                </div>
+                <h1 class="game-over-text" data-text="GAME OVER">GAME OVER</h1>
+                <h2 class="thank-you-text">THANK YOU FOR PLAYING</h2>
+                <div class="restart-prompt">PRESS START TO REPLAY</div>
+            </div>
+        </div>
+
+    </div>
+
+    <script src="script.js"></script>
+</body>
+
+</html>
+```

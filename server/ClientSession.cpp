@@ -15,18 +15,18 @@
 
 namespace wizz {
 
-ClientSession::ClientSession(SocketType socket, DatabaseManager &db,
-                             OnLoginCallback onLogin,
-                             OnMessageCallback onMessage,
-                             OnNudgeCallback onNudge,
-                             OnVoiceMessageCallback onVoiceMessage,
-                             OnTypingIndicatorCallback onTypingIndicator,
-                             GetStatusCallback getStatus,
-                             OnStatusChangeCallback onStatusChange)
+ClientSession::ClientSession(
+    SocketType socket, DatabaseManager &db, OnLoginCallback onLogin,
+    OnMessageCallback onMessage, OnNudgeCallback onNudge,
+    OnVoiceMessageCallback onVoiceMessage,
+    OnTypingIndicatorCallback onTypingIndicator, GetStatusCallback getStatus,
+    OnStatusChangeCallback onStatusChange,
+    OnUpdateAvatarCallback onUpdateAvatar, OnGetAvatarCallback onGetAvatar)
     : m_socket(socket), m_isLoggedIn(false), m_db(&db), m_onLogin(onLogin),
       m_onMessage(onMessage), m_onNudge(onNudge),
       m_onVoiceMessage(onVoiceMessage), m_onTypingIndicator(onTypingIndicator),
-      m_getStatus(getStatus), m_onStatusChange(onStatusChange) {}
+      m_getStatus(getStatus), m_onStatusChange(onStatusChange),
+      m_onUpdateAvatar(onUpdateAvatar), m_onGetAvatar(onGetAvatar) {}
 
 ClientSession::~ClientSession() {
   if (m_socket != INVALID_SOCKET_VAL) {
@@ -44,6 +44,8 @@ ClientSession::ClientSession(ClientSession &&other) noexcept
       m_onTypingIndicator(std::move(other.m_onTypingIndicator)),
       m_getStatus(std::move(other.m_getStatus)),
       m_onStatusChange(std::move(other.m_onStatusChange)),
+      m_onUpdateAvatar(std::move(other.m_onUpdateAvatar)),
+      m_onGetAvatar(std::move(other.m_onGetAvatar)),
       m_buffer(std::move(other.m_buffer)) {
   other.m_socket = INVALID_SOCKET_VAL;
 }
@@ -66,6 +68,8 @@ ClientSession &ClientSession::operator=(ClientSession &&other) noexcept {
     m_onTypingIndicator = std::move(other.m_onTypingIndicator);
     m_getStatus = std::move(other.m_getStatus);
     m_onStatusChange = std::move(other.m_onStatusChange);
+    m_onUpdateAvatar = std::move(other.m_onUpdateAvatar);
+    m_onGetAvatar = std::move(other.m_onGetAvatar);
 
     other.m_socket = INVALID_SOCKET_VAL;
   }
@@ -174,6 +178,14 @@ void ClientSession::processPacket(Packet &packet) {
         m_onTypingIndicator(this, targetUser, isTyping);
       }
     }
+    break;
+
+  case PacketType::UpdateAvatar:
+    handleUpdateAvatar(packet);
+    break;
+
+  case PacketType::GetAvatar:
+    handleGetAvatar(packet);
     break;
 
   default:
@@ -451,6 +463,50 @@ void ClientSession::handleVoiceMessage(Packet &packet) {
 
   if (m_onVoiceMessage) {
     m_onVoiceMessage(this, targetUser, duration, audioData);
+  }
+}
+
+void ClientSession::handleUpdateAvatar(Packet &packet) {
+  if (!m_isLoggedIn)
+    return;
+
+  uint32_t dataLen = 0;
+  std::vector<uint8_t> avatarData;
+
+  try {
+    dataLen = packet.readInt();
+    if (dataLen > 5 * 1024 * 1024) { // 5MB limit
+      std::cerr << "[Session] Avatar too large: " << dataLen << std::endl;
+      return;
+    }
+    avatarData = packet.readBytes(dataLen);
+  } catch (...) {
+    return;
+  }
+
+  std::cout << "[Session] Avatar Update: " << m_username << " (" << dataLen
+            << " bytes)" << std::endl;
+
+  if (m_onUpdateAvatar) {
+    m_onUpdateAvatar(this, avatarData);
+  }
+}
+
+void ClientSession::handleGetAvatar(Packet &packet) {
+  if (!m_isLoggedIn)
+    return;
+
+  std::string targetUser;
+  try {
+    targetUser = packet.readString();
+  } catch (...) {
+    return;
+  }
+
+  // std::cout << "[Session] Request Avatar for: " << targetUser << std::endl;
+
+  if (m_onGetAvatar) {
+    m_onGetAvatar(this, targetUser);
   }
 }
 

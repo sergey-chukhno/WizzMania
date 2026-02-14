@@ -73,6 +73,25 @@ void NetworkManager::sendTypingPacket(const QString &target, bool isTyping) {
   sendPacket(p);
 }
 
+void NetworkManager::sendUpdateAvatar(const QByteArray &data) {
+  if (!isConnected())
+    return;
+  wizz::Packet p(wizz::PacketType::UpdateAvatar);
+  // Write size then data
+  p.writeInt(static_cast<uint32_t>(data.size()));
+  // access raw data
+  p.writeData(reinterpret_cast<const uint8_t *>(data.data()), data.size());
+  sendPacket(p);
+}
+
+void NetworkManager::requestAvatar(const QString &username) {
+  if (!isConnected())
+    return;
+  wizz::Packet p(wizz::PacketType::GetAvatar);
+  p.writeString(username.toStdString());
+  sendPacket(p);
+}
+
 // --- Slots ---
 
 void NetworkManager::onSocketConnected() { emit connected(); }
@@ -151,6 +170,15 @@ void NetworkManager::onReadyRead() {
         QString sender = QString::fromStdString(pkt.readString());
         bool isTyping = (pkt.readInt() != 0);
         emit userTyping(sender, isTyping);
+      } else if (pkt.type() == wizz::PacketType::AvatarData) {
+        QString username = QString::fromStdString(pkt.readString());
+        uint32_t len = pkt.readInt();
+        if (len < 10 * 1024 * 1024) { // 10MB limit
+          std::vector<uint8_t> imgData = pkt.readBytes(len);
+          QByteArray qData(reinterpret_cast<const char *>(imgData.data()),
+                           imgData.size());
+          emit avatarReceived(username, qData);
+        }
       }
 
     } catch (...) {

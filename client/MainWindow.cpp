@@ -2,11 +2,15 @@
 #include "AddFriendDialog.h"
 #include "ChatWindow.h"
 #include "NetworkManager.h"
+#include <QBuffer>
 #include <QDebug>
+#include <QFileDialog>
 #include <QGraphicsDropShadowEffect>
 #include <QMessageBox>
 #include <QPaintEvent>
+#include <QPainterPath>
 #include <QPair> // Include QPair
+#include <QPropertyAnimation>
 #include <QTimer>
 
 MainWindow::MainWindow(const QString &username, const QPoint &initialPos,
@@ -103,6 +107,10 @@ MainWindow::MainWindow(const QString &username, const QPoint &initialPos,
         }
       });
 
+  // Connect Avatar Received
+  connect(&NetworkManager::instance(), &NetworkManager::avatarReceived, this,
+          &MainWindow::onAvatarReceived);
+
   // Initialize Dialogs
   m_addFriendDialog = new AddFriendDialog(this);
   connect(
@@ -122,8 +130,11 @@ MainWindow::MainWindow(const QString &username, const QPoint &initialPos,
       });
 
   setupUI();
-}
 
+  // Request my own avatar immediately
+  QTimer::singleShot(
+      500, [this]() { NetworkManager::instance().requestAvatar(m_username); });
+}
 void MainWindow::paintEvent(QPaintEvent *event) {
   QPainter painter(this);
 
@@ -243,8 +254,19 @@ void MainWindow::setupUI() {
   titleLabel->setStyleSheet("font-size: 22px; font-weight: 700; color: "
                             "#1a2530; background: transparent;");
 
+  QVBoxLayout *titleLayout = new QVBoxLayout();
+  titleLayout->setSpacing(0);
+  titleLayout->addWidget(titleLabel);
+
+  QLabel *subtitleLabel =
+      new QLabel("Undefined Behaviour Included for Free", glassCard);
+  subtitleLabel->setStyleSheet(
+      "font-size: 12px; font-weight: 500; color: #5a6b7c; "
+      "font-style: italic; background: transparent; padding-left: 2px;");
+  titleLayout->addWidget(subtitleLabel);
+
   headerLayout->addWidget(butterflyIcon);
-  headerLayout->addWidget(titleLabel);
+  headerLayout->addLayout(titleLayout);
   headerLayout->addStretch();
   cardLayout->addLayout(headerLayout);
 
@@ -265,6 +287,15 @@ void MainWindow::setupUI() {
   m_avatarLabel->setFixedSize(50, 50);
   m_avatarLabel->setStyleSheet("background: transparent;");
   m_avatarLabel->setCursor(Qt::PointingHandCursor);
+
+  // Make Avatar Clickable using Event Filter or lambda
+  // Simple way: wrap in a QPushButton with icon? Or make a transparent button
+  // on top? Let's use a transparent button on top for simplicity
+  QPushButton *avatarBtn = new QPushButton(m_avatarLabel);
+  avatarBtn->setFixedSize(50, 50);
+  avatarBtn->setStyleSheet("background: transparent; border: none;");
+  avatarBtn->setCursor(Qt::PointingHandCursor);
+  connect(avatarBtn, &QPushButton::clicked, this, &MainWindow::onAvatarClicked);
 
   // User info
   QVBoxLayout *userInfoLayout = new QVBoxLayout();
@@ -390,64 +421,8 @@ void MainWindow::setupUI() {
 
   cardLayout->addWidget(m_contactList, 1); // Stretch
 
-  // --- Chat Preview Panel ---
-  m_chatPreviewFrame = new QFrame(glassCard);
-  m_chatPreviewFrame->setStyleSheet(R"(
-        background-color: rgba(255, 255, 255, 40);
-        border: 1px solid rgba(200, 230, 255, 150);
-        border-radius: 12px;
-    )");
-
-  QVBoxLayout *chatPreviewLayout = new QVBoxLayout(m_chatPreviewFrame);
-  chatPreviewLayout->setContentsMargins(12, 10, 12, 10);
-  chatPreviewLayout->setSpacing(8);
-
-  m_chatPreviewLabel =
-      new QLabel("Select a friend to start chatting", m_chatPreviewFrame);
-  m_chatPreviewLabel->setStyleSheet(
-      "font-size: 12px; color: #718096; background: transparent;");
-  m_chatPreviewLabel->setAlignment(Qt::AlignCenter);
-  chatPreviewLayout->addWidget(m_chatPreviewLabel);
-
-  // Message input row
-  QHBoxLayout *inputRow = new QHBoxLayout();
-
-  m_messageInput = new QLineEdit(m_chatPreviewFrame);
-  m_messageInput->setPlaceholderText("Send a message...");
-  m_messageInput->setStyleSheet(R"(
-        background-color: rgba(255, 255, 255, 60);
-        border: 1px solid rgba(200, 220, 240, 150);
-        border-radius: 15px;
-        padding: 8px 15px;
-        font-size: 13px;
-        color: #2d3748;
-    )");
-
-  m_sendButton = new QPushButton("▶", m_chatPreviewFrame);
-  m_sendButton->setFixedSize(36, 36);
-  m_sendButton->setCursor(Qt::PointingHandCursor);
-  m_sendButton->setStyleSheet(R"(
-        QPushButton {
-            background-color: rgba(80, 180, 255, 150);
-            border: 2px solid rgba(150, 220, 255, 200);
-            border-radius: 18px;
-            font-size: 14px;
-            color: white;
-        }
-        QPushButton:hover {
-            background-color: rgba(100, 200, 255, 200);
-        }
-    )");
-  connect(m_sendButton, &QPushButton::clicked, this,
-          &MainWindow::onSendMessage);
-  connect(m_messageInput, &QLineEdit::returnPressed, this,
-          &MainWindow::onSendMessage);
-
-  inputRow->addWidget(m_messageInput);
-  inputRow->addWidget(m_sendButton);
-  chatPreviewLayout->addLayout(inputRow);
-
-  cardLayout->addWidget(m_chatPreviewFrame);
+  // --- Game Panel ---
+  setupGamePanel(cardLayout);
 
   mainLayout->addWidget(glassCard);
 
@@ -459,8 +434,23 @@ void MainWindow::setupUI() {
 }
 
 void MainWindow::setContacts(const QList<ContactInfo> &contacts) {
+  // Merge new contacts with existing ones to preserve avatars if already
+  // loaded But since setContacts usually replaces the list, we should check
+  // if we need to re-request avatars
+
+  // For MVP: Just replace list, but request avatars for everyone
+  // Optimization: In real app, check if we already have it.
+
   m_contacts = contacts;
   populateContactList();
+
+  // Request avatars for all contacts
+  for (const auto &contact : m_contacts) {
+    NetworkManager::instance().requestAvatar(contact.username);
+  }
+
+  // Also request my own avatar to ensure it's up to date
+  NetworkManager::instance().requestAvatar(m_username);
 }
 
 void MainWindow::populateContactList() {
@@ -541,15 +531,62 @@ void MainWindow::updateContactStatus(const QString &username, UserStatus status,
   populateContactList();
 }
 
+void MainWindow::updateContactAvatar(const QString &username,
+                                     const QPixmap &avatar) {
+  if (username == m_username) {
+    // Update my own avatar
+    m_avatarLabel->setPixmap(avatar.scaled(
+        50, 50, Qt::KeepAspectRatioByExpanding, Qt::SmoothTransformation));
+
+    // Apply circular mask again just in case
+    QPixmap circular(50, 50);
+    circular.fill(Qt::transparent);
+    QPainter painter(&circular);
+    painter.setRenderHint(QPainter::Antialiasing);
+    QPainterPath path;
+    path.addEllipse(0, 0, 50, 50);
+    painter.setClipPath(path);
+    painter.drawPixmap(0, 0,
+                       avatar.scaled(50, 50, Qt::KeepAspectRatioByExpanding,
+                                     Qt::SmoothTransformation));
+    m_avatarLabel->setPixmap(circular);
+    return;
+  }
+
+  // Update friend's avatar
+  bool found = false;
+  for (ContactInfo &contact : m_contacts) {
+    if (contact.username == username) {
+      contact.avatar = avatar;
+      found = true;
+      break;
+    }
+  }
+
+  if (found) {
+    populateContactList();
+  }
+}
+
+void MainWindow::onAvatarReceived(const QString &username,
+                                  const QByteArray &data) {
+  QPixmap avatar;
+  if (avatar.loadFromData(data)) {
+    updateContactAvatar(username, avatar);
+  } else {
+  }
+}
+
 void MainWindow::onStatusChanged(int index) {
   m_currentStatus = static_cast<UserStatus>(index);
   emit statusChanged(m_currentStatus,
                      m_statusMessageInput ? m_statusMessageInput->text() : "");
 
   // Inform NetworkManager
-  // We need to implement sendStatusChange in NetworkManager first, but for now
-  // we can manually construct packet or assume server knows from heartbeat?
-  // Protocol says: ContactStatusChange(203). We should send this.
+  // We need to implement sendStatusChange in NetworkManager first, but for
+  // now we can manually construct packet or assume server knows from
+  // heartbeat? Protocol says: ContactStatusChange(203). We should send
+  // this.
   wizz::Packet statusPkt(wizz::PacketType::ContactStatusChange);
   statusPkt.writeInt(static_cast<uint32_t>(m_currentStatus));
   statusPkt.writeString(""); // Optional message
@@ -585,18 +622,7 @@ void MainWindow::onRemoveFriendClicked() {
 }
 
 void MainWindow::onSendMessage() {
-  QString message = m_messageInput->text().trimmed();
-  if (message.isEmpty())
-    return;
-
-  // Get selected contact
-  QListWidgetItem *selected = m_contactList->currentItem();
-  if (selected) {
-    QString recipient = selected->data(Qt::UserRole).toString();
-    // TODO: Send message via NetworkManager
-    m_messageInput->clear();
-    m_chatPreviewLabel->setText("You: " + message);
-  }
+  // Deprecated: Chat Preview removed in favor of Game Panel
 }
 
 void MainWindow::onContactDoubleClicked(const QString &username) {
@@ -640,4 +666,227 @@ void MainWindow::onContactDoubleClicked(const QString &username) {
 
 void MainWindow::onChatWindowClosed(const QString &partnerName) {
   m_openChats.remove(partnerName);
+}
+
+void MainWindow::onAvatarClicked() {
+  QString fileName = QFileDialog::getOpenFileName(
+      this, "Change Avatar", "", "Images (*.png *.jpg *.jpeg)");
+  if (fileName.isEmpty())
+    return;
+
+  QPixmap pix(fileName);
+  if (pix.isNull()) {
+    QMessageBox::warning(this, "Error", "Failed to load image");
+    return;
+  }
+
+  // Immediate local update for responsiveness
+  updateContactAvatar(m_username, pix);
+
+  // Send to server
+  QByteArray bytes;
+  QBuffer buffer(&bytes);
+  buffer.open(QIODevice::WriteOnly);
+  pix.save(&buffer, "PNG");
+
+  NetworkManager::instance().sendUpdateAvatar(bytes);
+}
+
+// --- Game Panel Implementation ---
+
+void MainWindow::setupGamePanel(QVBoxLayout *parentLayout) {
+  m_gamePanelFrame = new QFrame(this);
+  m_gamePanelFrame->setStyleSheet(R"(
+        background-color: rgba(255, 255, 255, 40);
+        border: 1px solid rgba(200, 230, 255, 150);
+        border-radius: 12px;
+    )");
+
+  QVBoxLayout *panelLayout = new QVBoxLayout(m_gamePanelFrame);
+  panelLayout->setContentsMargins(12, 10, 12, 10);
+  panelLayout->setSpacing(8);
+
+  QLabel *titleLabel = new QLabel("SELECT A GAME TO PLAY", m_gamePanelFrame);
+  titleLabel->setStyleSheet("font-size: 11px; font-weight: 800; color: "
+                            "#4a5568; background: transparent; "
+                            "letter-spacing: 1px; text-transform: uppercase;");
+  titleLabel->setAlignment(Qt::AlignCenter);
+  panelLayout->addWidget(titleLabel);
+
+  // Horizontal layout for game icons
+  m_gamesLayout = new QHBoxLayout();
+  m_gamesLayout->setSpacing(15);
+  m_gamesLayout->addStretch();
+
+  QString appPath = QCoreApplication::applicationDirPath();
+  // Relative paths to icons (Source code location)
+  // Assuming build/client -> ../../games/
+
+  QString tileTwisterIcon =
+      appPath + "/../../games/TileTwister/assets/logo.png";
+  if (!QFile::exists(tileTwisterIcon))
+    tileTwisterIcon =
+        appPath +
+        "/../../../../games/TileTwister/assets/logo.png"; // Bundle fix
+
+  QString brickBreakerIcon =
+      appPath + "/../../games/BrickBreaker/assets/logo.png";
+  if (!QFile::exists(brickBreakerIcon))
+    brickBreakerIcon =
+        appPath +
+        "/../../../../games/BrickBreaker/assets/logo.png"; // Bundle fix
+
+  // Placeholder for where games will be added
+  addGameIcon("TileTwister", tileTwisterIcon);
+  addGameIcon("CyberpunkCannonShooter", brickBreakerIcon);
+
+  m_gamesLayout->addStretch();
+  panelLayout->addLayout(m_gamesLayout);
+
+  parentLayout->addWidget(m_gamePanelFrame);
+}
+
+void MainWindow::addGameIcon(const QString &name, const QString &iconPath) {
+  if (!m_gamesLayout)
+    return;
+
+  // Create Launch Button
+  QPushButton *gameBtn = new QPushButton(m_gamePanelFrame);
+  gameBtn->setFixedSize(64, 64);
+  gameBtn->setCursor(Qt::PointingHandCursor);
+  gameBtn->setToolTip("Play " + name);
+
+  // Install Event Filter for Hover Animation
+  gameBtn->installEventFilter(this);
+
+  // Load Icon
+  QPixmap pix(iconPath);
+  if (!iconPath.isEmpty() && !pix.isNull()) {
+    gameBtn->setIcon(QIcon(pix));
+    gameBtn->setIconSize(QSize(48, 48));
+  } else {
+    // Fallback: Colorful Text Icon
+    gameBtn->setText(name.left(1).toUpper());
+    QFont font = gameBtn->font();
+    font.setPixelSize(32);
+    font.setBold(true);
+    gameBtn->setFont(font);
+  }
+
+  gameBtn->setStyleSheet(R"(
+        QPushButton {
+            background-color: rgba(255, 255, 255, 60);
+            border: 2px solid rgba(200, 230, 255, 150);
+            border-radius: 32px;
+            padding: 0px;
+            color: #2d3748;
+        }
+        QPushButton:hover {
+            background-color: rgba(100, 200, 255, 80);
+            border: 2px solid rgba(100, 200, 255, 200);
+        }
+        QPushButton:pressed {
+            background-color: rgba(80, 180, 255, 120);
+        }
+    )");
+
+  // Connect click to launch
+  // Connect click to launch
+  connect(gameBtn, &QPushButton::clicked, this, [name]() {
+    QString appDir = QCoreApplication::applicationDirPath();
+    QString program;
+    QString workingDir;
+
+// Paths are relative to the executable (build/client/wizz_client)
+// Adjust logic based on OS if needed (Mac .app bundles have different
+// structure)
+#ifdef Q_OS_MAC
+    // Bundle path: wizz_client.app/Contents/MacOS/wizz_client
+    // We need to go up out of the bundle to reach build root
+    // .../build/client/wizz_client.app/Contents/MacOS -> .../build/client ->
+    // .../build Actually, usually easier to assume specific relative structure
+    // from CMake build
+
+    // For development/testing from build dir:
+    // appDir is .../build/client
+    // BUT if it's a bundle...
+#endif
+
+    // Simplified logic assuming flat build or standard structure
+    // We try to find the game relative to our current app dir
+
+    if (name == "TileTwister") {
+      // Target: build/games/TileTwister/TileTwister
+      // Working: games/TileTwister (source, for assets)
+
+      // From build/client -> ../games/TileTwister/TileTwister
+      program = appDir + "/../games/TileTwister/TileTwister";
+
+      // Working dir: we need the source dir for assets.
+      // In a real deployed app, attributes would be bundled.
+      // For this dev layout: ../../../games/TileTwister (assuming appDir is
+      // build/client) Let's assume we are in build/client.
+      workingDir = appDir + "/../../games/TileTwister";
+
+      // Check if path exists, otherwise try different depth
+      if (!QFile::exists(workingDir)) {
+        // Fallback for Mac Bundle: appDir is .../MacOS
+        // .../MacOS/../Resources/... or .../../../../../games
+        workingDir = appDir + "/../../../../games/TileTwister";
+        program = appDir + "/../../../../games/TileTwister/TileTwister";
+      }
+    } else if (name == "CyberpunkCannonShooter") {
+      // Target: build/bin/CyberpunkCannonShooter
+      // Working: build/bin (where assets are copied)
+
+      program = appDir + "/../bin/CyberpunkCannonShooter";
+      workingDir = appDir + "/../bin";
+
+      if (!QFile::exists(workingDir)) {
+        // Mac Bundle fallback
+        workingDir = appDir + "/../../../../bin";
+        program = appDir + "/../../../../bin/CyberpunkCannonShooter";
+      }
+    }
+
+    QStringList arguments;
+    if (!program.isEmpty()) {
+      qDebug() << "Launching:" << program << "In:" << workingDir;
+      QProcess::startDetached(program, arguments, workingDir);
+    }
+  });
+
+  // Insert before the last stretch
+  // m_gamesLayout has: stretch, [games...], stretch
+  // count is at least 2. insert at count-1
+  m_gamesLayout->insertWidget(m_gamesLayout->count() - 1, gameBtn);
+}
+
+bool MainWindow::eventFilter(QObject *obj, QEvent *event) {
+  if (QPushButton *btn = qobject_cast<QPushButton *>(obj)) {
+    if (event->type() == QEvent::Enter) {
+      // Hover Enter: Scale Up Icon
+      QPropertyAnimation *anim = new QPropertyAnimation(btn, "iconSize");
+      anim->setDuration(150);
+      anim->setStartValue(btn->iconSize());
+      anim->setEndValue(QSize(56, 56));
+      anim->start(QAbstractAnimation::DeleteWhenStopped);
+
+      // Move Up slightly via margin (Simulated with geometry check or
+      // stylesheet? Stylesheet is safer for layout but complicates animation.
+      // Let's stick to icon size + cursor for now as "professional" inner
+      // scale) Or animate geometry: btn->move(btn->x(), btn->y() - 2); // risky
+      // with layout
+      return true;
+    } else if (event->type() == QEvent::Leave) {
+      // Hover Leave: Scale Down Icon
+      QPropertyAnimation *anim = new QPropertyAnimation(btn, "iconSize");
+      anim->setDuration(150);
+      anim->setStartValue(btn->iconSize());
+      anim->setEndValue(QSize(48, 48));
+      anim->start(QAbstractAnimation::DeleteWhenStopped);
+      return true;
+    }
+  }
+  return QWidget::eventFilter(obj, event);
 }
