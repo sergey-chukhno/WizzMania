@@ -529,12 +529,12 @@ void TcpServer::run() {
             // Broadcast Offline Status (3) to Friends
             std::vector<std::string> friends = m_db.getFriends(username);
             for (const auto &friendName : friends) {
-              auto it = m_onlineUsers.find(friendName);
-              if (it != m_onlineUsers.end()) {
+              auto friendIt = m_onlineUsers.find(friendName);
+              if (friendIt != m_onlineUsers.end()) {
                 Packet notify(PacketType::ContactStatusChange);
                 notify.writeInt(3); // Offline
                 notify.writeString(username);
-                it->second->sendPacket(notify);
+                friendIt->second->sendPacket(notify);
               }
             }
           }

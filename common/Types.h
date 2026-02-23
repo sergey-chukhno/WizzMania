@@ -6,6 +6,7 @@
 #ifdef _WIN32
 #include <winsock2.h>
 typedef SOCKET SocketType;
+typedef int socklen_t; // Windows uses int for address lengths in accept()
 #define INVALID_SOCKET_VAL INVALID_SOCKET
 
 // Helper to close socket widely
