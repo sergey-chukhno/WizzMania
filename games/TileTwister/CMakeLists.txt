@@ -6,6 +6,16 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE) # Force all dependencies to be static
 
+# --- CMake 4.x & FetchContent Compatibility Fixes ---
+if(POLICY CMP0135)
+  cmake_policy(SET CMP0135 NEW) # Use modern timestamp extraction for URLs (fixes SDL2 warning)
+endif()
+
+# FreeType 2.13.2 sets cmake_minimum_required(2.8.12). 
+# CMake 4.0+ removed support for < 3.5. 
+# We explicitly force the minimum policy version to 3.5 for fetched subprojects.
+set(CMAKE_POLICY_VERSION_MINIMUM 3.5 CACHE STRING "Minimum policy version for subprojects" FORCE)
+
 # --- Dependencies ---
 include(FetchContent)
 
