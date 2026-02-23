@@ -283,10 +283,11 @@ void TcpServer::run() {
                 [this](ClientSession *sender, const std::string &target,
                        uint16_t duration, const std::vector<uint8_t> &data) {
                   long long timestamp = std::time(nullptr);
-                  std::stringstream ss;
-                  ss << "server/storage/voice_" << sender->getUsername() << "_"
-                     << timestamp << ".wav";
-                  std::string filepath = ss.str();
+                  fs::path storageDir = fs::path("server") / "storage";
+                  std::string filename = "voice_" + sender->getUsername() +
+                                         "_" + std::to_string(timestamp) +
+                                         ".wav";
+                  std::string filepath = (storageDir / filename).string();
 
                   std::ofstream outfile(filepath, std::ios::binary);
                   if (outfile.is_open()) {
@@ -353,14 +354,16 @@ void TcpServer::run() {
                        const std::vector<uint8_t> &data) {
                   std::string username = sender->getUsername();
                   long long timestamp = std::time(nullptr);
-                  std::stringstream ss;
-                  ss << "server/storage/avatars/avatar_" << username << "_"
-                     << timestamp << ".png";
-                  std::string filepath = ss.str();
+                  fs::path storageDir =
+                      fs::path("server") / "storage" / "avatars";
 
-                  if (!fs::exists("server/storage/avatars")) {
-                    fs::create_directories("server/storage/avatars");
+                  if (!fs::exists(storageDir)) {
+                    fs::create_directories(storageDir);
                   }
+
+                  std::string filename = "avatar_" + username + "_" +
+                                         std::to_string(timestamp) + ".png";
+                  std::string filepath = (storageDir / filename).string();
 
                   std::ofstream outfile(filepath, std::ios::binary);
                   if (outfile.is_open()) {
@@ -500,9 +503,10 @@ void TcpServer::run() {
 }
 
 void TcpServer::setupVoiceStorage() {
-  if (!fs::exists("server/storage")) {
-    fs::create_directories("server/storage");
-    std::cout << "[Server] Created storage directory: server/storage"
+  fs::path storageDir = fs::path("server") / "storage";
+  if (!fs::exists(storageDir)) {
+    fs::create_directories(storageDir);
+    std::cout << "[Server] Created storage directory: " << storageDir.string()
               << std::endl;
   }
 }
