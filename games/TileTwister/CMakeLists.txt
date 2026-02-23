@@ -76,6 +76,15 @@ set(SDL2TTF_VENDORED OFF CACHE BOOL "" FORCE)
 find_package(SDL2_ttf QUIET)
 if(NOT SDL2_ttf_FOUND)
   message(STATUS "SDL2_ttf not found on system, fetching from source...")
+  
+  # When FreeType is fetched from source, find_package(Freetype) inside SDL2_ttf fails 
+  # because it looks for system-installed paths. We explicitly set the cache variables it needs.
+  if(TARGET freetype)
+      set(FREETYPE_FOUND TRUE CACHE BOOL "Force FreeType found for SDL2_ttf" FORCE)
+      set(FREETYPE_INCLUDE_DIRS "${freetype_SOURCE_DIR}/include" CACHE PATH "Force FreeType include dir" FORCE)
+      set(FREETYPE_LIBRARY freetype CACHE STRING "Force FreeType library" FORCE)
+  endif()
+
   FetchContent_Declare(
     SDL2_ttf
     GIT_REPOSITORY https://github.com/libsdl-org/SDL_ttf.git
