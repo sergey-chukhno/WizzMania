@@ -50,7 +50,7 @@ struct TestClient {
 
   void send_packet(const Packet &pkt) {
     std::vector<uint8_t> data = pkt.serialize();
-    send(sockfd, data.data(), data.size(), 0);
+    send(sockfd, reinterpret_cast<const char *>(data.data()), data.size(), 0);
   }
 
   Packet receive_packet() {
