@@ -5,7 +5,7 @@
 // Helper to set a row for easy testing
 void setRow(Core::Grid &grid, int rowY, std::vector<int> values) {
   for (int x = 0; x < 4; ++x) {
-    if (x < values.size()) {
+    if (static_cast<size_t>(x) < values.size()) {
       grid.getTile(x, rowY) = Core::Tile(values[x]);
     } else {
       grid.getTile(x, rowY) = Core::Tile(0);
@@ -16,7 +16,7 @@ void setRow(Core::Grid &grid, int rowY, std::vector<int> values) {
 // Helper to check a row
 void checkRow(const Core::Grid &grid, int rowY, std::vector<int> expected) {
   for (int x = 0; x < 4; ++x) {
-    int val = (x < expected.size()) ? expected[x] : 0;
+    int val = (static_cast<size_t>(x) < expected.size()) ? expected[x] : 0;
     EXPECT_EQ(grid.getTile(x, rowY).getValue(), val)
         << "Mismatch at Row " << rowY << ", Col " << x;
   }
