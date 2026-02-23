@@ -843,12 +843,7 @@ void MainWindow::addGameIcon(const QString &name, const QString &iconPath) {
     // CannonShooter requires working dir to be the bin output folder where
     // assets live TileTwister expects the project source root folder
     if (name == "CyberpunkCannonShooter") {
-      if (!program.isEmpty()) {
-        QFileInfo exeInfo(program);
-        workingDir = exeInfo.absolutePath();
-      } else {
-        workingDir = resolveWorkingDir("BrickBreaker");
-      }
+      workingDir = resolveWorkingDir("BrickBreaker");
     } else {
       workingDir = resolveWorkingDir(name);
     }

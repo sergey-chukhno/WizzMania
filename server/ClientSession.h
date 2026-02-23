@@ -9,7 +9,7 @@
 
 // Forward Declaration
 namespace wizz {
-class DatabaseManager;
+class TcpServer;
 }
 
 namespace wizz {
@@ -42,8 +42,8 @@ using OnGetAvatarCallback =
 
 class ClientSession {
 public:
-  // Pass DB by reference, store as pointer, and Callbacks
-  explicit ClientSession(SocketType socket, DatabaseManager &db,
+  // Pass Server pointer for Async Task dispatch, and Callbacks
+  explicit ClientSession(SocketType socket, TcpServer *server,
                          OnLoginCallback onLogin, OnMessageCallback onMessage,
                          OnNudgeCallback onNudge,
                          OnVoiceMessageCallback onVoiceMessage,
@@ -97,8 +97,8 @@ private:
   std::string m_username;
   bool m_isLoggedIn;
 
-  // Pointer to the Shared Database (Owned by TcpServer)
-  DatabaseManager *m_db;
+  // Pointer to the Server for Async Task Queue access
+  TcpServer *m_server;
 
   // Callbacks
   OnLoginCallback m_onLogin;

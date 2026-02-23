@@ -1,7 +1,13 @@
 #pragma once
 
+#include <atomic>
+#include <condition_variable>
+#include <functional>
+#include <mutex>
+#include <queue>
 #include <sqlite3.h>
 #include <string>
+#include <thread>
 #include <vector>
 
 namespace wizz {
@@ -10,6 +16,9 @@ class DatabaseManager {
 public:
   DatabaseManager(const std::string &dbPath);
   ~DatabaseManager();
+
+  // Actor Model: Enqueue task for background DB thread
+  void postTask(std::function<void()> task);
 
   // Prevent copy (Single connection ideally, or manage strictly)
   DatabaseManager(const DatabaseManager &) = delete;
@@ -52,6 +61,8 @@ public:
   std::vector<std::string> getFriends(const std::string &username);
 
 private:
+  void workerLoop();
+
   std::string hashPassword(const std::string &password,
                            const std::string &salt);
   std::string generateSalt();
@@ -59,6 +70,12 @@ private:
 private:
   std::string m_dbPath;
   sqlite3 *m_db;
+
+  std::thread m_workerThread;
+  std::queue<std::function<void()>> m_tasks;
+  std::mutex m_mutex;
+  std::condition_variable m_cv;
+  std::atomic<bool> m_stopWorker;
 };
 
 } // namespace wizz

@@ -11,19 +11,19 @@
 #endif
 
 // Include full definition for implementation
-#include "DatabaseManager.h"
+#include "TcpServer.h"
 
 namespace wizz {
 
 ClientSession::ClientSession(
-    SocketType socket, DatabaseManager &db, OnLoginCallback onLogin,
+    SocketType socket, TcpServer *server, OnLoginCallback onLogin,
     OnMessageCallback onMessage, OnNudgeCallback onNudge,
     OnVoiceMessageCallback onVoiceMessage,
     OnTypingIndicatorCallback onTypingIndicator, GetStatusCallback getStatus,
     OnStatusChangeCallback onStatusChange,
     OnUpdateAvatarCallback onUpdateAvatar, OnGetAvatarCallback onGetAvatar)
-    : m_socket(socket), m_isLoggedIn(false), m_db(&db), m_onLogin(onLogin),
-      m_onMessage(onMessage), m_onNudge(onNudge),
+    : m_socket(socket), m_isLoggedIn(false), m_server(server),
+      m_onLogin(onLogin), m_onMessage(onMessage), m_onNudge(onNudge),
       m_onVoiceMessage(onVoiceMessage), m_onTypingIndicator(onTypingIndicator),
       m_getStatus(getStatus), m_onStatusChange(onStatusChange),
       m_onUpdateAvatar(onUpdateAvatar), m_onGetAvatar(onGetAvatar) {}
@@ -36,7 +36,7 @@ ClientSession::~ClientSession() {
 
 ClientSession::ClientSession(ClientSession &&other) noexcept
     : m_socket(other.m_socket), m_username(std::move(other.m_username)),
-      m_isLoggedIn(other.m_isLoggedIn), m_db(other.m_db),
+      m_isLoggedIn(other.m_isLoggedIn), m_server(other.m_server),
       m_onLogin(std::move(other.m_onLogin)),
       m_onMessage(std::move(other.m_onMessage)),
       m_onNudge(std::move(other.m_onNudge)),
@@ -60,7 +60,7 @@ ClientSession &ClientSession::operator=(ClientSession &&other) noexcept {
     m_username = std::move(other.m_username);
     m_isLoggedIn = other.m_isLoggedIn;
     m_buffer = std::move(other.m_buffer);
-    m_db = other.m_db; // Copy Pointer
+    m_server = other.m_server; // Copy Pointer
     m_onLogin = std::move(other.m_onLogin);
     m_onMessage = std::move(other.m_onMessage);
     m_onNudge = std::move(other.m_onNudge);
@@ -238,34 +238,40 @@ void ClientSession::handleRegister(Packet &packet) {
 
   std::cout << "[Session] Register Attempt: " << username << std::endl;
 
-  if (m_db && m_db->createUser(username, password)) {
-    std::cout << "[Session] Registration SUCCESS for " << username << std::endl;
-    // Auto-Login
-    m_username = username;
-    m_isLoggedIn = true;
+  if (!m_server)
+    return;
 
-    // 1. Send Success Packet FIRST
-    Packet resp(PacketType::RegisterSuccess);
-    resp.writeString("Registration Successful! Welcome, " + username);
+  m_server->getDb().postTask(
+      [server = m_server, socket = m_socket, username, password]() {
+        bool ok = server->getDb().createUser(username, password);
 
-    std::vector<uint8_t> buffer = resp.serialize();
-    send(m_socket, reinterpret_cast<const char *>(buffer.data()), buffer.size(),
-         0);
+        server->postResponse([server, socket, username, ok]() {
+          ClientSession *session = server->getSession(socket);
+          if (!session)
+            return;
 
-    // 2. Notify Server Registry (which might flush Offline Msgs)
-    if (m_onLogin) {
-      m_onLogin(this);
-    }
-  } else {
-    std::cout << "[Session] Registration FAILED (Taken): " << username
-              << std::endl;
-    Packet resp(PacketType::RegisterFailed);
-    resp.writeString("Username already taken.");
+          if (ok) {
+            std::cout << "[Session] Registration SUCCESS for " << username
+                      << std::endl;
+            session->m_username = username;
+            session->m_isLoggedIn = true;
 
-    std::vector<uint8_t> buffer = resp.serialize();
-    send(m_socket, reinterpret_cast<const char *>(buffer.data()), buffer.size(),
-         0);
-  }
+            Packet resp(PacketType::RegisterSuccess);
+            resp.writeString("Registration Successful! Welcome, " + username);
+            session->sendPacket(resp);
+
+            if (session->m_onLogin) {
+              session->m_onLogin(session);
+            }
+          } else {
+            std::cout << "[Session] Registration FAILED (Taken): " << username
+                      << std::endl;
+            Packet resp(PacketType::RegisterFailed);
+            resp.writeString("Username already taken.");
+            session->sendPacket(resp);
+          }
+        });
+      });
 }
 
 void ClientSession::handleLogin(Packet &packet) {
@@ -285,49 +291,54 @@ void ClientSession::handleLogin(Packet &packet) {
   std::cout << "[Session] Login Attempt: " << username << std::endl;
 
   // 2. Verify with Database
-  if (m_db && m_db->checkCredentials(username, password)) {
-    std::cout << "[Session] Login SUCCESS for " << username << std::endl;
-    m_username = username;
-    m_isLoggedIn = true;
+  if (!m_server)
+    return;
 
-    // 3. Send Response (LoginSuccess) FIRST
-    Packet resp(PacketType::LoginSuccess);
-    resp.writeString("Welcome to WizzMania, " + username + "!");
+  m_server->getDb().postTask([server = m_server, socket = m_socket, username,
+                              password]() {
+    bool ok = server->getDb().checkCredentials(username, password);
+    std::vector<std::string> friends;
+    if (ok) {
+      friends = server->getDb().getFriends(username);
+    }
 
-    std::vector<uint8_t> buffer = resp.serialize();
-    send(m_socket, reinterpret_cast<const char *>(buffer.data()), buffer.size(),
-         0);
+    server->postResponse([server, socket, username, ok,
+                          friends = std::move(friends)]() {
+      ClientSession *session = server->getSession(socket);
+      if (!session)
+        return;
 
-    // 4. Send Contact List (Sync)
-    std::vector<std::string> friends = m_db->getFriends(username);
-    if (!friends.empty()) {
-      Packet contactList(PacketType::ContactList);
-      contactList.writeInt(static_cast<uint32_t>(friends.size()));
-      for (const auto &name : friends) {
-        contactList.writeString(name);
-        // Sync Status
-        int status = m_getStatus ? m_getStatus(name) : 3; // 3 = Offline default
-        contactList.writeInt(static_cast<uint32_t>(status));
+      if (ok) {
+        std::cout << "[Session] Login SUCCESS for " << username << std::endl;
+        session->m_username = username;
+        session->m_isLoggedIn = true;
+
+        Packet resp(PacketType::LoginSuccess);
+        resp.writeString("Welcome to WizzMania, " + username + "!");
+        session->sendPacket(resp);
+
+        if (!friends.empty()) {
+          Packet contactList(PacketType::ContactList);
+          contactList.writeInt(static_cast<uint32_t>(friends.size()));
+          for (const auto &name : friends) {
+            contactList.writeString(name);
+            int status = session->m_getStatus ? session->m_getStatus(name) : 3;
+            contactList.writeInt(static_cast<uint32_t>(status));
+          }
+          session->sendPacket(contactList);
+        }
+
+        if (session->m_onLogin) {
+          session->m_onLogin(session);
+        }
+      } else {
+        std::cout << "[Session] Login FAILED for " << username << std::endl;
+        Packet resp(PacketType::LoginFailed);
+        resp.writeString("Invalid Username or Password.");
+        session->sendPacket(resp);
       }
-      sendPacket(contactList);
-    }
-
-    // 5. Notify Server Registry (Triggers Offline Msg Flush)
-    if (m_onLogin) {
-      m_onLogin(this);
-    }
-
-  } else {
-    std::cout << "[Session] Login FAILED for " << username << std::endl;
-
-    // 3. Send Response (LoginFailed)
-    Packet resp(PacketType::LoginFailed);
-    resp.writeString("Invalid Username or Password.");
-
-    std::vector<uint8_t> buffer = resp.serialize();
-    send(m_socket, reinterpret_cast<const char *>(buffer.data()), buffer.size(),
-         0);
-  }
+    });
+  });
 }
 
 void ClientSession::handleAddContact(Packet &packet) {
@@ -344,23 +355,38 @@ void ClientSession::handleAddContact(Packet &packet) {
   std::cout << "[Session] Add Contact: " << m_username << " -> " << targetUser
             << std::endl;
 
-  if (m_db && m_db->addFriend(m_username, targetUser)) {
-    // Success: Send Updated List (Sync)
-    std::vector<std::string> friends = m_db->getFriends(m_username);
-    Packet resp(PacketType::ContactList);
-    resp.writeInt(static_cast<uint32_t>(friends.size()));
-    for (const auto &name : friends) {
-      resp.writeString(name);
-      int status = m_getStatus ? m_getStatus(name) : 3;
-      resp.writeInt(static_cast<uint32_t>(status));
+  if (!m_server)
+    return;
+
+  m_server->getDb().postTask([server = m_server, socket = m_socket,
+                              username = m_username, targetUser]() {
+    bool ok = server->getDb().addFriend(username, targetUser);
+    std::vector<std::string> friends;
+    if (ok) {
+      friends = server->getDb().getFriends(username);
     }
-    sendPacket(resp);
-  } else {
-    // Fail: User not found
-    Packet err(PacketType::Error);
-    err.writeString("Failed to add contact: User not found.");
-    sendPacket(err);
-  }
+
+    server->postResponse([server, socket, ok, friends = std::move(friends)]() {
+      ClientSession *session = server->getSession(socket);
+      if (!session)
+        return;
+
+      if (ok) {
+        Packet resp(PacketType::ContactList);
+        resp.writeInt(static_cast<uint32_t>(friends.size()));
+        for (const auto &name : friends) {
+          resp.writeString(name);
+          int status = session->m_getStatus ? session->m_getStatus(name) : 3;
+          resp.writeInt(static_cast<uint32_t>(status));
+        }
+        session->sendPacket(resp);
+      } else {
+        Packet err(PacketType::Error);
+        err.writeString("Failed to add contact: User not found.");
+        session->sendPacket(err);
+      }
+    });
+  });
 }
 
 void ClientSession::handleRemoveContact(Packet &packet) {
@@ -377,18 +403,34 @@ void ClientSession::handleRemoveContact(Packet &packet) {
   std::cout << "[Session] Remove Contact: " << m_username << " -> "
             << targetUser << std::endl;
 
-  if (m_db && m_db->removeFriend(m_username, targetUser)) {
-    // Send Updated List
-    std::vector<std::string> friends = m_db->getFriends(m_username);
-    Packet resp(PacketType::ContactList);
-    resp.writeInt(static_cast<uint32_t>(friends.size()));
-    for (const auto &name : friends) {
-      resp.writeString(name);
-      int status = m_getStatus ? m_getStatus(name) : 3;
-      resp.writeInt(static_cast<uint32_t>(status));
+  if (!m_server)
+    return;
+
+  m_server->getDb().postTask([server = m_server, socket = m_socket,
+                              username = m_username, targetUser]() {
+    bool ok = server->getDb().removeFriend(username, targetUser);
+    std::vector<std::string> friends;
+    if (ok) {
+      friends = server->getDb().getFriends(username);
     }
-    sendPacket(resp);
-  }
+
+    server->postResponse([server, socket, ok, friends = std::move(friends)]() {
+      ClientSession *session = server->getSession(socket);
+      if (!session)
+        return;
+
+      if (ok) {
+        Packet resp(PacketType::ContactList);
+        resp.writeInt(static_cast<uint32_t>(friends.size()));
+        for (const auto &name : friends) {
+          resp.writeString(name);
+          int status = session->m_getStatus ? session->m_getStatus(name) : 3;
+          resp.writeInt(static_cast<uint32_t>(status));
+        }
+        session->sendPacket(resp);
+      }
+    });
+  });
 }
 
 void ClientSession::handleStatusChange(Packet &packet) {
