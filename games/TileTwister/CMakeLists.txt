@@ -38,6 +38,7 @@ FetchContent_MakeAvailable(googletest)
 # Force Static Build for Simplicity
 set(SDL_SHARED OFF CACHE BOOL "" FORCE)
 set(SDL_STATIC ON CACHE BOOL "" FORCE)
+set(SDL_TEST OFF CACHE BOOL "" FORCE)
 
 find_package(SDL2 QUIET)
 if(NOT SDL2_FOUND)
