@@ -33,10 +33,23 @@ public:
 
   void stop();
 
+  // Thread-safe Response Queue for passing work from DB Thread back to Main
+  // Thread
+  void postResponse(std::function<void()> responseTask);
+
+  // Safe lookup for async callbacks
+  ClientSession *getSession(SocketType socket);
+  DatabaseManager &getDb() { return m_db; }
+
 private:
+  void processResponses();
+
   int m_port;
   SocketType m_serverSocket;
   bool m_isRunning;
+
+  std::mutex m_responseMutex;
+  std::vector<std::function<void()>> m_responses;
 
   // Database (The Single Source of Truth)
   DatabaseManager m_db;

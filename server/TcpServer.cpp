@@ -65,6 +65,30 @@ void TcpServer::stop() {
   }
 }
 
+void TcpServer::postResponse(std::function<void()> responseTask) {
+  std::lock_guard<std::mutex> lock(m_responseMutex);
+  m_responses.push_back(std::move(responseTask));
+}
+
+void TcpServer::processResponses() {
+  std::vector<std::function<void()>> tasksToRun;
+  {
+    std::lock_guard<std::mutex> lock(m_responseMutex);
+    tasksToRun.swap(m_responses);
+  }
+  for (auto &task : tasksToRun) {
+    task();
+  }
+}
+
+ClientSession *TcpServer::getSession(SocketType socket) {
+  auto it = m_sessions.find(socket);
+  if (it != m_sessions.end()) {
+    return &it->second;
+  }
+  return nullptr;
+}
+
 void TcpServer::initSocket() {
   // 1. Create Socket (IPv4, TCP, Default Protocol)
   m_serverSocket = socket(AF_INET, SOCK_STREAM, 0);
@@ -122,13 +146,16 @@ void TcpServer::run() {
       }
     }
 
-    // Timeout (1 second)
+    // Timeout (10 milliseconds instead of 1s to ensure responsive queued tasks)
     timeval timeout;
-    timeout.tv_sec = 1;
-    timeout.tv_usec = 0;
+    timeout.tv_sec = 0;
+    timeout.tv_usec = 10000;
 
     // 3. Wait for Activity
     int activity = select(max_fd + 1, &readfds, nullptr, nullptr, &timeout);
+
+    // Process safely returned DB responses on Main Thread FIRST
+    processResponses();
 
     if (activity < 0) {
       std::cerr << "[Server] Select error" << std::endl;
@@ -150,82 +177,93 @@ void TcpServer::run() {
         std::cout << "[Server] New Connection: " << clientSocket << std::endl;
 
         // Create Session and Move into Map
-        // Pass m_db reference AND the Login Callback
+        // Pass TcpServer pointer AND the Login Callback
         m_sessions.emplace(
             clientSocket,
             ClientSession(
-                clientSocket, m_db,
+                clientSocket, this,
                 // 1. OnLogin
                 [this](ClientSession *session) {
                   std::string username = session->getUsername();
-                  std::cout << "[Server] User Online: " << username
-                            << std::endl;
-                  m_onlineUsers[username] = session;
+                  SocketType socket = session->getSocket();
 
-                  // Broadcast Online Status to Friends
-                  std::vector<std::string> friends = m_db.getFriends(username);
-                  for (const auto &friendName : friends) {
-                    auto it = m_onlineUsers.find(friendName);
-                    if (it != m_onlineUsers.end()) {
-                      // 1. Notify Friend that I am Online (Status=1)
-                      Packet notify(PacketType::ContactStatusChange);
-                      notify.writeInt(1); // Online
-                      notify.writeString(username);
-                      it->second->sendPacket(notify);
-                    }
-                  }
-
-                  // Check for Offline Messages
-                  auto pending = m_db.fetchPendingMessages(username);
-                  if (!pending.empty()) {
-                    std::cout << "[Server] Flushing " << pending.size()
-                              << " offline messages to " << username
-                              << std::endl;
+                  m_db.postTask([this, username, socket]() {
+                    auto pending = m_db.fetchPendingMessages(username);
                     for (const auto &msg : pending) {
-                      if (msg.body.rfind("VOICE:", 0) == 0) {
-                        // It's a voice message!
-                        std::vector<std::string> parts;
-                        std::stringstream ss(msg.body);
-                        std::string item;
-                        while (std::getline(ss, item, ':')) {
-                          parts.push_back(item);
-                        }
-
-                        if (parts.size() >= 3) {
-                          uint16_t duration =
-                              static_cast<uint16_t>(std::stoi(parts[1]));
-                          std::string filename = parts[2];
-
-                          std::ifstream infile(filename, std::ios::binary |
-                                                             std::ios::ate);
-                          if (infile.is_open()) {
-                            std::streamsize size = infile.tellg();
-                            infile.seekg(0, std::ios::beg);
-                            std::vector<uint8_t> buffer(size);
-                            if (infile.read(
-                                    reinterpret_cast<char *>(buffer.data()),
-                                    size)) {
-                              Packet outPacket(PacketType::VoiceMessage);
-                              outPacket.writeString(msg.sender);
-                              outPacket.writeInt(
-                                  static_cast<uint32_t>(duration));
-                              outPacket.writeInt(
-                                  static_cast<uint32_t>(buffer.size()));
-                              outPacket.writeData(buffer.data(), buffer.size());
-                              session->sendPacket(outPacket);
-                            }
-                          }
-                        }
-                      } else {
-                        // Standard Text Message
-                        Packet outPacket(PacketType::DirectMessage);
-                        outPacket.writeString(msg.sender);
-                        outPacket.writeString(msg.body);
-                        session->sendPacket(outPacket);
-                      }
                       m_db.markAsDelivered(msg.id);
                     }
-                  }
+                    auto friends = m_db.getFriends(username);
+
+                    postResponse([this, username, socket,
+                                  pending = std::move(pending),
+                                  friends = std::move(friends)]() {
+                      ClientSession *session = getSession(socket);
+                      if (!session)
+                        return;
+
+                      std::cout << "[Server] User Online: " << username
+                                << std::endl;
+                      m_onlineUsers[username] = session;
+
+                      // Broadcast Online Status to Friends
+                      for (const auto &friendName : friends) {
+                        auto it = m_onlineUsers.find(friendName);
+                        if (it != m_onlineUsers.end()) {
+                          Packet notify(PacketType::ContactStatusChange);
+                          notify.writeInt(1); // Online
+                          notify.writeString(username);
+                          it->second->sendPacket(notify);
+                        }
+                      }
+
+                      // Check for Offline Messages
+                      if (!pending.empty()) {
+                        std::cout << "[Server] Flushing " << pending.size()
+                                  << " offline messages to " << username
+                                  << std::endl;
+                        for (const auto &msg : pending) {
+                          if (msg.body.rfind("VOICE:", 0) == 0) {
+                            std::vector<std::string> parts;
+                            std::stringstream ss(msg.body);
+                            std::string item;
+                            while (std::getline(ss, item, ':')) {
+                              parts.push_back(item);
+                            }
+                            if (parts.size() >= 3) {
+                              uint16_t duration =
+                                  static_cast<uint16_t>(std::stoi(parts[1]));
+                              std::string filename = parts[2];
+                              std::ifstream infile(filename, std::ios::binary |
+                                                                 std::ios::ate);
+                              if (infile.is_open()) {
+                                std::streamsize size = infile.tellg();
+                                infile.seekg(0, std::ios::beg);
+                                std::vector<uint8_t> buffer(size);
+                                if (infile.read(
+                                        reinterpret_cast<char *>(buffer.data()),
+                                        size)) {
+                                  Packet outPacket(PacketType::VoiceMessage);
+                                  outPacket.writeString(msg.sender);
+                                  outPacket.writeInt(
+                                      static_cast<uint32_t>(duration));
+                                  outPacket.writeInt(
+                                      static_cast<uint32_t>(buffer.size()));
+                                  outPacket.writeData(buffer.data(),
+                                                      buffer.size());
+                                  session->sendPacket(outPacket);
+                                }
+                              }
+                            }
+                          } else {
+                            Packet outPacket(PacketType::DirectMessage);
+                            outPacket.writeString(msg.sender);
+                            outPacket.writeString(msg.body);
+                            session->sendPacket(outPacket);
+                          }
+                        }
+                      }
+                    });
+                  });
                 },
                 // 2. OnMessage (Routing)
                 [this](ClientSession *sender, const std::string &target,
@@ -246,8 +284,12 @@ void TcpServer::run() {
                     std::cout << "[Router] User " << target
                               << " not found (Offline). Storing." << std::endl;
                   }
-                  m_db.storeMessage(sender->getUsername(), target, msg,
-                                    delivered);
+
+                  // Fire and forget DB insertion
+                  m_db.postTask([this, senderName = sender->getUsername(),
+                                 target, msg, delivered]() {
+                    m_db.storeMessage(senderName, target, msg, delivered);
+                  });
                 },
                 // 3. OnNudge Callback
                 [this](ClientSession *sender, const std::string &target) {
@@ -308,8 +350,10 @@ void TcpServer::run() {
                   } else {
                     std::string proxyMsg =
                         "VOICE:" + std::to_string(duration) + ":" + filepath;
-                    m_db.storeMessage(sender->getUsername(), target, proxyMsg,
-                                      false);
+                    m_db.postTask([this, senderName = sender->getUsername(),
+                                   target, proxyMsg]() {
+                      m_db.storeMessage(senderName, target, proxyMsg, false);
+                    });
                   }
                 },
                 // 5. OnTypingIndicator Callback
@@ -338,16 +382,22 @@ void TcpServer::run() {
                 [this](ClientSession *sender, int newStatus) {
                   std::string username = sender->getUsername();
                   m_userStatuses[username] = newStatus;
-                  std::vector<std::string> friends = m_db.getFriends(username);
-                  for (const auto &friendName : friends) {
-                    auto it = m_onlineUsers.find(friendName);
-                    if (it != m_onlineUsers.end()) {
-                      Packet notify(PacketType::ContactStatusChange);
-                      notify.writeInt(static_cast<uint32_t>(newStatus));
-                      notify.writeString(username);
-                      it->second->sendPacket(notify);
-                    }
-                  }
+
+                  m_db.postTask([this, username, newStatus]() {
+                    auto friends = m_db.getFriends(username);
+                    postResponse([this, username, newStatus,
+                                  friends = std::move(friends)]() {
+                      for (const auto &friendName : friends) {
+                        auto it = m_onlineUsers.find(friendName);
+                        if (it != m_onlineUsers.end()) {
+                          Packet notify(PacketType::ContactStatusChange);
+                          notify.writeInt(static_cast<uint32_t>(newStatus));
+                          notify.writeString(username);
+                          it->second->sendPacket(notify);
+                        }
+                      }
+                    });
+                  });
                 },
                 // 8. OnUpdateAvatar Callback
                 [this](ClientSession *sender,
@@ -372,32 +422,32 @@ void TcpServer::run() {
                     outfile.close();
                     std::cout << "[Server] Saved Avatar: " << filepath
                               << std::endl;
-                    if (m_db.updateUserAvatar(username, filepath)) {
-                      std::cout << "[Server] DB Updated for " << username
-                                << std::endl;
+                    m_db.postTask([this, username, filepath, data]() {
+                      if (m_db.updateUserAvatar(username, filepath)) {
+                        std::cout << "[Server] DB Updated for " << username
+                                  << std::endl;
+                        auto friends = m_db.getFriends(username);
 
-                      // BROADCAST TO FRIENDS
-                      std::vector<std::string> friends =
-                          m_db.getFriends(username);
-                      for (const auto &friendName : friends) {
-                        auto it = m_onlineUsers.find(friendName);
-                        if (it != m_onlineUsers.end()) {
-                          // Send AvatarData to friend
-                          Packet resp(PacketType::AvatarData);
-                          resp.writeString(username);
-                          resp.writeInt(static_cast<uint32_t>(data.size()));
-                          resp.writeData(data.data(), data.size());
-                          it->second->sendPacket(resp);
-                          std::cout << "[Server] Broadcasted avatar to "
-                                    << friendName << std::endl;
-                        }
+                        postResponse([this, username,
+                                      friends = std::move(friends), data]() {
+                          for (const auto &friendName : friends) {
+                            auto it = m_onlineUsers.find(friendName);
+                            if (it != m_onlineUsers.end()) {
+                              Packet resp(PacketType::AvatarData);
+                              resp.writeString(username);
+                              resp.writeInt(static_cast<uint32_t>(data.size()));
+                              resp.writeData(data.data(), data.size());
+                              it->second->sendPacket(resp);
+                              std::cout << "[Server] Broadcasted avatar to "
+                                        << friendName << std::endl;
+                            }
+                          }
+                        });
+                      } else {
+                        std::cerr << "[Server] DB Update Failed for "
+                                  << username << std::endl;
                       }
-                      // Also reflect back to sender to confirm? (Client handles
-                      // local update, but good for consistency)
-                    } else {
-                      std::cerr << "[Server] DB Update Failed for " << username
-                                << std::endl;
-                    }
+                    });
                   } else {
                     std::cerr << "[Server] Failed to write file: " << filepath
                               << std::endl;
@@ -405,45 +455,53 @@ void TcpServer::run() {
                 },
                 // 9. OnGetAvatar Callback
                 [this](ClientSession *sender, const std::string &target) {
-                  std::string filepath = m_db.getUserAvatar(target);
-                  // Debug Logs
-                  std::cout << "[Server] GetAvatar req for " << target
-                            << ". Path: " << filepath << std::endl;
+                  SocketType socket = sender->getSocket();
 
-                  if (filepath.empty()) {
-                    std::cout << "[Server] No avatar path in DB for " << target
-                              << std::endl;
-                    return;
-                  }
+                  m_db.postTask([this, socket, target]() {
+                    std::string filepath = m_db.getUserAvatar(target);
+                    std::vector<uint8_t> buffer;
+                    if (!filepath.empty() && fs::exists(filepath)) {
+                      std::ifstream infile(filepath,
+                                           std::ios::binary | std::ios::ate);
+                      if (infile.is_open()) {
+                        std::streamsize size = infile.tellg();
+                        infile.seekg(0, std::ios::beg);
+                        buffer.resize(size);
+                        infile.read(reinterpret_cast<char *>(buffer.data()),
+                                    size);
+                      }
+                    }
 
-                  if (!fs::exists(filepath)) {
-                    std::cout << "[Server] File not found: " << filepath
-                              << std::endl;
-                    return;
-                  }
+                    postResponse([this, socket, target, filepath,
+                                  buffer = std::move(buffer)]() {
+                      ClientSession *session = getSession(socket);
+                      if (!session)
+                        return;
 
-                  std::ifstream infile(filepath,
-                                       std::ios::binary | std::ios::ate);
-                  if (infile.is_open()) {
-                    std::streamsize size = infile.tellg();
-                    infile.seekg(0, std::ios::beg);
-                    std::vector<uint8_t> buffer(size);
-                    if (infile.read(reinterpret_cast<char *>(buffer.data()),
-                                    size)) {
+                      std::cout << "[Server] GetAvatar req for " << target
+                                << ". Path: " << filepath << std::endl;
+                      if (filepath.empty()) {
+                        std::cout << "[Server] No avatar path in DB for "
+                                  << target << std::endl;
+                        return;
+                      }
+                      if (buffer.empty()) {
+                        std::cerr << "[Server] Failed to open file for read or "
+                                     "file empty: "
+                                  << filepath << std::endl;
+                        return;
+                      }
+
                       Packet resp(PacketType::AvatarData);
                       resp.writeString(target);
                       resp.writeInt(static_cast<uint32_t>(buffer.size()));
                       resp.writeData(buffer.data(), buffer.size());
-                      sender->sendPacket(resp);
-                      std::cout << "[Server] Sent avatar (" << size
-                                << " bytes) to " << sender->getUsername()
+                      session->sendPacket(resp);
+                      std::cout << "[Server] Sent avatar (" << buffer.size()
+                                << " bytes) to " << session->getUsername()
                                 << std::endl;
-                    }
-                  } else {
-                    std::cerr
-                        << "[Server] Failed to open file for read: " << filepath
-                        << std::endl;
-                  }
+                    });
+                  });
                 }));
       }
     }

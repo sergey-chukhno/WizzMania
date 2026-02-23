@@ -6,14 +6,52 @@
 namespace wizz {
 
 DatabaseManager::DatabaseManager(const std::string &dbPath)
-    : m_dbPath(dbPath), m_db(nullptr) {}
+    : m_dbPath(dbPath), m_db(nullptr), m_stopWorker(false) {}
 
 DatabaseManager::~DatabaseManager() {
+  {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    m_stopWorker = true;
+  }
+  m_cv.notify_one();
+  if (m_workerThread.joinable()) {
+    m_workerThread.join();
+  }
+
   if (m_db) {
     sqlite3_close(m_db);
     std::cout << "[DB] Connection Closed." << std::endl;
   }
 }
+
+void DatabaseManager::postTask(std::function<void()> task) {
+  {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    m_tasks.push(std::move(task));
+  }
+  m_cv.notify_one();
+}
+
+void DatabaseManager::workerLoop() {
+  while (true) {
+    std::function<void()> task;
+    {
+      std::unique_lock<std::mutex> lock(m_mutex);
+      m_cv.wait(lock, [this] { return m_stopWorker || !m_tasks.empty(); });
+
+      if (m_stopWorker && m_tasks.empty()) {
+        break;
+      }
+
+      task = std::move(m_tasks.front());
+      m_tasks.pop();
+    }
+    if (task) {
+      task();
+    }
+  }
+}
+
 bool DatabaseManager::init() {
   // 1. Open Connection
   int rc = sqlite3_open(m_dbPath.c_str(), &m_db);
@@ -24,6 +62,9 @@ bool DatabaseManager::init() {
   }
 
   std::cout << "[DB] Opened successfully: " << m_dbPath << std::endl;
+
+  // Start the worker thread
+  m_workerThread = std::thread(&DatabaseManager::workerLoop, this);
 
   // 2. Create Users Table
   const char *sqlUsers = "CREATE TABLE IF NOT EXISTS users ("
