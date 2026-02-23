@@ -1461,7 +1461,7 @@ void Game::drawOverlay() {
   m_renderer.drawFillRect(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT);
 }
 
-void Game::drawCard(int x, int y, int w, int h) {
+void Game::drawCard(int /*x*/, int /*y*/, int /*w*/, int /*h*/) {
   // Legacy or specific use
   drawOverlay();
 }
@@ -1542,12 +1542,7 @@ void Game::drawSwitch(const std::string &label, bool value, int x, int y, int w,
 // --- RENDER HELPERS ---
 
 void Game::renderGridBackground() {
-  Color gridColor = getGridColor();
-
-  // Layout V2: Y=180, Size=450
-  int gridY = 180;
-  int gridSize = 450;
-  int marginX = (WINDOW_WIDTH - gridSize) / 2;
+  // Background removed
 
   // Check if tile texture is loaded to use for background tiles
   // Actually, we removed the full background and used transparent board.
@@ -1661,9 +1656,7 @@ void Game::handleInputSavePrompt(Action action, int mx, int my, bool clicked) {
   // Simple Yes/No Overlay logic
   // Center Card: 400x300.
   // Buttons: Yes (Green), No (Red).
-  int cardW = 400;
   int cardH = 300;
-  int cardX = (WINDOW_WIDTH - cardW) / 2;
   int cardY = (WINDOW_HEIGHT - cardH) / 2;
 
   int btnWidth = 120;
