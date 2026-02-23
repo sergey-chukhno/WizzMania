@@ -21,9 +21,10 @@ include(FetchContent)
 
 # 1. GoogleTest
 FetchContent_Declare(
-  googletest
-  URL https://github.com/google/googletest/archive/refs/tags/v1.14.0.zip
-)
+    googletest
+    URL https://github.com/google/googletest/archive/refs/tags/v1.14.0.zip
+    TLS_VERIFY OFF # Bypass SSL cert checks for Windows compatibility
+  )
 # For Windows: Prevent GTest from overriding our compiler/linker options
 set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(googletest)
@@ -42,9 +43,10 @@ find_package(SDL2 QUIET)
 if(NOT SDL2_FOUND)
   message(STATUS "SDL2 not found on system, fetching from source...")
   FetchContent_Declare(
-    SDL2
-    URL https://github.com/libsdl-org/SDL/releases/download/release-2.28.5/SDL2-2.28.5.zip
-  )
+      SDL2
+      URL https://github.com/libsdl-org/SDL/releases/download/release-2.28.5/SDL2-2.28.5.zip
+      TLS_VERIFY OFF # Bypass SSL cert checks for Windows compatibility
+    )
   FetchContent_MakeAvailable(SDL2)
   # SDL2 CMake creates 'SDL2::SDL2-static' or 'SDL2::SDL2' depending on settings
   if(TARGET SDL2-static)
@@ -59,10 +61,11 @@ find_package(Freetype QUIET)
 if(NOT Freetype_FOUND)
   message(STATUS "Freetype not found, fetching from source...")
   FetchContent_Declare(
-      Freetype
-      GIT_REPOSITORY https://github.com/freetype/freetype.git
-      GIT_TAG VER-2-13-2
-  )
+        Freetype
+        GIT_REPOSITORY https://github.com/freetype/freetype.git
+        GIT_TAG VER-2-13-2
+        TLS_VERIFY OFF # Bypass SSL cert checks for Windows compatibility
+    )
   FetchContent_MakeAvailable(Freetype)
   if(TARGET freetype)
       add_library(Freetype::Freetype ALIAS freetype)
@@ -86,18 +89,20 @@ if(NOT SDL2_ttf_FOUND)
   endif()
 
   FetchContent_Declare(
-    SDL2_ttf
-    GIT_REPOSITORY https://github.com/libsdl-org/SDL_ttf.git
-    GIT_TAG release-2.22.0
-  )
+      SDL2_ttf
+      GIT_REPOSITORY https://github.com/libsdl-org/SDL_ttf.git
+      GIT_TAG release-2.22.0
+      TLS_VERIFY OFF # Bypass SSL cert checks for Windows compatibility
+    )
   FetchContent_MakeAvailable(SDL2_ttf)
 
 # SDL2_image
 FetchContent_Declare(
-  SDL2_image
-  GIT_REPOSITORY https://github.com/libsdl-org/SDL_image.git
-  GIT_TAG        release-2.6.3
-)
+    SDL2_image
+    GIT_REPOSITORY https://github.com/libsdl-org/SDL_image.git
+    GIT_TAG        release-2.6.3
+    TLS_VERIFY OFF # Bypass SSL cert checks for Windows compatibility
+  )
 set(SDL2IMAGE_VENDORED OFF CACHE BOOL "" FORCE)
 set(SDL2IMAGE_BACKEND_IMAGEIO OFF CACHE BOOL "" FORCE) # Mac fix
 set(SDL2IMAGE_INSTALL OFF CACHE BOOL "" FORCE) # Disable install to fix export error
