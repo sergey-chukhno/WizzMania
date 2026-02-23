@@ -181,5 +181,5 @@ target_include_directories(IntegrationTests PRIVATE src src/game)
 target_link_libraries(IntegrationTests PRIVATE GTest::gtest_main TileTwister_Core)
 
 include(GoogleTest)
-gtest_discover_tests(TileTwister_Tests)
-gtest_discover_tests(IntegrationTests)
+gtest_discover_tests(TileTwister_Tests DISCOVERY_MODE PRE_TEST)
+gtest_discover_tests(IntegrationTests DISCOVERY_MODE PRE_TEST)
