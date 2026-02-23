@@ -3,15 +3,70 @@
 #include "ChatWindow.h"
 #include "NetworkManager.h"
 #include <QBuffer>
+#include <QCoreApplication>
 #include <QDebug>
+#include <QDir>
 #include <QFileDialog>
 #include <QGraphicsDropShadowEffect>
 #include <QMessageBox>
 #include <QPaintEvent>
 #include <QPainterPath>
 #include <QPair> // Include QPair
+#include <QProcess>
 #include <QPropertyAnimation>
 #include <QTimer>
+
+namespace {
+QString resolveExecutablePath(const QString &baseName) {
+  QString exeName = baseName;
+#ifdef Q_OS_WIN
+  exeName += ".exe";
+#endif
+
+  QDir appDir(QCoreApplication::applicationDirPath());
+  QStringList searchPaths;
+
+  // Walk up the directory tree to handle nested builds (e.g. bundles, MSVC
+  // Debug folders)
+  QDir currentDir = appDir;
+  for (int i = 0; i < 5; ++i) {
+    searchPaths << currentDir.absoluteFilePath("games/" + baseName + "/" +
+                                               exeName);
+    searchPaths << currentDir.absoluteFilePath("bin/" + exeName);
+    searchPaths << currentDir.absoluteFilePath("games/" + baseName + "/Debug/" +
+                                               exeName);
+    searchPaths << currentDir.absoluteFilePath("games/" + baseName +
+                                               "/Release/" + exeName);
+    searchPaths << currentDir.absoluteFilePath("bin/Debug/" + exeName);
+    searchPaths << currentDir.absoluteFilePath("bin/Release/" + exeName);
+
+    if (!currentDir.cdUp())
+      break;
+  }
+
+  for (const QString &path : searchPaths) {
+    if (QFile::exists(path)) {
+      return QDir::cleanPath(path);
+    }
+  }
+  return "";
+}
+
+QString resolveWorkingDir(const QString &gameFolder) {
+  QDir dir(QCoreApplication::applicationDirPath());
+  // We need to find the SOURCE tree where the assets live for icons.
+  // The source tree has the 'games' folder at its root.
+  for (int i = 0; i < 6; ++i) {
+    // If we found the source directory mapping
+    if (dir.exists("games/" + gameFolder + "/assets")) {
+      return QDir::cleanPath(dir.absoluteFilePath("games/" + gameFolder));
+    }
+    if (!dir.cdUp())
+      break;
+  }
+  return QCoreApplication::applicationDirPath();
+}
+} // namespace
 
 MainWindow::MainWindow(const QString &username, const QPoint &initialPos,
                        QWidget *parent)
@@ -718,23 +773,13 @@ void MainWindow::setupGamePanel(QVBoxLayout *parentLayout) {
   m_gamesLayout->setSpacing(15);
   m_gamesLayout->addStretch();
 
-  QString appPath = QCoreApplication::applicationDirPath();
-  // Relative paths to icons (Source code location)
-  // Assuming build/client -> ../../games/
-
+  QString tileTwisterDir = resolveWorkingDir("TileTwister");
   QString tileTwisterIcon =
-      appPath + "/../../games/TileTwister/assets/logo.png";
-  if (!QFile::exists(tileTwisterIcon))
-    tileTwisterIcon =
-        appPath +
-        "/../../../../games/TileTwister/assets/logo.png"; // Bundle fix
+      QDir(tileTwisterDir).absoluteFilePath("assets/logo.png");
 
+  QString brickBreakerDir = resolveWorkingDir("BrickBreaker");
   QString brickBreakerIcon =
-      appPath + "/../../games/BrickBreaker/assets/logo.png";
-  if (!QFile::exists(brickBreakerIcon))
-    brickBreakerIcon =
-        appPath +
-        "/../../../../games/BrickBreaker/assets/logo.png"; // Bundle fix
+      QDir(brickBreakerDir).absoluteFilePath("assets/logo.png");
 
   // Placeholder for where games will be added
   addGameIcon("TileTwister", tileTwisterIcon);
@@ -791,68 +836,29 @@ void MainWindow::addGameIcon(const QString &name, const QString &iconPath) {
     )");
 
   // Connect click to launch
-  // Connect click to launch
   connect(gameBtn, &QPushButton::clicked, this, [name]() {
-    QString appDir = QCoreApplication::applicationDirPath();
-    QString program;
+    QString program = resolveExecutablePath(name);
     QString workingDir;
 
-// Paths are relative to the executable (build/client/wizz_client)
-// Adjust logic based on OS if needed (Mac .app bundles have different
-// structure)
-#ifdef Q_OS_MAC
-    // Bundle path: wizz_client.app/Contents/MacOS/wizz_client
-    // We need to go up out of the bundle to reach build root
-    // .../build/client/wizz_client.app/Contents/MacOS -> .../build/client ->
-    // .../build Actually, usually easier to assume specific relative structure
-    // from CMake build
-
-    // For development/testing from build dir:
-    // appDir is .../build/client
-    // BUT if it's a bundle...
-#endif
-
-    // Simplified logic assuming flat build or standard structure
-    // We try to find the game relative to our current app dir
-
-    if (name == "TileTwister") {
-      // Target: build/games/TileTwister/TileTwister
-      // Working: games/TileTwister (source, for assets)
-
-      // From build/client -> ../games/TileTwister/TileTwister
-      program = appDir + "/../games/TileTwister/TileTwister";
-
-      // Working dir: we need the source dir for assets.
-      // In a real deployed app, attributes would be bundled.
-      // For this dev layout: ../../../games/TileTwister (assuming appDir is
-      // build/client) Let's assume we are in build/client.
-      workingDir = appDir + "/../../games/TileTwister";
-
-      // Check if path exists, otherwise try different depth
-      if (!QFile::exists(workingDir)) {
-        // Fallback for Mac Bundle: appDir is .../MacOS
-        // .../MacOS/../Resources/... or .../../../../../games
-        workingDir = appDir + "/../../../../games/TileTwister";
-        program = appDir + "/../../../../games/TileTwister/TileTwister";
+    // CannonShooter requires working dir to be the bin output folder where
+    // assets live TileTwister expects the project source root folder
+    if (name == "CyberpunkCannonShooter") {
+      if (!program.isEmpty()) {
+        QFileInfo exeInfo(program);
+        workingDir = exeInfo.absolutePath();
+      } else {
+        workingDir = resolveWorkingDir("BrickBreaker");
       }
-    } else if (name == "CyberpunkCannonShooter") {
-      // Target: build/bin/CyberpunkCannonShooter
-      // Working: build/bin (where assets are copied)
-
-      program = appDir + "/../bin/CyberpunkCannonShooter";
-      workingDir = appDir + "/../bin";
-
-      if (!QFile::exists(workingDir)) {
-        // Mac Bundle fallback
-        workingDir = appDir + "/../../../../bin";
-        program = appDir + "/../../../../bin/CyberpunkCannonShooter";
-      }
+    } else {
+      workingDir = resolveWorkingDir(name);
     }
 
     QStringList arguments;
-    if (!program.isEmpty()) {
+    if (!program.isEmpty() && QFile::exists(program)) {
       qDebug() << "Launching:" << program << "In:" << workingDir;
       QProcess::startDetached(program, arguments, workingDir);
+    } else {
+      qDebug() << "Could not locate executable for game:" << name;
     }
   });
 
