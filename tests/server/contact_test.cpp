@@ -1,12 +1,16 @@
 #include "../../common/Packet.h"
+#ifdef _WIN32
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#ifdef _MSC_VER
+#pragma comment(lib, "ws2_32.lib")
+#endif
+#else
 #include <arpa/inet.h>
-#include <chrono>
-#include <cstring>
-#include <iostream>
 #include <netinet/in.h>
 #include <sys/socket.h>
-#include <thread>
 #include <unistd.h>
+#endif
 #include <vector>
 
 using namespace wizz;
@@ -24,7 +28,13 @@ struct TestClient {
     }
   }
 
-  ~TestClient() { close(sockfd); }
+  ~TestClient() {
+#ifdef _WIN32
+    closesocket(sockfd);
+#else
+    close(sockfd);
+#endif
+  }
 
   void connect_to_server(int port) {
     sockaddr_in serv_addr;
