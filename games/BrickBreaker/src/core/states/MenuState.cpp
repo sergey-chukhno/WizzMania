@@ -27,8 +27,6 @@ MenuState::~MenuState() = default;
 void MenuState::initializeUI() {
   // Use Display font for title
   const sf::Font &displayFont = FontManager::getDisplayFont();
-  // Use Body font for buttons
-  const sf::Font &bodyFont = FontManager::getBodyFont();
 
   // Initialize starfield with more stars for enhanced space background
   starfield_ = std::make_unique<Starfield>(
