@@ -70,6 +70,21 @@ private:
   void listenSocket();      // Step 3: Listen
   void cleanup();           // Close and cleanup
   void setupVoiceStorage(); // Create storage directory
+
+  // Client Session Handlers (Extracted from run() loop)
+  void handleLogin(ClientSession *session);
+  void handleMessage(ClientSession *sender, const std::string &target,
+                     const std::string &msg);
+  void handleNudge(ClientSession *sender, const std::string &target);
+  void handleVoiceMessage(ClientSession *sender, const std::string &target,
+                          uint16_t duration, const std::vector<uint8_t> &data);
+  void handleTypingIndicator(ClientSession *sender, const std::string &target,
+                             bool isTyping);
+  int handleGetStatus(const std::string &username);
+  void handleStatusChange(ClientSession *sender, int newStatus);
+  void handleUpdateAvatar(ClientSession *sender,
+                          const std::vector<uint8_t> &data);
+  void handleGetAvatar(ClientSession *sender, const std::string &target);
 };
 
 } // namespace wizz

@@ -18,6 +18,8 @@ set(CLIENT_SOURCES
     AddFriendDialog.cpp
     ChatWindow.cpp
     MainWindow.cpp
+    GameLauncher.cpp
+    AvatarManager.cpp
     resources.qrc
 )
 

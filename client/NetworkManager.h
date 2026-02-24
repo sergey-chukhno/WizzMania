@@ -1,8 +1,10 @@
 #pragma once
 
 #include "../common/Packet.h"
+#include <QHash>
 #include <QObject>
 #include <QTcpSocket>
+#include <functional>
 #include <memory>
 
 class NetworkManager : public QObject {
@@ -57,4 +59,17 @@ private:
 
   QTcpSocket *m_socket;
   std::vector<uint8_t> m_buffer; // Receive buffer
+
+  // Packet Handlers
+  void registerHandlers();
+  void handleContactListPacket(wizz::Packet &pkt);
+  void handleContactStatusChangePacket(wizz::Packet &pkt);
+  void handleErrorPacket(wizz::Packet &pkt);
+  void handleDirectMessagePacket(wizz::Packet &pkt);
+  void handleNudgePacket(wizz::Packet &pkt);
+  void handleVoiceMessagePacket(wizz::Packet &pkt);
+  void handleTypingIndicatorPacket(wizz::Packet &pkt);
+  void handleAvatarDataPacket(wizz::Packet &pkt);
+
+  QHash<wizz::PacketType, std::function<void(wizz::Packet &)>> m_packetHandlers;
 };

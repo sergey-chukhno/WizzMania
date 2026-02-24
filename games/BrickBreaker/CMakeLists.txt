@@ -60,11 +60,11 @@ target_link_libraries(${PROJECT_NAME}
 
 # Copy assets to build directory (for development)
 # Copy to bin directory where executable is located
-if(EXISTS ${CMAKE_SOURCE_DIR}/assets)
-    file(COPY ${CMAKE_SOURCE_DIR}/assets DESTINATION ${CMAKE_RUNTIME_OUTPUT_DIRECTORY})
+if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/assets)
+    file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/assets DESTINATION ${CMAKE_RUNTIME_OUTPUT_DIRECTORY})
 endif()
-if(EXISTS ${CMAKE_SOURCE_DIR}/config)
-    file(COPY ${CMAKE_SOURCE_DIR}/config DESTINATION ${CMAKE_RUNTIME_OUTPUT_DIRECTORY})
+if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/config)
+    file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/config DESTINATION ${CMAKE_RUNTIME_OUTPUT_DIRECTORY})
 endif()
 
 # Compiler-specific options

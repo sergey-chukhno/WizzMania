@@ -18,6 +18,7 @@
 
 #include <QRandomGenerator>
 #include <QUrl>
+#include <memory>
 
 ChatWindow::ChatWindow(const QString &partnerName, const QPoint &initialPos,
                        QWidget *parent)
@@ -413,22 +414,19 @@ QWidget *ChatWindow::createVoiceBubble(uint16_t duration,
 
             // Reset any other buttons? (Optional, skip for MVP)
 
-            // Connect specifically for this interaction
-            QMetaObject::Connection *connStop = new QMetaObject::Connection;
+            auto connStop = std::make_shared<QMetaObject::Connection>();
             *connStop = connect(m_audioManager, &AudioManager::playbackStopped,
-                                this, [playBtn, duration, this, connStop]() {
+                                this, [playBtn, duration, connStop]() {
                                   playBtn->setText(
                                       "▶ " + QString::number(duration) + "s");
                                   disconnect(*connStop);
-                                  delete connStop;
                                 });
 
-            QMetaObject::Connection *connStart = new QMetaObject::Connection;
+            auto connStart = std::make_shared<QMetaObject::Connection>();
             *connStart = connect(m_audioManager, &AudioManager::playbackStarted,
-                                 this, [playBtn, this, connStart]() {
+                                 this, [playBtn, connStart]() {
                                    playBtn->setText("🔊 Playing...");
                                    disconnect(*connStart);
-                                   delete connStart;
                                  });
 
             m_audioManager->playAudio(audioData);

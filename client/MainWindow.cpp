@@ -1,6 +1,8 @@
 #include "MainWindow.h"
 #include "AddFriendDialog.h"
+#include "AvatarManager.h"
 #include "ChatWindow.h"
+#include "GameLauncher.h"
 #include "NetworkManager.h"
 #include <QBuffer>
 #include <QCoreApplication>
@@ -12,62 +14,8 @@
 #include <QPaintEvent>
 #include <QPainterPath>
 #include <QPair> // Include QPair
-#include <QProcess>
 #include <QPropertyAnimation>
 #include <QTimer>
-
-namespace {
-QString resolveExecutablePath(const QString &baseName) {
-  QString exeName = baseName;
-#ifdef Q_OS_WIN
-  exeName += ".exe";
-#endif
-
-  QDir appDir(QCoreApplication::applicationDirPath());
-  QStringList searchPaths;
-
-  // Walk up the directory tree to handle nested builds (e.g. bundles, MSVC
-  // Debug folders)
-  QDir currentDir = appDir;
-  for (int i = 0; i < 5; ++i) {
-    searchPaths << currentDir.absoluteFilePath("games/" + baseName + "/" +
-                                               exeName);
-    searchPaths << currentDir.absoluteFilePath("bin/" + exeName);
-    searchPaths << currentDir.absoluteFilePath("games/" + baseName + "/Debug/" +
-                                               exeName);
-    searchPaths << currentDir.absoluteFilePath("games/" + baseName +
-                                               "/Release/" + exeName);
-    searchPaths << currentDir.absoluteFilePath("bin/Debug/" + exeName);
-    searchPaths << currentDir.absoluteFilePath("bin/Release/" + exeName);
-
-    if (!currentDir.cdUp())
-      break;
-  }
-
-  for (const QString &path : searchPaths) {
-    if (QFile::exists(path)) {
-      return QDir::cleanPath(path);
-    }
-  }
-  return "";
-}
-
-QString resolveWorkingDir(const QString &gameFolder) {
-  QDir dir(QCoreApplication::applicationDirPath());
-  // We need to find the SOURCE tree where the assets live for icons.
-  // The source tree has the 'games' folder at its root.
-  for (int i = 0; i < 6; ++i) {
-    // If we found the source directory mapping
-    if (dir.exists("games/" + gameFolder + "/assets")) {
-      return QDir::cleanPath(dir.absoluteFilePath("games/" + gameFolder));
-    }
-    if (!dir.cdUp())
-      break;
-  }
-  return QCoreApplication::applicationDirPath();
-}
-} // namespace
-
 MainWindow::MainWindow(const QString &username, const QPoint &initialPos,
                        QWidget *parent)
     : QWidget(parent), m_username(username) {
@@ -162,9 +110,9 @@ MainWindow::MainWindow(const QString &username, const QPoint &initialPos,
         }
       });
 
-  // Connect Avatar Received
-  connect(&NetworkManager::instance(), &NetworkManager::avatarReceived, this,
-          &MainWindow::onAvatarReceived);
+  // Connect Avatar Updated
+  connect(&AvatarManager::instance(), &AvatarManager::avatarUpdated, this,
+          &MainWindow::updateContactAvatar);
 
   // Initialize Dialogs
   m_addFriendDialog = new AddFriendDialog(this);
@@ -188,7 +136,7 @@ MainWindow::MainWindow(const QString &username, const QPoint &initialPos,
 
   // Request my own avatar immediately
   QTimer::singleShot(
-      500, [this]() { NetworkManager::instance().requestAvatar(m_username); });
+      500, [this]() { AvatarManager::instance().getAvatar(m_username, 50); });
 }
 void MainWindow::paintEvent(QPaintEvent *event) {
   QPainter painter(this);
@@ -200,45 +148,6 @@ void MainWindow::paintEvent(QPaintEvent *event) {
   }
 
   QWidget::paintEvent(event);
-}
-
-QPixmap MainWindow::createAvatarWithInitials(const QString &name, int size) {
-  QPixmap avatar(size, size);
-  avatar.fill(Qt::transparent);
-
-  QPainter painter(&avatar);
-  painter.setRenderHint(QPainter::Antialiasing);
-
-  // Generate color from name hash
-  uint hash = qHash(name);
-  QColor bgColor = QColor::fromHsl(hash % 360, 150, 120);
-
-  // Draw circle
-  painter.setBrush(bgColor);
-  painter.setPen(Qt::NoPen);
-  painter.drawEllipse(0, 0, size, size);
-
-  // Draw initials
-  QString initials;
-  QStringList parts = name.split('_');
-  if (parts.isEmpty())
-    parts = name.split(' ');
-  for (const QString &part : parts) {
-    if (!part.isEmpty())
-      initials += part[0].toUpper();
-    if (initials.length() >= 2)
-      break;
-  }
-  if (initials.isEmpty() && !name.isEmpty()) {
-    initials = name.left(2).toUpper();
-  }
-
-  painter.setPen(Qt::white);
-  QFont font("SF Pro Display", size / 3, QFont::Bold);
-  painter.setFont(font);
-  painter.drawText(QRect(0, 0, size, size), Qt::AlignCenter, initials);
-
-  return avatar;
 }
 
 QColor MainWindow::getStatusColor(UserStatus status) {
@@ -338,7 +247,7 @@ void MainWindow::setupUI() {
 
   // Avatar
   m_avatarLabel = new QLabel(profileFrame);
-  m_avatarLabel->setPixmap(createAvatarWithInitials(m_username, 50));
+  m_avatarLabel->setPixmap(AvatarManager::instance().getAvatar(m_username, 50));
   m_avatarLabel->setFixedSize(50, 50);
   m_avatarLabel->setStyleSheet("background: transparent;");
   m_avatarLabel->setCursor(Qt::PointingHandCursor);
@@ -499,13 +408,13 @@ void MainWindow::setContacts(const QList<ContactInfo> &contacts) {
   m_contacts = contacts;
   populateContactList();
 
-  // Request avatars for all contacts
+  // Initialize fetching avatars for all contacts
   for (const auto &contact : m_contacts) {
-    NetworkManager::instance().requestAvatar(contact.username);
+    AvatarManager::instance().getAvatar(contact.username, 36);
   }
 
   // Also request my own avatar to ensure it's up to date
-  NetworkManager::instance().requestAvatar(m_username);
+  AvatarManager::instance().getAvatar(m_username, 50);
 }
 
 void MainWindow::populateContactList() {
@@ -527,7 +436,8 @@ void MainWindow::populateContactList() {
     // Avatar
     QLabel *avatar = new QLabel();
     if (contact.avatar.isNull()) {
-      avatar->setPixmap(createAvatarWithInitials(contact.username, 36));
+      avatar->setPixmap(
+          AvatarManager::instance().getAvatar(contact.username, 36));
     } else {
       avatar->setPixmap(contact.avatar.scaled(36, 36, Qt::KeepAspectRatio,
                                               Qt::SmoothTransformation));
@@ -620,15 +530,6 @@ void MainWindow::updateContactAvatar(const QString &username,
 
   if (found) {
     populateContactList();
-  }
-}
-
-void MainWindow::onAvatarReceived(const QString &username,
-                                  const QByteArray &data) {
-  QPixmap avatar;
-  if (avatar.loadFromData(data)) {
-    updateContactAvatar(username, avatar);
-  } else {
   }
 }
 
@@ -773,17 +674,17 @@ void MainWindow::setupGamePanel(QVBoxLayout *parentLayout) {
   m_gamesLayout->setSpacing(15);
   m_gamesLayout->addStretch();
 
-  QString tileTwisterDir = resolveWorkingDir("TileTwister");
+  QString tileTwisterDir = GameLauncher::resolveWorkingDir("TileTwister");
   QString tileTwisterIcon =
       QDir(tileTwisterDir).absoluteFilePath("assets/logo.png");
 
-  QString brickBreakerDir = resolveWorkingDir("BrickBreaker");
+  QString brickBreakerDir = GameLauncher::resolveWorkingDir("BrickBreaker");
   QString brickBreakerIcon =
       QDir(brickBreakerDir).absoluteFilePath("assets/logo.png");
 
   // Placeholder for where games will be added
   addGameIcon("TileTwister", tileTwisterIcon);
-  addGameIcon("CyberpunkCannonShooter", brickBreakerIcon);
+  addGameIcon("BrickBreaker", brickBreakerIcon);
 
   m_gamesLayout->addStretch();
   panelLayout->addLayout(m_gamesLayout);
@@ -836,26 +737,8 @@ void MainWindow::addGameIcon(const QString &name, const QString &iconPath) {
     )");
 
   // Connect click to launch
-  connect(gameBtn, &QPushButton::clicked, this, [name]() {
-    QString program = resolveExecutablePath(name);
-    QString workingDir;
-
-    // CannonShooter requires working dir to be the bin output folder where
-    // assets live TileTwister expects the project source root folder
-    if (name == "CyberpunkCannonShooter") {
-      workingDir = resolveWorkingDir("BrickBreaker");
-    } else {
-      workingDir = resolveWorkingDir(name);
-    }
-
-    QStringList arguments;
-    if (!program.isEmpty() && QFile::exists(program)) {
-      qDebug() << "Launching:" << program << "In:" << workingDir;
-      QProcess::startDetached(program, arguments, workingDir);
-    } else {
-      qDebug() << "Could not locate executable for game:" << name;
-    }
-  });
+  connect(gameBtn, &QPushButton::clicked, this,
+          [name]() { GameLauncher::launchGame(name); });
 
   // Insert before the last stretch
   // m_gamesLayout has: stretch, [games...], stretch
