@@ -50,7 +50,8 @@ QPixmap LoginDialog::processTransparentImage(const QString &path, int size) {
 
 void LoginDialog::setupUI() {
   setWindowTitle("Wizz Mania");
-  setFixedSize(1024, 768);
+  resize(1024, 768);
+  setMinimumSize(1024, 768);
 
   QVBoxLayout *mainLayout = new QVBoxLayout(this);
   mainLayout->setAlignment(Qt::AlignCenter);
