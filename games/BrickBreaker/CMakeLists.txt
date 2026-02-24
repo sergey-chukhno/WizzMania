@@ -16,10 +16,24 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 
-# Find SFML (version 3.0 or later)
-# Note: Graphics automatically includes System and Window
-# Audio automatically includes System
-find_package(SFML 3.0 COMPONENTS Graphics Audio REQUIRED)
+# Try to find SFML 3.0 natively first
+find_package(SFML 3.0 COMPONENTS Graphics Audio QUIET)
+
+if(NOT SFML_FOUND)
+    message(STATUS "SFML 3.0 not found natively. Fetching from GitHub via FetchContent...")
+    include(FetchContent)
+    
+    # SFML 3.0 requires C++17
+    set(SFML_BUILD_EXAMPLES OFF CACHE BOOL "Disable SFML examples")
+    set(SFML_BUILD_DOC OFF CACHE BOOL "Disable SFML documentation")
+    
+    FetchContent_Declare(
+        SFML
+        GIT_REPOSITORY https://github.com/SFML/SFML.git
+        GIT_TAG        3.0.0
+    )
+    FetchContent_MakeAvailable(SFML)
+endif()
 
 # Source files
 set(SOURCES
