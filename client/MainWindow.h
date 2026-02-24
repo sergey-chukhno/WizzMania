@@ -66,12 +66,10 @@ private slots:
 
   // Avatar Slots
   void onAvatarClicked();
-  void onAvatarReceived(const QString &username, const QByteArray &data);
 
 private:
   void setupUI();
   void populateContactList();
-  QPixmap createAvatarWithInitials(const QString &name, int size);
   QColor getStatusColor(UserStatus status);
   QString getStatusText(UserStatus status);
 

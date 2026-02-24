@@ -24,11 +24,9 @@ AudioManager::AudioManager(QObject *parent) : QObject(parent) { setupFormat(); }
 AudioManager::~AudioManager() {
   if (m_audioSource) {
     m_audioSource->stop();
-    delete m_audioSource;
   }
   if (m_audioSink) {
     m_audioSink->stop();
-    delete m_audioSink;
   }
 }
 
@@ -66,10 +64,10 @@ bool AudioManager::startRecording() {
            << m_format.channelCount() << "chan," << m_format.sampleFormat();
 
   if (m_audioSource) {
-    delete m_audioSource;
+    m_audioSource.reset();
   }
-  m_audioSource = new QAudioSource(device, m_format, this);
-  connect(m_audioSource, &QAudioSource::stateChanged, this,
+  m_audioSource = std::make_unique<QAudioSource>(device, m_format);
+  connect(m_audioSource.get(), &QAudioSource::stateChanged, this,
           [this](QAudio::State state) {
             qDebug() << "Audio Source State:" << state;
             if (state == QAudio::StoppedState) {
@@ -159,7 +157,7 @@ void AudioManager::playAudio(const std::vector<uint8_t> &wavData) {
 
   if (m_audioSink) {
     m_audioSink->stop();
-    delete m_audioSink;
+    m_audioSink.reset();
   }
 
   // Header Parsing to determine format
@@ -180,10 +178,10 @@ void AudioManager::playAudio(const std::vector<uint8_t> &wavData) {
         << "Format from WAV not supported by output device. Playback may fail.";
   }
 
-  m_audioSink = new QAudioSink(device, playFormat, this);
+  m_audioSink = std::make_unique<QAudioSink>(device, playFormat);
   m_audioSink->setVolume(1.0f); // Force max volume
 
-  connect(m_audioSink, &QAudioSink::stateChanged, this,
+  connect(m_audioSink.get(), &QAudioSink::stateChanged, this,
           [this](QAudio::State state) {
             qDebug() << "Audio Sink State:" << state;
             if (state == QAudio::ActiveState) {

@@ -7,6 +7,7 @@
 #include <QByteArray>
 #include <QMediaDevices>
 #include <QObject>
+#include <memory>
 #include <vector>
 
 class AudioManager : public QObject {
@@ -34,8 +35,8 @@ private:
   QByteArray addWavHeader(const QByteArray &rawPcmData);
 
   QAudioFormat m_format;
-  QAudioSource *m_audioSource = nullptr;
-  QAudioSink *m_audioSink = nullptr;
+  std::unique_ptr<QAudioSource> m_audioSource;
+  std::unique_ptr<QAudioSink> m_audioSink;
 
   QBuffer m_inputBuffer;  // For recording
   QBuffer m_outputBuffer; // For playback (sink reads from here)

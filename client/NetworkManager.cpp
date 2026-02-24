@@ -25,6 +25,8 @@ NetworkManager::NetworkManager(QObject *parent) : QObject(parent) {
   connect(m_socket, &QTcpSocket::errorOccurred, this,
           &NetworkManager::onSocketError);
   connect(m_socket, &QTcpSocket::readyRead, this, &NetworkManager::onReadyRead);
+
+  registerHandlers();
 }
 
 NetworkManager::~NetworkManager() {
@@ -132,53 +134,11 @@ void NetworkManager::onReadyRead() {
       wizz::Packet pkt(packetData);
       emit packetReceived(pkt);
 
-      // Parse high-level packets
-      // Parse high-level packets
-      if (pkt.type() == wizz::PacketType::ContactList) {
-        uint32_t count = pkt.readInt();
-        QList<QPair<QString, int>> contacts;
-        for (uint32_t i = 0; i < count; ++i) {
-          QString name = QString::fromStdString(pkt.readString());
-          int status = static_cast<int>(pkt.readInt());
-          contacts.append({name, status});
-        }
-        emit contactListReceived(contacts);
-      } else if (pkt.type() == wizz::PacketType::ContactStatusChange) {
-        int status = static_cast<int>(pkt.readInt());
-        QString username = QString::fromStdString(pkt.readString());
-        emit contactStatusChanged(username, status);
-      } else if (pkt.type() == wizz::PacketType::Error) {
-        QString msg = QString::fromStdString(pkt.readString());
-        emit errorOccurred(msg);
-      } else if (pkt.type() == wizz::PacketType::DirectMessage) {
-        QString sender = QString::fromStdString(pkt.readString());
-        QString text = QString::fromStdString(pkt.readString());
-        emit messageReceived(sender, text);
-      } else if (pkt.type() == wizz::PacketType::Nudge) {
-        QString sender = QString::fromStdString(pkt.readString());
-        emit nudgeReceived(sender);
-      } else if (pkt.type() == wizz::PacketType::VoiceMessage) {
-        QString sender = QString::fromStdString(pkt.readString());
-        uint16_t duration = static_cast<uint16_t>(pkt.readInt());
-        uint32_t len = pkt.readInt();
-        // Safety / Sanity check
-        if (len < 50 * 1024 * 1024) { // Limit to 50MB (arbitrary large for MVP)
-          std::vector<uint8_t> audioData = pkt.readBytes(len);
-          emit voiceMessageReceived(sender, duration, audioData);
-        }
-      } else if (pkt.type() == wizz::PacketType::TypingIndicator) {
-        QString sender = QString::fromStdString(pkt.readString());
-        bool isTyping = (pkt.readInt() != 0);
-        emit userTyping(sender, isTyping);
-      } else if (pkt.type() == wizz::PacketType::AvatarData) {
-        QString username = QString::fromStdString(pkt.readString());
-        uint32_t len = pkt.readInt();
-        if (len < 10 * 1024 * 1024) { // 10MB limit
-          std::vector<uint8_t> imgData = pkt.readBytes(len);
-          QByteArray qData(reinterpret_cast<const char *>(imgData.data()),
-                           imgData.size());
-          emit avatarReceived(username, qData);
-        }
+      // Dispatch packet through registered handlers
+      if (m_packetHandlers.contains(pkt.type())) {
+        m_packetHandlers[pkt.type()](pkt);
+      } else {
+        // Unhandled packet logic can go here (or be ignored)
       }
 
     } catch (...) {
@@ -188,5 +148,92 @@ void NetworkManager::onReadyRead() {
 
     // 4. Remove from buffer
     m_buffer.erase(m_buffer.begin(), m_buffer.begin() + totalSize);
+  }
+}
+
+// --- Packet Handlers ---
+
+void NetworkManager::registerHandlers() {
+  m_packetHandlers[wizz::PacketType::ContactList] = [this](wizz::Packet &pkt) {
+    handleContactListPacket(pkt);
+  };
+  m_packetHandlers[wizz::PacketType::ContactStatusChange] =
+      [this](wizz::Packet &pkt) { handleContactStatusChangePacket(pkt); };
+  m_packetHandlers[wizz::PacketType::Error] = [this](wizz::Packet &pkt) {
+    handleErrorPacket(pkt);
+  };
+  m_packetHandlers[wizz::PacketType::DirectMessage] =
+      [this](wizz::Packet &pkt) { handleDirectMessagePacket(pkt); };
+  m_packetHandlers[wizz::PacketType::Nudge] = [this](wizz::Packet &pkt) {
+    handleNudgePacket(pkt);
+  };
+  m_packetHandlers[wizz::PacketType::VoiceMessage] = [this](wizz::Packet &pkt) {
+    handleVoiceMessagePacket(pkt);
+  };
+  m_packetHandlers[wizz::PacketType::TypingIndicator] =
+      [this](wizz::Packet &pkt) { handleTypingIndicatorPacket(pkt); };
+  m_packetHandlers[wizz::PacketType::AvatarData] = [this](wizz::Packet &pkt) {
+    handleAvatarDataPacket(pkt);
+  };
+}
+
+void NetworkManager::handleContactListPacket(wizz::Packet &pkt) {
+  uint32_t count = pkt.readInt();
+  QList<QPair<QString, int>> contacts;
+  for (uint32_t i = 0; i < count; ++i) {
+    QString name = QString::fromStdString(pkt.readString());
+    int status = static_cast<int>(pkt.readInt());
+    contacts.append({name, status});
+  }
+  emit contactListReceived(contacts);
+}
+
+void NetworkManager::handleContactStatusChangePacket(wizz::Packet &pkt) {
+  int status = static_cast<int>(pkt.readInt());
+  QString username = QString::fromStdString(pkt.readString());
+  emit contactStatusChanged(username, status);
+}
+
+void NetworkManager::handleErrorPacket(wizz::Packet &pkt) {
+  QString msg = QString::fromStdString(pkt.readString());
+  emit errorOccurred(msg);
+}
+
+void NetworkManager::handleDirectMessagePacket(wizz::Packet &pkt) {
+  QString sender = QString::fromStdString(pkt.readString());
+  QString text = QString::fromStdString(pkt.readString());
+  emit messageReceived(sender, text);
+}
+
+void NetworkManager::handleNudgePacket(wizz::Packet &pkt) {
+  QString sender = QString::fromStdString(pkt.readString());
+  emit nudgeReceived(sender);
+}
+
+void NetworkManager::handleVoiceMessagePacket(wizz::Packet &pkt) {
+  QString sender = QString::fromStdString(pkt.readString());
+  uint16_t duration = static_cast<uint16_t>(pkt.readInt());
+  uint32_t len = pkt.readInt();
+  // Safety / Sanity check
+  if (len < 50 * 1024 * 1024) { // Limit to 50MB (arbitrary large for MVP)
+    std::vector<uint8_t> audioData = pkt.readBytes(len);
+    emit voiceMessageReceived(sender, duration, audioData);
+  }
+}
+
+void NetworkManager::handleTypingIndicatorPacket(wizz::Packet &pkt) {
+  QString sender = QString::fromStdString(pkt.readString());
+  bool isTyping = (pkt.readInt() != 0);
+  emit userTyping(sender, isTyping);
+}
+
+void NetworkManager::handleAvatarDataPacket(wizz::Packet &pkt) {
+  QString username = QString::fromStdString(pkt.readString());
+  uint32_t len = pkt.readInt();
+  if (len < 10 * 1024 * 1024) { // 10MB limit
+    std::vector<uint8_t> imgData = pkt.readBytes(len);
+    QByteArray qData(reinterpret_cast<const char *>(imgData.data()),
+                     imgData.size());
+    emit avatarReceived(username, qData);
   }
 }
