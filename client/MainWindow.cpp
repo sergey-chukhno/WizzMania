@@ -18,7 +18,7 @@
 #include <QTimer>
 MainWindow::MainWindow(const QString &username, const QPoint &initialPos,
                        QWidget *parent)
-    : QWidget(parent), m_username(username) {
+    : QWidget(parent), m_username(username), m_statusMessageInput(nullptr) {
   setWindowTitle("Wizz Mania - " + username);
   setMinimumSize(350, 500);
   resize(400, 600);
