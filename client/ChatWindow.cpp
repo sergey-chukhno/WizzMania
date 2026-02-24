@@ -280,8 +280,6 @@ void ChatWindow::onEmojiClicked() {
   // Ideally near the emoji button, but input works as anchor too.
   menu->exec(QCursor::pos());
   menu->deleteLater();
-  menu->exec(QCursor::pos());
-  menu->deleteLater();
 }
 
 void ChatWindow::onMicClicked() {
