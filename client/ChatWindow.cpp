@@ -15,6 +15,7 @@
 #include <QPushButton>
 #include <QScrollBar>
 #include <QWidgetAction>
+#include <QWindow>
 
 #include <QRandomGenerator>
 #include <QUrl>
@@ -150,17 +151,16 @@ void ChatWindow::paintEvent(QPaintEvent *event) {
 // Dragging logic
 void ChatWindow::mousePressEvent(QMouseEvent *event) {
   if (event->button() == Qt::LeftButton) {
-    m_dragPosition =
-        event->globalPosition().toPoint() - frameGeometry().topLeft();
+    if (window()->windowHandle()) {
+      window()->windowHandle()->startSystemMove();
+    }
     event->accept();
   }
 }
 
 void ChatWindow::mouseMoveEvent(QMouseEvent *event) {
-  if (event->buttons() & Qt::LeftButton) {
-    move(event->globalPosition().toPoint() - m_dragPosition);
-    event->accept();
-  }
+  // Native drag handles movement (Wayland/X11 compatibility)
+  event->ignore();
 }
 
 void ChatWindow::addVoiceMessage(const QString &sender, uint16_t duration,
