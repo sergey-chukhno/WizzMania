@@ -1,3 +1,4 @@
+#define SDL_MAIN_HANDLED
 #include "game/Game.hpp"
 #include <SDL2/SDL.h>
 #include <iostream>

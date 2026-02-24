@@ -1883,7 +1883,8 @@ void Game::renderAchievementPopup() {
 
   // Icon
   if (m_popupAchievementIndex >= 0 &&
-      m_popupAchievementIndex < m_achievementTextures.size()) {
+      static_cast<size_t>(m_popupAchievementIndex) <
+          m_achievementTextures.size()) {
     auto &tex = m_achievementTextures[m_popupAchievementIndex];
     if (tex) {
       SDL_Rect ir = {x + 20, y + 10, 80, 80};
@@ -1929,7 +1930,8 @@ void Game::renderAchievements() {
     int iconX = cardX + 50;
     int iconY = curY + (itemH - iconSize) / 2;
 
-    if (i < m_achievementTextures.size() && m_achievementTextures[i]) {
+    if (static_cast<size_t>(i) < m_achievementTextures.size() &&
+        m_achievementTextures[i]) {
       auto &tex = m_achievementTextures[i];
       SDL_Rect r = {iconX, iconY, iconSize, iconSize};
       if (unlocked) {

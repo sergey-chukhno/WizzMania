@@ -11,6 +11,10 @@
 #include <sys/socket.h>
 #include <unistd.h>
 #endif
+#include <chrono>
+#include <iostream>
+#include <stdexcept>
+#include <thread>
 #include <vector>
 
 using namespace wizz;
