@@ -12,7 +12,8 @@
 
 AuthWindow::AuthWindow(QWidget *parent) : QWidget(parent) {
   setWindowTitle("Wizz Mania");
-  setFixedSize(1024, 768);
+  resize(1024, 768);
+  setMinimumSize(1024, 768);
 
   // Load background image
   m_backgroundPixmap = QPixmap(":/assets/login_bg.png");
