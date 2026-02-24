@@ -199,8 +199,42 @@ if (auto* state = getCurrentState()) {
             </div>
         </div>
 
-        <!-- Slide 7: Game Over -->
+        <!-- Slide 7: WizzMania Integration & Security -->
         <div class="slide" id="slide-7">
+            <h2 class="slide-title">WIZZMANIA INTEGRATION</h2>
+            <div class="analysis-container">
+                <div class="analysis-card strong">
+                    <h3>CLEAN ARCHITECTURE</h3>
+                    <ul>
+                        <li><strong>RAII Enforced:</strong> Smart pointers (`std::unique_ptr`) prevent memory leaks
+                            across client and server logic.</li>
+                        <li><strong>OCP & SRP:</strong> Dispatch tables remove monolithic `if` chains. Game Launcher and
+                            Avatar Manager cleanly decouple UI from file system OS APIs.</li>
+                    </ul>
+                </div>
+                <div class="analysis-card strong">
+                    <h3>MULTITHREADING</h3>
+                    <ul>
+                        <li><strong>Actor Model:</strong> SQLite Database writes isolated to background threads to
+                            prevent Server Event Loop `select()` starvation.</li>
+                        <li><strong>Non-Blocking I/O:</strong> Fully asynchronous socket polling (`QTcpSocket` on
+                            Client, OS Native Multiplexing on Server) for immediate UI response.</li>
+                    </ul>
+                </div>
+                <div class="analysis-card strong">
+                    <h3>SECURITY & CRYPTO</h3>
+                    <ul>
+                        <li><strong>SHA-256 Hashing:</strong> OpenSSL integration for storing and validating user
+                            credentials with 128-bit randomized salts.</li>
+                        <li><strong>DoS Protection:</strong> Buffer bounds checking (10MB payload ceiling) natively
+                            prevents malformed packet crashes and memory abuse.</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 8: Game Over -->
+        <div class="slide" id="slide-8">
             <div class="game-over-container">
                 <div class="game-screenshot-frame large">
                     <img src="assets/images/gameplay_mockup.png" alt="Gameplay Screenshot">

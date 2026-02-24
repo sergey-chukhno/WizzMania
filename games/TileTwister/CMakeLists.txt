@@ -160,6 +160,9 @@ add_executable(TileTwister
 )
 target_include_directories(TileTwister PUBLIC src)
 target_link_libraries(TileTwister PRIVATE TileTwister_Core TileTwister_Engine)
+if(MINGW)
+    target_link_libraries(TileTwister PRIVATE setjmp)
+endif()
 
 # --- Testing ---
 enable_testing()

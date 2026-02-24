@@ -1,9 +1,57 @@
 #include "DatabaseManager.h"
-#include <functional> // For std::hash (Mock hashing)
+#include <iomanip> // Added based on user's snippet
 #include <iostream>
+#include <mutex>          // Added based on user's snippet
+#include <openssl/evp.h>  // Added based on user's instruction
+#include <openssl/rand.h> // Added based on user's instruction
+#include <openssl/sha.h>  // Added for SHA256
 #include <sstream>
 
 namespace wizz {
+
+// Helper function to convert byte array to hex string
+std::string bytesToHex(const unsigned char *bytes, size_t len) {
+  std::stringstream ss;
+  ss << std::hex << std::setfill('0');
+  for (size_t i = 0; i < len; ++i) {
+    ss << std::setw(2) << static_cast<int>(bytes[i]);
+  }
+  return ss.str();
+}
+
+// New generateSalt implementation using OpenSSL RAND_bytes
+std::string DatabaseManager::generateSalt() {
+  const int SALT_LEN = 16; // 128-bit salt
+  unsigned char salt[SALT_LEN];
+  if (RAND_bytes(salt, SALT_LEN) != 1) {
+    // Handle error, e.g., log and throw exception or return empty string
+    std::cerr << "[DB] Error generating random salt." << std::endl;
+    return "";
+  }
+  return bytesToHex(salt, SALT_LEN);
+}
+
+// New hashPassword implementation using OpenSSL EVP API (replacing deprecated
+// SHA256_*)
+std::string DatabaseManager::hashPassword(const std::string &password,
+                                          const std::string &salt) {
+  std::string combined = password + salt;
+
+  EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
+  const EVP_MD *md = EVP_sha256();
+  unsigned char hash[EVP_MAX_MD_SIZE];
+  unsigned int md_len;
+
+  if (mdctx == nullptr)
+    return "";
+
+  EVP_DigestInit_ex(mdctx, md, nullptr);
+  EVP_DigestUpdate(mdctx, combined.c_str(), combined.size());
+  EVP_DigestFinal_ex(mdctx, hash, &md_len);
+  EVP_MD_CTX_free(mdctx);
+
+  return bytesToHex(hash, md_len);
+}
 
 DatabaseManager::DatabaseManager(const std::string &dbPath)
     : m_dbPath(dbPath), m_db(nullptr), m_stopWorker(false) {}
@@ -404,25 +452,6 @@ std::string DatabaseManager::getUserAvatar(const std::string &username) {
   }
   sqlite3_finalize(stmt);
   return path;
-}
-
-// --- Helpers ---
-std::string DatabaseManager::generateSalt() {
-  // Mock Salt for "Day 3" (In production, use random bytes)
-  return "salty_User_";
-}
-
-std::string DatabaseManager::hashPassword(const std::string &password,
-                                          const std::string &salt) {
-  // Mock Hash (std::hash) - NOT CRYPTOGRAPHICALLY SECURE
-  // TODO: Replace with SHA256 (OpenSSL) later
-  std::string combo = salt + password;
-  std::hash<std::string> hasher;
-  size_t hashVal = hasher(combo);
-
-  std::stringstream ss;
-  ss << std::hex << hashVal;
-  return ss.str();
 }
 
 } // namespace wizz

@@ -10,6 +10,10 @@ add_executable(wizz_server
 # Link against the common library
 target_link_libraries(wizz_server PRIVATE wizz_common)
 
+# OpenSSL
+find_package(OpenSSL REQUIRED)
+target_link_libraries(wizz_server PRIVATE OpenSSL::Crypto)
+
 # SQLite3
 find_package(SQLite3 QUIET)
 if(SQLite3_FOUND)
