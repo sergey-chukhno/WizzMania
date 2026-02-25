@@ -2,8 +2,10 @@
 
 #include "../common/Packet.h"
 #include <QHash>
+#include <QMetaType>
 #include <QObject>
 #include <QTcpSocket>
+#include <atomic>
 #include <functional>
 #include <memory>
 
@@ -13,10 +15,14 @@ class NetworkManager : public QObject {
 public:
   static NetworkManager &instance();
 
+  bool isConnected() const;
+
+  void initSocket();
+
+public slots:
   // Connection
   void connectToHost(const QString &host, quint16 port);
   void disconnectFromHost();
-  bool isConnected() const;
 
   // Sending Data
   void sendPacket(const wizz::Packet &packet);
@@ -57,8 +63,9 @@ private:
   NetworkManager(const NetworkManager &) = delete;
   NetworkManager &operator=(const NetworkManager &) = delete;
 
-  QTcpSocket *m_socket;
+  QTcpSocket *m_socket = nullptr;
   std::vector<uint8_t> m_buffer; // Receive buffer
+  std::atomic<bool> m_isConnected{false};
 
   // Packet Handlers
   void registerHandlers();
