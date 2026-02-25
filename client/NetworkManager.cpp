@@ -2,6 +2,8 @@
 #include <QDataStream>
 #include <QDebug>
 
+#include <QThread>
+
 #ifdef _WIN32
 #include <winsock2.h>
 #else
@@ -9,23 +11,36 @@
 #endif
 
 NetworkManager &NetworkManager::instance() {
-  static NetworkManager _instance;
-  return _instance;
+  static NetworkManager *_instance = nullptr;
+  if (!_instance) {
+    QThread *thread = new QThread();
+    _instance = new NetworkManager();
+    _instance->moveToThread(thread);
+    QObject::connect(thread, &QThread::started, _instance,
+                     &NetworkManager::initSocket);
+    thread->start();
+  }
+  return *_instance;
 }
 
 NetworkManager::NetworkManager(QObject *parent) : QObject(parent) {
+  qRegisterMetaType<wizz::Packet>("wizz::Packet");
+  qRegisterMetaType<std::vector<uint8_t>>("std::vector<uint8_t>");
+  qRegisterMetaType<uint16_t>("uint16_t");
+}
+
+void NetworkManager::initSocket() {
   m_socket = new QTcpSocket(this);
 
   connect(m_socket, &QTcpSocket::connected, this,
           &NetworkManager::onSocketConnected);
   connect(m_socket, &QTcpSocket::disconnected, this,
           &NetworkManager::onSocketDisconnected);
-  // Note: QOverload is needed for errorOccurred because it's overloaded in
-  // older Qt versions, but in Qt6 errorOccurred is standard.
   connect(m_socket, &QTcpSocket::errorOccurred, this,
           &NetworkManager::onSocketError);
   connect(m_socket, &QTcpSocket::readyRead, this, &NetworkManager::onReadyRead);
 
+  // Register Handlers is safe here on the background thread
   registerHandlers();
 }
 
@@ -34,19 +49,34 @@ NetworkManager::~NetworkManager() {
 }
 
 void NetworkManager::connectToHost(const QString &host, quint16 port) {
+  if (QThread::currentThread() != this->thread()) {
+    QMetaObject::invokeMethod(this, "connectToHost", Qt::QueuedConnection,
+                              Q_ARG(QString, host), Q_ARG(quint16, port));
+    return;
+  }
   if (m_socket->state() != QAbstractSocket::UnconnectedState) {
     m_socket->disconnectFromHost();
   }
   m_socket->connectToHost(host, port);
 }
 
-void NetworkManager::disconnectFromHost() { m_socket->disconnectFromHost(); }
-
-bool NetworkManager::isConnected() const {
-  return m_socket->state() == QAbstractSocket::ConnectedState;
+void NetworkManager::disconnectFromHost() {
+  if (QThread::currentThread() != this->thread()) {
+    QMetaObject::invokeMethod(this, "disconnectFromHost", Qt::QueuedConnection);
+    return;
+  }
+  if (m_socket)
+    m_socket->disconnectFromHost();
 }
 
+bool NetworkManager::isConnected() const { return m_isConnected.load(); }
+
 void NetworkManager::sendPacket(const wizz::Packet &packet) {
+  if (QThread::currentThread() != this->thread()) {
+    QMetaObject::invokeMethod(this, "sendPacket", Qt::QueuedConnection,
+                              Q_ARG(wizz::Packet, packet));
+    return;
+  }
   if (!isConnected())
     return;
 
@@ -57,6 +87,12 @@ void NetworkManager::sendPacket(const wizz::Packet &packet) {
 
 void NetworkManager::sendVoiceMessage(const QString &target, uint16_t duration,
                                       const std::vector<uint8_t> &data) {
+  if (QThread::currentThread() != this->thread()) {
+    QMetaObject::invokeMethod(this, "sendVoiceMessage", Qt::QueuedConnection,
+                              Q_ARG(QString, target), Q_ARG(uint16_t, duration),
+                              Q_ARG(std::vector<uint8_t>, data));
+    return;
+  }
   wizz::Packet p(wizz::PacketType::VoiceMessage);
   p.writeString(target.toStdString());
   p.writeInt(static_cast<uint32_t>(duration));
@@ -67,6 +103,11 @@ void NetworkManager::sendVoiceMessage(const QString &target, uint16_t duration,
 }
 
 void NetworkManager::sendTypingPacket(const QString &target, bool isTyping) {
+  if (QThread::currentThread() != this->thread()) {
+    QMetaObject::invokeMethod(this, "sendTypingPacket", Qt::QueuedConnection,
+                              Q_ARG(QString, target), Q_ARG(bool, isTyping));
+    return;
+  }
   if (!isConnected())
     return;
   wizz::Packet p(wizz::PacketType::TypingIndicator);
@@ -76,6 +117,11 @@ void NetworkManager::sendTypingPacket(const QString &target, bool isTyping) {
 }
 
 void NetworkManager::sendUpdateAvatar(const QByteArray &data) {
+  if (QThread::currentThread() != this->thread()) {
+    QMetaObject::invokeMethod(this, "sendUpdateAvatar", Qt::QueuedConnection,
+                              Q_ARG(QByteArray, data));
+    return;
+  }
   if (!isConnected())
     return;
   wizz::Packet p(wizz::PacketType::UpdateAvatar);
@@ -87,6 +133,11 @@ void NetworkManager::sendUpdateAvatar(const QByteArray &data) {
 }
 
 void NetworkManager::requestAvatar(const QString &username) {
+  if (QThread::currentThread() != this->thread()) {
+    QMetaObject::invokeMethod(this, "requestAvatar", Qt::QueuedConnection,
+                              Q_ARG(QString, username));
+    return;
+  }
   if (!isConnected())
     return;
   wizz::Packet p(wizz::PacketType::GetAvatar);
@@ -96,9 +147,15 @@ void NetworkManager::requestAvatar(const QString &username) {
 
 // --- Slots ---
 
-void NetworkManager::onSocketConnected() { emit connected(); }
+void NetworkManager::onSocketConnected() {
+  m_isConnected.store(true);
+  emit connected();
+}
 
-void NetworkManager::onSocketDisconnected() { emit disconnected(); }
+void NetworkManager::onSocketDisconnected() {
+  m_isConnected.store(false);
+  emit disconnected();
+}
 
 void NetworkManager::onSocketError(QAbstractSocket::SocketError socketError) {
   Q_UNUSED(socketError);
