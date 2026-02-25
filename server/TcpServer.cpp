@@ -13,24 +13,12 @@ namespace wizz {
 namespace fs = std::filesystem;
 
 TcpServer::TcpServer(int port)
-    : m_port(port), m_serverSocket(INVALID_SOCKET_VAL), m_isRunning(false),
-      m_db("wizzmania.db") // Default DB file
-{
-// Windows Sockets Initialization (One-time)
-#ifdef _WIN32
-  WSADATA wsaData;
-  if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
-    throw std::runtime_error("WSAStartup Failed");
-  }
-#endif
-}
+    : m_acceptor(m_ioContext,
+                 asio::ip::tcp::endpoint(asio::ip::tcp::v4(), port)),
+      m_port(port), m_isRunning(false), m_db("wizzmania.db") // Default DB file
+{}
 
-TcpServer::~TcpServer() {
-  stop();
-#ifdef _WIN32
-  WSACleanup();
-#endif
-}
+TcpServer::~TcpServer() { stop(); }
 
 void TcpServer::start() {
   try {
@@ -41,14 +29,14 @@ void TcpServer::start() {
 
     setupVoiceStorage(); // Create storage directory
 
-    initSocket();
-    bindSocket();
-    listenSocket();
-
     std::cout << "[Server] Listening on port " << m_port << std::endl;
     m_isRunning = true;
 
-    run(); // Enter Main Loop
+    // Start accepting connections
+    doAccept();
+
+    // 2. Run the Main Event Loop
+    run();
   } catch (const std::exception &e) {
     std::cerr << "[Server] Fatal Error: " << e.what() << std::endl;
     stop(); // Ensure cleanup
@@ -58,221 +46,90 @@ void TcpServer::start() {
 
 void TcpServer::stop() {
   m_isRunning = false;
-  if (m_serverSocket != INVALID_SOCKET_VAL) {
-    close_socket_raw(m_serverSocket);
-    m_serverSocket = INVALID_SOCKET_VAL;
-    std::cout << "[Server] Stopped." << std::endl;
-  }
+  m_ioContext.stop(); // Stop Boost.Asio event loop
+  std::cout << "[Server] Stopped." << std::endl;
 }
 
-void TcpServer::postResponse(std::function<void()> responseTask) {
-  std::lock_guard<std::mutex> lock(m_responseMutex);
-  m_responses.push_back(std::move(responseTask));
-}
-
-void TcpServer::processResponses() {
-  std::vector<std::function<void()>> tasksToRun;
-  {
-    std::lock_guard<std::mutex> lock(m_responseMutex);
-    tasksToRun.swap(m_responses);
-  }
-  for (auto &task : tasksToRun) {
-    task();
-  }
-}
-
-ClientSession *TcpServer::getSession(SocketType socket) {
-  auto it = m_sessions.find(socket);
+ClientSession *TcpServer::getSession(int sessionId) {
+  auto it = m_sessions.find(sessionId);
   if (it != m_sessions.end()) {
-    return &it->second;
+    return it->second.get();
   }
   return nullptr;
 }
 
-void TcpServer::initSocket() {
-  // 1. Create Socket (IPv4, TCP, Default Protocol)
-  m_serverSocket = socket(AF_INET, SOCK_STREAM, 0);
+void TcpServer::doAccept() {
+  m_acceptor.async_accept([this](asio::error_code ec,
+                                 asio::ip::tcp::socket socket) {
+    if (!ec) {
+      int sessionId = m_nextSessionId++;
+      std::cout << "[Server] New Connection (Session ID: " << sessionId << ")"
+                << std::endl;
 
-  if (m_serverSocket == INVALID_SOCKET_VAL) {
-    throw std::runtime_error("Failed to create socket");
-  }
+      // Create the Session wrapped in a shared_ptr
+      auto session = std::make_shared<ClientSession>(
+          sessionId, std::move(socket), this,
+          // 1. OnLogin
+          [this](std::shared_ptr<ClientSession> s) { handleLogin(s.get()); },
+          // 2. OnMessage (Routing)
+          [this](std::shared_ptr<ClientSession> sender,
+                 const std::string &target, const std::string &msg) {
+            handleMessage(sender.get(), target, msg);
+          },
+          // 3. OnNudge Callback
+          [this](std::shared_ptr<ClientSession> sender,
+                 const std::string &target) {
+            handleNudge(sender.get(), target);
+          },
+          // 4. OnVoiceMessage Callback
+          [this](std::shared_ptr<ClientSession> sender,
+                 const std::string &target, uint16_t duration,
+                 const std::vector<uint8_t> &data) {
+            handleVoiceMessage(sender.get(), target, duration, data);
+          },
+          // 5. OnTypingIndicator Callback
+          [this](std::shared_ptr<ClientSession> sender,
+                 const std::string &target, bool isTyping) {
+            handleTypingIndicator(sender.get(), target, isTyping);
+          },
+          // 6. GetStatus Callback
+          [this](const std::string &username) -> int {
+            return handleGetStatus(username);
+          },
+          // 7. OnStatusChange Callback
+          [this](std::shared_ptr<ClientSession> sender, int newStatus) {
+            handleStatusChange(sender.get(), newStatus);
+          },
+          // 8. OnUpdateAvatar Callback
+          [this](std::shared_ptr<ClientSession> sender,
+                 const std::vector<uint8_t> &data) {
+            handleUpdateAvatar(sender.get(), data);
+          },
+          // 9. OnGetAvatar Callback
+          [this](std::shared_ptr<ClientSession> sender,
+                 const std::string &target) {
+            handleGetAvatar(sender.get(), target);
+          });
 
-  // 2. Set SO_REUSEADDR (Allows immediate restart on same port)
-  int opt = 1;
-#ifdef _WIN32
-  setsockopt(m_serverSocket, SOL_SOCKET, SO_REUSEADDR, (const char *)&opt,
-             sizeof(opt));
-#else
-  setsockopt(m_serverSocket, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
-#endif
-}
+      m_sessions[sessionId] = session;
+      session->start(); // Begin reading asynchronously
 
-void TcpServer::bindSocket() {
-  sockaddr_in serverAddr{};
-  serverAddr.sin_family = AF_INET;
-  serverAddr.sin_addr.s_addr = INADDR_ANY; // Listen on ALL interfaces (0.0.0.0)
-  serverAddr.sin_port =
-      htons(static_cast<uint16_t>(m_port)); // Port in Network Byte Order
-
-  if (bind(m_serverSocket, (struct sockaddr *)&serverAddr, sizeof(serverAddr)) <
-      0) {
-    throw std::runtime_error("Failed to bind socket (Port used?)");
-  }
-}
-
-void TcpServer::listenSocket() {
-  // Backlog of 5 pending connections
-  if (listen(m_serverSocket, 5) < 0) {
-    throw std::runtime_error("Failed to listen on socket");
-  }
+      // Queue the next accept
+      doAccept();
+    } else {
+      std::cerr << "[Server] Accept Error: " << ec.message() << std::endl;
+    }
+  });
 }
 
 void TcpServer::run() {
-  // Main Event Loop
+  // Main Event Loop is now handled by Boost.Asio
   while (m_isRunning) {
-    fd_set readfds;
-    FD_ZERO(&readfds);
-
-    // 1. Monitor Server Socket (for new connections)
-    FD_SET(m_serverSocket, &readfds);
-    int max_fd = static_cast<int>(m_serverSocket);
-
-    // 2. Monitor All Client Sockets (for incoming data)
-    for (const auto &pair : m_sessions) {
-      SocketType sock = pair.first;
-      FD_SET(sock, &readfds);
-      if (static_cast<int>(sock) > max_fd) {
-        max_fd = static_cast<int>(sock);
-      }
-    }
-
-    // Timeout (10 milliseconds instead of 1s to ensure responsive queued tasks)
-    timeval timeout;
-    timeout.tv_sec = 0;
-    timeout.tv_usec = 10000;
-
-    // 3. Wait for Activity
-    int activity = select(max_fd + 1, &readfds, nullptr, nullptr, &timeout);
-
-    // Process safely returned DB responses on Main Thread FIRST
-    processResponses();
-
-    if (activity < 0) {
-      std::cerr << "[Server] Select error" << std::endl;
-      break;
-    }
-
-    if (activity == 0) {
-      continue; // Timeout
-    }
-
-    // 4. Check New Connections
-    if (FD_ISSET(m_serverSocket, &readfds)) {
-      sockaddr_in clientAddr;
-      socklen_t clientLen = sizeof(clientAddr);
-      SocketType clientSocket =
-          accept(m_serverSocket, (struct sockaddr *)&clientAddr, &clientLen);
-
-      if (clientSocket != INVALID_SOCKET_VAL) {
-        std::cout << "[Server] New Connection: " << clientSocket << std::endl;
-
-        // Create Session and Move into Map
-        // Pass TcpServer pointer AND the Login Callback
-        m_sessions.emplace(
-            clientSocket,
-            ClientSession(
-                clientSocket, this,
-                // 1. OnLogin
-                [this](ClientSession *session) { handleLogin(session); },
-                // 2. OnMessage (Routing)
-                [this](ClientSession *sender, const std::string &target,
-                       const std::string &msg) {
-                  handleMessage(sender, target, msg);
-                },
-                // 3. OnNudge Callback
-                [this](ClientSession *sender, const std::string &target) {
-                  handleNudge(sender, target);
-                },
-                // 4. OnVoiceMessage Callback
-                [this](ClientSession *sender, const std::string &target,
-                       uint16_t duration, const std::vector<uint8_t> &data) {
-                  handleVoiceMessage(sender, target, duration, data);
-                },
-                // 5. OnTypingIndicator Callback
-                [this](ClientSession *sender, const std::string &target,
-                       bool isTyping) {
-                  handleTypingIndicator(sender, target, isTyping);
-                },
-                // 6. GetStatus Callback
-                [this](const std::string &username) -> int {
-                  return handleGetStatus(username);
-                },
-                // 7. OnStatusChange Callback
-                [this](ClientSession *sender, int newStatus) {
-                  handleStatusChange(sender, newStatus);
-                },
-                // 8. OnUpdateAvatar Callback
-                [this](ClientSession *sender,
-                       const std::vector<uint8_t> &data) {
-                  handleUpdateAvatar(sender, data);
-                },
-                // 9. OnGetAvatar Callback
-                [this](ClientSession *sender, const std::string &target) {
-                  handleGetAvatar(sender, target);
-                }));
-      }
-    }
-
-    // 5. Check Data from Existing Clients
-    for (auto it = m_sessions.begin(); it != m_sessions.end();) {
-      SocketType sock = it->first;
-
-      if (FD_ISSET(sock, &readfds)) {
-        char recvBuf[1024];
-        int bytesReceived = recv(sock, recvBuf, sizeof(recvBuf), 0);
-        if (bytesReceived <= 0) {
-          // Disconnected or Error
-          std::cout << "[Server] Client Disconnected: " << sock << std::endl;
-
-          // Day 4: Remove from Registry if logged in
-          ClientSession &session = it->second;
-          // Note: We need to know if they were logged in.
-          // Ideally ClientSession had isLoggedIn() or we check username empty?
-          std::string username = session.getUsername();
-          if (!username.empty()) {
-            m_onlineUsers.erase(username);
-            std::cout << "[Server] User Offline: " << username << std::endl;
-
-            // Broadcast Offline Status (3) to Friends
-            std::vector<std::string> friends = m_db.getFriends(username);
-            for (const auto &friendName : friends) {
-              auto friendIt = m_onlineUsers.find(friendName);
-              if (friendIt != m_onlineUsers.end()) {
-                Packet notify(PacketType::ContactStatusChange);
-                notify.writeInt(3); // Offline
-                notify.writeString(username);
-                friendIt->second->sendPacket(notify);
-              }
-            }
-          }
-
-          it = m_sessions.erase(it); // Remove from map
-        } else {
-          // Valid Data Received -> Pass to Session
-          ClientSession &session = it->second;
-          bool keepAlive = session.onDataReceived(recvBuf, bytesReceived);
-
-          if (!keepAlive) {
-            std::cout << "[Server] Kicking Client (Protocol Error): " << sock
-                      << std::endl;
-            it = m_sessions.erase(it);
-          } else {
-            ++it;
-          }
-        }
-      } else {
-        ++it;
-      }
+    try {
+      m_ioContext.run(); // Block and process all events until stopped
+      break;             // `run()` exits normally when stopped or out of work
+    } catch (std::exception &e) {
+      std::cerr << "[Server] io_context exception: " << e.what() << std::endl;
     }
   }
 }
@@ -290,18 +147,18 @@ void TcpServer::setupVoiceStorage() {
 
 void wizz::TcpServer::handleLogin(ClientSession *session) {
   std::string username = session->getUsername();
-  SocketType socket = session->getSocket();
+  int sessionId = session->getId();
 
-  m_db.postTask([this, username, socket]() {
+  m_db.postTask([this, username, sessionId]() {
     auto pending = m_db.fetchPendingMessages(username);
     for (const auto &msg : pending) {
       m_db.markAsDelivered(msg.id);
     }
     auto friends = m_db.getFriends(username);
 
-    postResponse([this, username, socket, pending = std::move(pending),
+    postResponse([this, username, sessionId, pending = std::move(pending),
                   friends = std::move(friends)]() {
-      ClientSession *session = getSession(socket);
+      ClientSession *session = getSession(sessionId);
       if (!session)
         return;
 
@@ -542,9 +399,9 @@ void wizz::TcpServer::handleUpdateAvatar(ClientSession *sender,
 
 void wizz::TcpServer::handleGetAvatar(ClientSession *sender,
                                       const std::string &target) {
-  SocketType socket = sender->getSocket();
+  int sessionId = sender->getId();
 
-  m_db.postTask([this, socket, target]() {
+  m_db.postTask([this, sessionId, target]() {
     std::string filepath = m_db.getUserAvatar(target);
     std::vector<uint8_t> buffer;
     if (!filepath.empty() && fs::exists(filepath)) {
@@ -558,8 +415,8 @@ void wizz::TcpServer::handleGetAvatar(ClientSession *sender,
     }
 
     postResponse(
-        [this, socket, target, filepath, buffer = std::move(buffer)]() {
-          ClientSession *session = getSession(socket);
+        [this, sessionId, target, filepath, buffer = std::move(buffer)]() {
+          ClientSession *session = getSession(sessionId);
           if (!session)
             return;
 

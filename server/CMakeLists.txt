@@ -9,10 +9,25 @@ add_executable(wizz_server
 
 # Link against the common library
 target_link_libraries(wizz_server PRIVATE wizz_common)
-
 # OpenSSL
 find_package(OpenSSL REQUIRED)
 target_link_libraries(wizz_server PRIVATE OpenSSL::Crypto)
+
+# Asio (Standalone Header-Only via FetchContent to ensure zero local dependencies)
+include(FetchContent)
+FetchContent_Declare(
+    asio
+    URL "https://github.com/chriskohlhoff/asio/archive/refs/tags/asio-1-30-2.tar.gz"
+)
+FetchContent_GetProperties(asio)
+if(NOT asio_POPULATED)
+    message(STATUS "Fetching Standalone Asio 1.30.2...")
+    FetchContent_Populate(asio)
+endif()
+
+# Bind headers and define Standalone mode so Asio doesn't look for Boost
+target_include_directories(wizz_server PRIVATE ${asio_SOURCE_DIR}/asio/include)
+target_compile_definitions(wizz_server PRIVATE ASIO_STANDALONE)
 
 # SQLite3
 find_package(SQLite3 QUIET)

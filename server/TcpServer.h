@@ -1,13 +1,11 @@
 #pragma once
 
-#include <cstdint>
-#include <string>
-#include <vector>
-
-#include "../common/Types.h"
-
+#include <mutex>
 #include <string>
 #include <unordered_map>
+#include <vector>
+
+#include <asio.hpp>
 
 #include "../common/Types.h"
 #include "ClientSession.h"
@@ -35,18 +33,24 @@ public:
 
   // Thread-safe Response Queue for passing work from DB Thread back to Main
   // Thread
-  void postResponse(std::function<void()> responseTask);
+  template <typename F> void postResponse(F &&responseTask) {
+    asio::post(m_ioContext, std::forward<F>(responseTask));
+  }
 
-  // Safe lookup for async callbacks
-  ClientSession *getSession(SocketType socket);
+  // Safe lookup for async callbacks using Session ID
+  ClientSession *getSession(int sessionId);
   DatabaseManager &getDb() { return m_db; }
 
 private:
   void processResponses();
 
+  // Boost.Asio Core
+  asio::io_context m_ioContext;
+  asio::ip::tcp::acceptor m_acceptor;
+
   int m_port;
-  SocketType m_serverSocket;
   bool m_isRunning;
+  int m_nextSessionId = 1;
 
   std::mutex m_responseMutex;
   std::vector<std::function<void()>> m_responses;
@@ -54,9 +58,10 @@ private:
   // Database (The Single Source of Truth)
   DatabaseManager m_db;
 
-  // Day 3: Session Management
-  // Key: Socket Descriptor (int), Value: Session Object
-  std::unordered_map<SocketType, ClientSession> m_sessions;
+  // Session Management
+  // Key: Session ID, Value: Shared Pointer to prevent lifetime crashes during
+  // async IO
+  std::unordered_map<int, std::shared_ptr<ClientSession>> m_sessions;
 
   // Day 4: Online Registry (The "Phonebook")
   // Key: Username, Value: Pointer to Session
@@ -64,10 +69,9 @@ private:
   // Track Status (1=Online, 2=Busy, 3=Offline)
   std::unordered_map<std::string, int> m_userStatuses;
 
-  // Helpers
-  void initSocket();        // Step 1: Create
-  void bindSocket();        // Step 2: Bind
-  void listenSocket();      // Step 3: Listen
+  // Asio Accept Loop
+  void doAccept();
+
   void cleanup();           // Close and cleanup
   void setupVoiceStorage(); // Create storage directory
 
