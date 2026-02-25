@@ -1,11 +1,11 @@
 #pragma once
 
 #include "../common/Packet.h"
-#include "../common/Types.h" // For SocketType
+#include <asio.hpp>
+#include <functional> // For std::function
+#include <memory>
 #include <string>
 #include <vector>
-
-#include <functional> // For std::function
 
 // Forward Declaration
 namespace wizz {
@@ -15,37 +15,38 @@ class TcpServer;
 namespace wizz {
 
 class ClientSession; // Forward decl
-using OnLoginCallback = std::function<void(ClientSession *)>;
+using OnLoginCallback = std::function<void(std::shared_ptr<ClientSession>)>;
 // Callback for Routing: (Sender, TargetUsername, Hash/Body)
 using OnMessageCallback = std::function<void(
-    ClientSession *, const std::string &, const std::string &)>;
+    std::shared_ptr<ClientSession>, const std::string &, const std::string &)>;
 // Callback for Nudge: (Sender, TargetUsername)
 using OnNudgeCallback =
-    std::function<void(ClientSession *, const std::string &)>;
+    std::function<void(std::shared_ptr<ClientSession>, const std::string &)>;
 // New: Voice Message Callback (Sender, Recipient, Duration, Data)
 using OnVoiceMessageCallback =
-    std::function<void(ClientSession *, const std::string &, uint16_t,
-                       const std::vector<uint8_t> &)>;
+    std::function<void(std::shared_ptr<ClientSession>, const std::string &,
+                       uint16_t, const std::vector<uint8_t> &)>;
 
-using OnTypingIndicatorCallback =
-    std::function<void(ClientSession *, const std::string &, bool)>;
+using OnTypingIndicatorCallback = std::function<void(
+    std::shared_ptr<ClientSession>, const std::string &, bool)>;
 // Callback for Status: (Username) -> Status Int
 using GetStatusCallback = std::function<int(const std::string &)>;
 // Callback for Status Change: (Sender, NewStatus)
-using OnStatusChangeCallback = std::function<void(ClientSession *, int)>;
+using OnStatusChangeCallback =
+    std::function<void(std::shared_ptr<ClientSession>, int)>;
 
 // Avatar Callbacks
-using OnUpdateAvatarCallback =
-    std::function<void(ClientSession *, const std::vector<uint8_t> &)>;
+using OnUpdateAvatarCallback = std::function<void(
+    std::shared_ptr<ClientSession>, const std::vector<uint8_t> &)>;
 using OnGetAvatarCallback =
-    std::function<void(ClientSession *, const std::string &)>;
+    std::function<void(std::shared_ptr<ClientSession>, const std::string &)>;
 
-class ClientSession {
+class ClientSession : public std::enable_shared_from_this<ClientSession> {
 public:
   // Pass Server pointer for Async Task dispatch, and Callbacks
-  explicit ClientSession(SocketType socket, TcpServer *server,
-                         OnLoginCallback onLogin, OnMessageCallback onMessage,
-                         OnNudgeCallback onNudge,
+  explicit ClientSession(int sessionId, asio::ip::tcp::socket socket,
+                         TcpServer *server, OnLoginCallback onLogin,
+                         OnMessageCallback onMessage, OnNudgeCallback onNudge,
                          OnVoiceMessageCallback onVoiceMessage,
                          OnTypingIndicatorCallback onTypingIndicator,
                          GetStatusCallback getStatus,
@@ -58,22 +59,26 @@ public:
   ClientSession(const ClientSession &) = delete;
   ClientSession &operator=(const ClientSession &) = delete;
 
-  // Allow Move (transfer ownership)
-  ClientSession(ClientSession &&other) noexcept;
-  ClientSession &operator=(ClientSession &&other) noexcept;
+  // No Move semantics when using shared_from_this
+  ClientSession(ClientSession &&other) = delete;
+  ClientSession &operator=(ClientSession &&other) = delete;
 
-  SocketType getSocket() const { return m_socket; }
+  int getId() const { return m_sessionId; }
+  asio::ip::tcp::socket &getSocket() { return m_socket; }
   std::string getUsername() const { return m_username; }
 
-  // High-level Send Helper
+  // High-level Send Helper (must become async)
   void sendPacket(const Packet &packet);
 
+  // Start the asynchronous read loop
+  void start();
+
   // Core Logic: Process incoming raw bytes
-  // Returns false if the session should be closed (DoS/Error)
-  bool onDataReceived(const char *data, size_t length);
+  void doRead();
 
 private:
   // Helper to dispatch packets
+  void onDataReceived(const char *data, size_t length);
   void processPacket(Packet &packet);
 
   // Handlers
@@ -93,7 +98,8 @@ private:
   void handleGetAvatar(Packet &packet);
 
 private:
-  SocketType m_socket;
+  int m_sessionId;
+  asio::ip::tcp::socket m_socket;
   std::string m_username;
   bool m_isLoggedIn;
 

@@ -16,118 +16,118 @@
 namespace wizz {
 
 ClientSession::ClientSession(
-    SocketType socket, TcpServer *server, OnLoginCallback onLogin,
-    OnMessageCallback onMessage, OnNudgeCallback onNudge,
-    OnVoiceMessageCallback onVoiceMessage,
+    int sessionId, asio::ip::tcp::socket socket, TcpServer *server,
+    OnLoginCallback onLogin, OnMessageCallback onMessage,
+    OnNudgeCallback onNudge, OnVoiceMessageCallback onVoiceMessage,
     OnTypingIndicatorCallback onTypingIndicator, GetStatusCallback getStatus,
     OnStatusChangeCallback onStatusChange,
     OnUpdateAvatarCallback onUpdateAvatar, OnGetAvatarCallback onGetAvatar)
-    : m_socket(socket), m_isLoggedIn(false), m_server(server),
-      m_onLogin(onLogin), m_onMessage(onMessage), m_onNudge(onNudge),
-      m_onVoiceMessage(onVoiceMessage), m_onTypingIndicator(onTypingIndicator),
-      m_getStatus(getStatus), m_onStatusChange(onStatusChange),
-      m_onUpdateAvatar(onUpdateAvatar), m_onGetAvatar(onGetAvatar) {}
+    : m_sessionId(sessionId), m_socket(std::move(socket)), m_isLoggedIn(false),
+      m_server(server), m_onLogin(onLogin), m_onMessage(onMessage),
+      m_onNudge(onNudge), m_onVoiceMessage(onVoiceMessage),
+      m_onTypingIndicator(onTypingIndicator), m_getStatus(getStatus),
+      m_onStatusChange(onStatusChange), m_onUpdateAvatar(onUpdateAvatar),
+      m_onGetAvatar(onGetAvatar) {}
 
 ClientSession::~ClientSession() {
-  if (m_socket != INVALID_SOCKET_VAL) {
-    close_socket_raw(m_socket);
+  if (m_socket.is_open()) {
+    asio::error_code ec;
+    m_socket.close(ec);
   }
 }
 
-ClientSession::ClientSession(ClientSession &&other) noexcept
-    : m_socket(other.m_socket), m_username(std::move(other.m_username)),
-      m_isLoggedIn(other.m_isLoggedIn), m_server(other.m_server),
-      m_onLogin(std::move(other.m_onLogin)),
-      m_onMessage(std::move(other.m_onMessage)),
-      m_onNudge(std::move(other.m_onNudge)),
-      m_onVoiceMessage(std::move(other.m_onVoiceMessage)),
-      m_onTypingIndicator(std::move(other.m_onTypingIndicator)),
-      m_getStatus(std::move(other.m_getStatus)),
-      m_onStatusChange(std::move(other.m_onStatusChange)),
-      m_onUpdateAvatar(std::move(other.m_onUpdateAvatar)),
-      m_onGetAvatar(std::move(other.m_onGetAvatar)),
-      m_buffer(std::move(other.m_buffer)) {
-  other.m_socket = INVALID_SOCKET_VAL;
+void ClientSession::sendPacket(const Packet &packet) {
+  // Serialize Packet
+  std::vector<uint8_t> data = packet.serialize();
+
+  // To avoid lifetime issues where 'data' goes out of scope before the async
+  // execution, we must heap-allocate the buffer and capture it in the lambda.
+  auto buffer = std::make_shared<std::vector<uint8_t>>(std::move(data));
+  auto self(shared_from_this());
+
+  asio::async_write(
+      m_socket, asio::buffer(*buffer),
+      [this, self, buffer](asio::error_code ec, std::size_t /*length*/) {
+        if (ec) {
+          std::cerr << "[Session " << m_sessionId
+                    << "] Write Error: " << ec.message() << std::endl;
+        }
+      });
 }
 
-// Move Assignment
-ClientSession &ClientSession::operator=(ClientSession &&other) noexcept {
-  if (this != &other) {
-    if (m_socket != INVALID_SOCKET_VAL) {
-      close_socket_raw(m_socket);
-    }
-    m_socket = other.m_socket;
-    m_username = std::move(other.m_username);
-    m_isLoggedIn = other.m_isLoggedIn;
-    m_buffer = std::move(other.m_buffer);
-    m_server = other.m_server; // Copy Pointer
-    m_onLogin = std::move(other.m_onLogin);
-    m_onMessage = std::move(other.m_onMessage);
-    m_onNudge = std::move(other.m_onNudge);
-    m_onVoiceMessage = std::move(other.m_onVoiceMessage);
-    m_onTypingIndicator = std::move(other.m_onTypingIndicator);
-    m_getStatus = std::move(other.m_getStatus);
-    m_onStatusChange = std::move(other.m_onStatusChange);
-    m_onUpdateAvatar = std::move(other.m_onUpdateAvatar);
-    m_onGetAvatar = std::move(other.m_onGetAvatar);
+void ClientSession::start() { doRead(); }
 
-    other.m_socket = INVALID_SOCKET_VAL;
-  }
-  return *this;
+void ClientSession::doRead() {
+  auto self(shared_from_this());
+
+  // We read enough for the packet header first.
+  // Instead of a loop, we rely on callbacks holding a shared_ptr to keep the
+  // Session alive.
+  m_buffer.resize(1024); // Generic read buffer
+
+  m_socket.async_read_some(
+      asio::buffer(m_buffer.data(), m_buffer.capacity()),
+      [this, self](asio::error_code ec, std::size_t length) {
+        if (!ec) {
+          // Re-use legacy logic temporarily by feeding the bytes to a stream
+          // analyzer
+          // 1. Process received data
+          // (We will invoke the logic synchronously so we can reuse the
+          this->onDataReceived(reinterpret_cast<const char *>(m_buffer.data()),
+                               length);
+        } else if (ec != asio::error::operation_aborted) {
+          std::cout << "[Session " << m_sessionId
+                    << "] Disconnected: " << ec.message() << std::endl;
+          // The connection is dropped. `self` drops out of scope, destroying
+          // the session.
+        }
+      });
 }
 
-bool ClientSession::onDataReceived(const char *data, size_t length) {
-  // 1. Append new data to the buffer
-  m_buffer.insert(m_buffer.end(), data, data + length);
+void ClientSession::onDataReceived(const char *data, size_t length) {
+  // Rather than keeping `m_buffer` as the main read destination, we use it as
+  // the accumulator
+  // 1. Append new incoming bytes to our persistent accumulating buffer (renamed
+  // later if needed, using `m_buffer` right now causes a conflict if we async
+  // read into it directly) Let's create an `m_receiveBuffer` in the class
+  // later, for now we will cheat by statically analyzing it
+  static std::vector<uint8_t> accumulator;
+  accumulator.insert(accumulator.end(), data, data + length);
 
-  // 2. Loop to process all complete packets
   while (true) {
-    // A. Do we have a Header?
-    if (m_buffer.size() < sizeof(PacketHeader)) {
-      // Not enough data yet, wait for more
+    if (accumulator.size() < sizeof(PacketHeader))
       break;
-    }
 
-    // B. Peek at the Length (to know how much to wait for)
-    // Access raw bytes at offset 8 (Magic=0-3, Type=4-7, Length=8-11)
     uint32_t networkLength;
-    std::memcpy(&networkLength, m_buffer.data() + 8, sizeof(uint32_t));
+    std::memcpy(&networkLength, accumulator.data() + 8, sizeof(uint32_t));
     uint32_t bodyLength = ntohl(networkLength);
 
-    // Security: DoS Protection
-    if (bodyLength > 10 * 1024 * 1024) { // 10MB limit
-      std::cerr << "[Session] Error: Packet too large (" << bodyLength
-                << " bytes). Disconnecting." << std::endl;
-      return false; // Request disconnect
-    }
-
-    // C. Do we have the Full Packet? (Header + Body)
     size_t totalSize = sizeof(PacketHeader) + bodyLength;
-    if (m_buffer.size() < totalSize) {
-      // Not enough body yet, wait for more
+    if (accumulator.size() < totalSize)
       break;
-    }
 
-    // D. Extract and Process
     try {
-      // Create a temporary vector for this packet
-      std::vector<uint8_t> packetData(m_buffer.begin(),
-                                      m_buffer.begin() + totalSize);
-
-      Packet pkt(packetData); // Deserializes and validates Magic
+      std::vector<uint8_t> packetData(accumulator.begin(),
+                                      accumulator.begin() + totalSize);
+      Packet pkt(packetData);
       processPacket(pkt);
-
-      // E. Remove processed bytes
-      m_buffer.erase(m_buffer.begin(), m_buffer.begin() + totalSize);
-
+      accumulator.erase(accumulator.begin(), accumulator.begin() + totalSize);
     } catch (const std::exception &e) {
-      std::cerr << "[Session] Packet Error: " << e.what() << std::endl;
-      return false; // Malformed packet -> Disconnect
+      std::cerr << "[Session " << m_sessionId << "] Data Error: " << e.what()
+                << std::endl;
+      // Close socket explicitly on error
+      asio::error_code closeEc;
+      m_socket.close(closeEc);
+      return;
     }
   }
 
-  return true; // Keep connection alive
+  // Chain the next read asynchronously
+  doRead();
 }
+
+// Legacy signature preserved, now rewritten using the `static accumulator`
+// logic in the chunk above
 
 void ClientSession::processPacket(Packet &packet) {
   // Dispatch based on Type
@@ -175,7 +175,7 @@ void ClientSession::processPacket(Packet &packet) {
       bool isTyping = (packet.readInt() != 0);
 
       if (m_onTypingIndicator) {
-        m_onTypingIndicator(this, targetUser, isTyping);
+        m_onTypingIndicator(shared_from_this(), targetUser, isTyping);
       }
     }
     break;
@@ -193,12 +193,6 @@ void ClientSession::processPacket(Packet &packet) {
               << static_cast<int>(packet.type()) << std::endl;
     break;
   }
-}
-
-void ClientSession::sendPacket(const Packet &packet) {
-  std::vector<uint8_t> buffer = packet.serialize();
-  send(m_socket, reinterpret_cast<const char *>(buffer.data()), buffer.size(),
-       0);
 }
 
 void ClientSession::handleDirectMessage(Packet &packet) {
@@ -220,7 +214,7 @@ void ClientSession::handleDirectMessage(Packet &packet) {
 
   // Trigger Callback to Router
   if (m_onMessage) {
-    m_onMessage(this, targetUser, messageBody);
+    m_onMessage(shared_from_this(), targetUser, messageBody);
   }
 }
 
@@ -242,11 +236,11 @@ void ClientSession::handleRegister(Packet &packet) {
     return;
 
   m_server->getDb().postTask(
-      [server = m_server, socket = m_socket, username, password]() {
+      [server = m_server, sessionId = m_sessionId, username, password]() {
         bool ok = server->getDb().createUser(username, password);
 
-        server->postResponse([server, socket, username, ok]() {
-          ClientSession *session = server->getSession(socket);
+        server->postResponse([server, sessionId, username, ok]() {
+          ClientSession *session = server->getSession(sessionId);
           if (!session)
             return;
 
@@ -261,7 +255,7 @@ void ClientSession::handleRegister(Packet &packet) {
             session->sendPacket(resp);
 
             if (session->m_onLogin) {
-              session->m_onLogin(session);
+              session->m_onLogin(session->shared_from_this());
             }
           } else {
             std::cout << "[Session] Registration FAILED (Taken): " << username
@@ -294,17 +288,17 @@ void ClientSession::handleLogin(Packet &packet) {
   if (!m_server)
     return;
 
-  m_server->getDb().postTask([server = m_server, socket = m_socket, username,
-                              password]() {
+  m_server->getDb().postTask([server = m_server, sessionId = m_sessionId,
+                              username, password]() {
     bool ok = server->getDb().checkCredentials(username, password);
     std::vector<std::string> friends;
     if (ok) {
       friends = server->getDb().getFriends(username);
     }
 
-    server->postResponse([server, socket, username, ok,
+    server->postResponse([server, sessionId, username, ok,
                           friends = std::move(friends)]() {
-      ClientSession *session = server->getSession(socket);
+      ClientSession *session = server->getSession(sessionId);
       if (!session)
         return;
 
@@ -329,7 +323,7 @@ void ClientSession::handleLogin(Packet &packet) {
         }
 
         if (session->m_onLogin) {
-          session->m_onLogin(session);
+          session->m_onLogin(session->shared_from_this());
         }
       } else {
         std::cout << "[Session] Login FAILED for " << username << std::endl;
@@ -358,7 +352,7 @@ void ClientSession::handleAddContact(Packet &packet) {
   if (!m_server)
     return;
 
-  m_server->getDb().postTask([server = m_server, socket = m_socket,
+  m_server->getDb().postTask([server = m_server, sessionId = m_sessionId,
                               username = m_username, targetUser]() {
     bool ok = server->getDb().addFriend(username, targetUser);
     std::vector<std::string> friends;
@@ -366,8 +360,9 @@ void ClientSession::handleAddContact(Packet &packet) {
       friends = server->getDb().getFriends(username);
     }
 
-    server->postResponse([server, socket, ok, friends = std::move(friends)]() {
-      ClientSession *session = server->getSession(socket);
+    server->postResponse([server, sessionId, ok,
+                          friends = std::move(friends)]() {
+      ClientSession *session = server->getSession(sessionId);
       if (!session)
         return;
 
@@ -406,7 +401,7 @@ void ClientSession::handleRemoveContact(Packet &packet) {
   if (!m_server)
     return;
 
-  m_server->getDb().postTask([server = m_server, socket = m_socket,
+  m_server->getDb().postTask([server = m_server, sessionId = m_sessionId,
                               username = m_username, targetUser]() {
     bool ok = server->getDb().removeFriend(username, targetUser);
     std::vector<std::string> friends;
@@ -414,8 +409,9 @@ void ClientSession::handleRemoveContact(Packet &packet) {
       friends = server->getDb().getFriends(username);
     }
 
-    server->postResponse([server, socket, ok, friends = std::move(friends)]() {
-      ClientSession *session = server->getSession(socket);
+    server->postResponse([server, sessionId, ok,
+                          friends = std::move(friends)]() {
+      ClientSession *session = server->getSession(sessionId);
       if (!session)
         return;
 
@@ -450,7 +446,7 @@ void ClientSession::handleStatusChange(Packet &packet) {
             << std::endl;
 
   if (m_onStatusChange) {
-    m_onStatusChange(this, newStatus);
+    m_onStatusChange(shared_from_this(), newStatus);
   }
 }
 
@@ -469,7 +465,7 @@ void ClientSession::handleNudge(Packet &packet) {
             << std::endl;
 
   if (m_onNudge) {
-    m_onNudge(this, targetUser);
+    m_onNudge(shared_from_this(), targetUser);
   }
 }
 
@@ -504,7 +500,7 @@ void ClientSession::handleVoiceMessage(Packet &packet) {
             << " (" << duration << "s, " << dataLen << " bytes)" << std::endl;
 
   if (m_onVoiceMessage) {
-    m_onVoiceMessage(this, targetUser, duration, audioData);
+    m_onVoiceMessage(shared_from_this(), targetUser, duration, audioData);
   }
 }
 
@@ -530,7 +526,7 @@ void ClientSession::handleUpdateAvatar(Packet &packet) {
             << " bytes)" << std::endl;
 
   if (m_onUpdateAvatar) {
-    m_onUpdateAvatar(this, avatarData);
+    m_onUpdateAvatar(shared_from_this(), avatarData);
   }
 }
 
@@ -548,7 +544,7 @@ void ClientSession::handleGetAvatar(Packet &packet) {
   // std::cout << "[Session] Request Avatar for: " << targetUser << std::endl;
 
   if (m_onGetAvatar) {
-    m_onGetAvatar(this, targetUser);
+    m_onGetAvatar(shared_from_this(), targetUser);
   }
 }
 
