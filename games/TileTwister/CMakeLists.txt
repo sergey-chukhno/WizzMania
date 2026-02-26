@@ -91,8 +91,7 @@ if(NOT SDL2_ttf_FOUND)
 
   FetchContent_Declare(
       SDL2_ttf
-      GIT_REPOSITORY https://github.com/libsdl-org/SDL_ttf.git
-      GIT_TAG release-2.22.0
+      URL https://github.com/libsdl-org/SDL_ttf/releases/download/release-2.22.0/SDL2_ttf-2.22.0.zip
       TLS_VERIFY OFF # Bypass SSL cert checks for Windows compatibility
     )
   FetchContent_MakeAvailable(SDL2_ttf)
@@ -100,8 +99,7 @@ if(NOT SDL2_ttf_FOUND)
 # SDL2_image
 FetchContent_Declare(
     SDL2_image
-    GIT_REPOSITORY https://github.com/libsdl-org/SDL_image.git
-    GIT_TAG        release-2.6.3
+    URL https://github.com/libsdl-org/SDL_image/releases/download/release-2.6.3/SDL2_image-2.6.3.zip
     TLS_VERIFY OFF # Bypass SSL cert checks for Windows compatibility
   )
 set(SDL2IMAGE_VENDORED OFF CACHE BOOL "" FORCE)
@@ -111,8 +109,7 @@ FetchContent_MakeAvailable(SDL2_image)
 # SDL2_mixer
 FetchContent_Declare(
   SDL2_mixer
-  GIT_REPOSITORY https://github.com/libsdl-org/SDL_mixer.git
-  GIT_TAG        release-2.6.3
+  URL https://github.com/libsdl-org/SDL_mixer/releases/download/release-2.6.3/SDL2_mixer-2.6.3.zip
 )
 set(SDL2MIXER_VENDORED OFF CACHE BOOL "" FORCE)
 set(SDL2MIXER_OPUS OFF CACHE BOOL "" FORCE)     # Disable extra formats for speed
@@ -158,8 +155,12 @@ add_executable(TileTwister
     src/game/AnimationManager.cpp
     src/game/PersistenceManager.cpp
 )
-target_include_directories(TileTwister PUBLIC src)
-target_link_libraries(TileTwister PRIVATE TileTwister_Core TileTwister_Engine)
+target_include_directories(TileTwister PUBLIC src ../../common)
+find_package(Threads REQUIRED)
+target_link_libraries(TileTwister PRIVATE TileTwister_Core TileTwister_Engine Threads::Threads)
+if(UNIX AND NOT APPLE)
+    target_link_libraries(TileTwister PRIVATE rt)
+endif()
 if(MINGW)
     target_link_libraries(TileTwister PRIVATE setjmp)
 endif()

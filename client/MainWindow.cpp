@@ -1,4 +1,5 @@
 #include "MainWindow.h"
+#include "../common/GameIPC.h"
 #include "AddFriendDialog.h"
 #include "AvatarManager.h"
 #include "ChatWindow.h"
@@ -22,6 +23,8 @@ MainWindow::MainWindow(const QString &username, const QPoint &initialPos,
   setWindowTitle("Wizz Mania - " + username);
   setMinimumSize(350, 500);
   resize(400, 600);
+
+  setupGameIPC();
 
   if (!initialPos.isNull()) {
     move(initialPos);
@@ -113,6 +116,13 @@ MainWindow::MainWindow(const QString &username, const QPoint &initialPos,
   // Connect Avatar Updated
   connect(&AvatarManager::instance(), &AvatarManager::avatarUpdated, this,
           &MainWindow::updateContactAvatar);
+
+  // Connect Game Status
+  connect(
+      &NetworkManager::instance(), &NetworkManager::gameStatusChanged, this,
+      [this](const QString &username, const QString &gameName, uint32_t score) {
+        updateContactGameStatus(username, gameName, score);
+      });
 
   // Initialize Dialogs
   m_addFriendDialog = new AddFriendDialog(this);
@@ -474,6 +484,14 @@ void MainWindow::populateContactList() {
     QString statusText = contact.statusMessage.isEmpty()
                              ? getStatusText(contact.status)
                              : contact.statusMessage;
+
+    // Add game status if playing
+    if (contact.isPlayingGame && !contact.currentGameName.isEmpty()) {
+      statusText = QString("🎮 Playing %1 (Score: %2)")
+                       .arg(contact.currentGameName)
+                       .arg(contact.currentGameScore);
+    }
+
     QLabel *statusLabel = new QLabel(statusText);
     statusLabel->setStyleSheet(
         "font-size: 11px; color: #718096; background: transparent;");
@@ -500,6 +518,26 @@ void MainWindow::updateContactStatus(const QString &username, UserStatus status,
       contact.status = status;
       if (!statusMessage.isEmpty()) {
         contact.statusMessage = statusMessage;
+      }
+      break;
+    }
+  }
+  populateContactList();
+}
+
+void MainWindow::updateContactGameStatus(const QString &username,
+                                         const QString &gameName,
+                                         uint32_t score) {
+  for (ContactInfo &contact : m_contacts) {
+    if (contact.username == username) {
+      if (gameName.isEmpty()) {
+        contact.isPlayingGame = false;
+        contact.currentGameName = "";
+        contact.currentGameScore = 0;
+      } else {
+        contact.isPlayingGame = true;
+        contact.currentGameName = gameName;
+        contact.currentGameScore = score;
       }
       break;
     }
@@ -778,4 +816,51 @@ bool MainWindow::eventFilter(QObject *obj, QEvent *event) {
     }
   }
   return QWidget::eventFilter(obj, event);
+}
+
+void MainWindow::setupGameIPC() {
+  m_gameIPC.setKey(QString::fromStdString(wizz::SHARED_MEMORY_KEY));
+  m_gameIPCTimer = new QTimer(this);
+  connect(m_gameIPCTimer, &QTimer::timeout, this, &MainWindow::onPollGameIPC);
+  m_gameIPCTimer->start(100); // 100ms
+}
+
+void MainWindow::onPollGameIPC() {
+  if (!m_gameIPC.isAttached()) {
+    if (!m_gameIPC.attach(QSharedMemory::ReadOnly)) {
+      if (m_lastIPCIsPlaying) {
+        m_lastIPCIsPlaying = false;
+        NetworkManager::instance().sendGameStatus("", 0);
+      }
+      return;
+    }
+  }
+
+  if (m_gameIPC.lock()) {
+    const wizz::GameIPCData *data =
+        static_cast<const wizz::GameIPCData *>(m_gameIPC.constData());
+    if (data) {
+      bool isPlaying = data->isPlaying;
+      uint32_t currentScore = data->currentScore;
+      QString gameName = QString::fromUtf8(data->gameName);
+
+      if (isPlaying != m_lastIPCIsPlaying || currentScore != m_lastIPCScore ||
+          gameName != m_lastIPCGameName) {
+        m_lastIPCIsPlaying = isPlaying;
+        m_lastIPCScore = currentScore;
+        m_lastIPCGameName = gameName;
+
+        if (m_lastIPCIsPlaying) {
+          NetworkManager::instance().sendGameStatus(m_lastIPCGameName,
+                                                    m_lastIPCScore);
+        } else {
+          NetworkManager::instance().sendGameStatus("", 0);
+          m_gameIPC.unlock();
+          m_gameIPC.detach();
+          return;
+        }
+      }
+    }
+    m_gameIPC.unlock();
+  }
 }

@@ -3,6 +3,7 @@
 #include "PersistenceManager.hpp"
 #include <SDL.h>
 #include <cmath>
+#include <cstring>
 #include <iostream>
 #include <string>
 
@@ -112,6 +113,37 @@ Game::Game()
   }
 
   resetGame();
+
+  // Initialize IPC
+  m_sharedMemory =
+      std::make_unique<wizz::NativeSharedMemory>(wizz::SHARED_MEMORY_KEY);
+  if (m_sharedMemory->createAndMap() || m_sharedMemory->openAndMap()) {
+    m_sharedMemory->lock();
+    if (m_sharedMemory->data()) {
+      m_sharedMemory->data()->isPlaying = true;
+      m_sharedMemory->data()->currentScore = m_score;
+      std::strncpy(m_sharedMemory->data()->gameName, "TileTwister",
+                   sizeof(m_sharedMemory->data()->gameName) - 1);
+      m_sharedMemory->data()
+          ->gameName[sizeof(m_sharedMemory->data()->gameName) - 1] = '\0';
+    }
+    m_sharedMemory->unlock();
+    std::cout << "TileTwister IPC connected successfully" << std::endl;
+  } else {
+    std::cerr << "Failed to initialize Shared Memory IPC for TileTwister"
+              << std::endl;
+  }
+}
+
+Game::~Game() {
+  if (m_sharedMemory) {
+    m_sharedMemory->lock();
+    if (m_sharedMemory->data()) {
+      m_sharedMemory->data()->isPlaying = false;
+    }
+    m_sharedMemory->unlock();
+    m_sharedMemory->close();
+  }
 }
 
 // ... (methods) ...
@@ -694,6 +726,14 @@ void Game::handleInputPlaying(Action action, int mx, int my, bool clicked) {
     m_score += result.score;
     if (m_score > m_bestScore)
       m_bestScore = m_score;
+
+    if (m_sharedMemory) {
+      m_sharedMemory->lock();
+      if (m_sharedMemory->data()) {
+        m_sharedMemory->data()->currentScore = m_score;
+      }
+      m_sharedMemory->unlock();
+    }
 
     // Process Events for Animation
     bool hasAnimations = false;

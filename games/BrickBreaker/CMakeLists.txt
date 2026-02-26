@@ -60,17 +60,24 @@ set(SOURCES
 # Create executable
 add_executable(${PROJECT_NAME} ${SOURCES})
 
-# Include directories (using modern target-based approach)
-# Must be after add_executable
-target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+target_include_directories(${PROJECT_NAME} PRIVATE 
+    include
+    ../../common
+)
 
 # Link SFML libraries
 # Graphics automatically includes System and Window
 # Audio automatically includes System
-target_link_libraries(${PROJECT_NAME}
+find_package(Threads REQUIRED)
+target_link_libraries(${PROJECT_NAME} PRIVATE
     SFML::Graphics
     SFML::Audio
+    Threads::Threads
 )
+
+if(UNIX AND NOT APPLE)
+    target_link_libraries(${PROJECT_NAME} PRIVATE rt)
+endif()
 
 # Copy assets to build directory (for development)
 # Copy to bin directory where executable is located

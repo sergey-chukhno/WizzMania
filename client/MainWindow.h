@@ -10,6 +10,8 @@
 #include <QProcess>
 #include <QPushButton>
 #include <QScrollArea>
+#include <QSharedMemory>
+#include <QTimer>
 #include <QVBoxLayout>
 #include <QWidget>
 
@@ -22,6 +24,11 @@ struct ContactInfo {
   UserStatus status;
   QString statusMessage;
   QPixmap avatar; // Empty = use initials
+
+  // Game state
+  bool isPlayingGame = false;
+  QString currentGameName;
+  uint32_t currentGameScore = 0;
 };
 
 class AddFriendDialog; // Forward declaration
@@ -43,6 +50,8 @@ public:
   void updateContactStatus(const QString &username, UserStatus status,
                            const QString &statusMessage = "");
   void updateContactAvatar(const QString &username, const QPixmap &avatar);
+  void updateContactGameStatus(const QString &username, const QString &gameName,
+                               uint32_t score);
 
 signals:
   void contactDoubleClicked(const QString &username);
@@ -66,6 +75,9 @@ private slots:
 
   // Avatar Slots
   void onAvatarClicked();
+
+  // IPC Slots
+  void onPollGameIPC();
 
 private:
   void setupUI();
@@ -97,4 +109,14 @@ private:
 
   // Active Chats
   QMap<QString, ChatWindow *> m_openChats;
+
+  // IPC (Game Status Polling)
+  void setupGameIPC();
+  QSharedMemory m_gameIPC;
+  QTimer *m_gameIPCTimer = nullptr;
+
+  // Track last IPC state to only broadcast changes
+  bool m_lastIPCIsPlaying = false;
+  uint32_t m_lastIPCScore = 0;
+  QString m_lastIPCGameName;
 };

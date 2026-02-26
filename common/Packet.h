@@ -38,6 +38,9 @@ enum class PacketType : uint32_t {
   GetAvatar = 401,    // Client -> Server (Request)
   AvatarData = 402,   // Server -> Client (Download)
 
+  // Games
+  GameStatus = 500,
+
   // Errors
   Error = 999
 };
