@@ -30,15 +30,25 @@ NetworkManager::NetworkManager(QObject *parent) : QObject(parent) {
 }
 
 void NetworkManager::initSocket() {
-  m_socket = new QTcpSocket(this);
+  m_socket = new QSslSocket(this);
 
-  connect(m_socket, &QTcpSocket::connected, this,
+  connect(m_socket, &QSslSocket::connected, this,
           &NetworkManager::onSocketConnected);
-  connect(m_socket, &QTcpSocket::disconnected, this,
+  connect(m_socket, &QSslSocket::disconnected, this,
           &NetworkManager::onSocketDisconnected);
-  connect(m_socket, &QTcpSocket::errorOccurred, this,
+  connect(m_socket, &QSslSocket::errorOccurred, this,
           &NetworkManager::onSocketError);
-  connect(m_socket, &QTcpSocket::readyRead, this, &NetworkManager::onReadyRead);
+  connect(m_socket, &QSslSocket::readyRead, this, &NetworkManager::onReadyRead);
+
+  // Ignore SSL errors since we use self-signed certificates for local
+  // development
+  connect(
+      m_socket, QOverload<const QList<QSslError> &>::of(&QSslSocket::sslErrors),
+      this, [this](const QList<QSslError> &errors) {
+        qDebug() << "[Security] Ignoring SSL Errors since cert is self-signed:"
+                 << errors;
+        m_socket->ignoreSslErrors();
+      });
 
   // Register Handlers is safe here on the background thread
   registerHandlers();
@@ -57,7 +67,7 @@ void NetworkManager::connectToHost(const QString &host, quint16 port) {
   if (m_socket->state() != QAbstractSocket::UnconnectedState) {
     m_socket->disconnectFromHost();
   }
-  m_socket->connectToHost(host, port);
+  m_socket->connectToHostEncrypted(host, port);
 }
 
 void NetworkManager::disconnectFromHost() {
@@ -143,6 +153,24 @@ void NetworkManager::requestAvatar(const QString &username) {
   wizz::Packet p(wizz::PacketType::GetAvatar);
   p.writeString(username.toStdString());
   sendPacket(p);
+}
+
+void NetworkManager::sendStatusChange(int status,
+                                      const QString &statusMessage) {
+  if (QThread::currentThread() != this->thread()) {
+    QMetaObject::invokeMethod(this, "sendStatusChange", Qt::QueuedConnection,
+                              Q_ARG(int, status),
+                              Q_ARG(QString, statusMessage));
+    return;
+  }
+  if (!isConnected())
+    return;
+
+  wizz::Packet statusPkt(wizz::PacketType::ContactStatusChange);
+  statusPkt.writeInt(static_cast<uint32_t>(status));
+  // The server implementation currently does not read the status message string
+  // statusPkt.writeString(statusMessage.toStdString());
+  sendPacket(statusPkt);
 }
 
 // --- Slots ---
@@ -242,6 +270,7 @@ void NetworkManager::handleContactListPacket(wizz::Packet &pkt) {
     int status = static_cast<int>(pkt.readInt());
     contacts.append({name, status});
   }
+  m_cachedContacts = contacts;
   emit contactListReceived(contacts);
 }
 

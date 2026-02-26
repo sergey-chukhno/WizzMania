@@ -16,23 +16,25 @@
 namespace wizz {
 
 ClientSession::ClientSession(
-    int sessionId, asio::ip::tcp::socket socket, TcpServer *server,
-    OnLoginCallback onLogin, OnMessageCallback onMessage,
+    int sessionId, asio::ip::tcp::socket socket, asio::ssl::context &sslContext,
+    TcpServer *server, OnLoginCallback onLogin, OnMessageCallback onMessage,
     OnNudgeCallback onNudge, OnVoiceMessageCallback onVoiceMessage,
     OnTypingIndicatorCallback onTypingIndicator, GetStatusCallback getStatus,
     OnStatusChangeCallback onStatusChange,
-    OnUpdateAvatarCallback onUpdateAvatar, OnGetAvatarCallback onGetAvatar)
-    : m_sessionId(sessionId), m_socket(std::move(socket)), m_isLoggedIn(false),
-      m_server(server), m_onLogin(onLogin), m_onMessage(onMessage),
-      m_onNudge(onNudge), m_onVoiceMessage(onVoiceMessage),
-      m_onTypingIndicator(onTypingIndicator), m_getStatus(getStatus),
-      m_onStatusChange(onStatusChange), m_onUpdateAvatar(onUpdateAvatar),
-      m_onGetAvatar(onGetAvatar) {}
+    OnUpdateAvatarCallback onUpdateAvatar, OnGetAvatarCallback onGetAvatar,
+    OnDisconnectCallback onDisconnect)
+    : m_sessionId(sessionId), m_socket(std::move(socket), sslContext),
+      m_isLoggedIn(false), m_server(server), m_onLogin(onLogin),
+      m_onMessage(onMessage), m_onNudge(onNudge),
+      m_onVoiceMessage(onVoiceMessage), m_onTypingIndicator(onTypingIndicator),
+      m_getStatus(getStatus), m_onStatusChange(onStatusChange),
+      m_onUpdateAvatar(onUpdateAvatar), m_onGetAvatar(onGetAvatar),
+      m_onDisconnect(onDisconnect) {}
 
 ClientSession::~ClientSession() {
-  if (m_socket.is_open()) {
+  if (m_socket.lowest_layer().is_open()) {
     asio::error_code ec;
-    m_socket.close(ec);
+    m_socket.lowest_layer().close(ec);
   }
 }
 
@@ -40,22 +42,49 @@ void ClientSession::sendPacket(const Packet &packet) {
   // Serialize Packet
   std::vector<uint8_t> data = packet.serialize();
 
-  // To avoid lifetime issues where 'data' goes out of scope before the async
-  // execution, we must heap-allocate the buffer and capture it in the lambda.
-  auto buffer = std::make_shared<std::vector<uint8_t>>(std::move(data));
-  auto self(shared_from_this());
-
-  asio::async_write(
-      m_socket, asio::buffer(*buffer),
-      [this, self, buffer](asio::error_code ec, std::size_t /*length*/) {
-        if (ec) {
-          std::cerr << "[Session " << m_sessionId
-                    << "] Write Error: " << ec.message() << std::endl;
-        }
-      });
+  // Must run on the io_context thread!
+  bool writeInProgress = !m_outbox.empty();
+  m_outbox.push_back(std::move(data));
+  if (!writeInProgress) {
+    doWrite();
+  }
 }
 
-void ClientSession::start() { doRead(); }
+void ClientSession::doWrite() {
+  auto self(shared_from_this());
+
+  asio::async_write(m_socket, asio::buffer(m_outbox.front()),
+                    [this, self](asio::error_code ec, std::size_t /*length*/) {
+                      if (!ec) {
+                        m_outbox.pop_front();
+                        if (!m_outbox.empty()) {
+                          doWrite();
+                        }
+                      } else {
+                        std::cerr << "[Session " << m_sessionId
+                                  << "] TLS Write Error: " << ec.message()
+                                  << std::endl;
+                        if (m_socket.lowest_layer().is_open()) {
+                          asio::error_code closeEc;
+                          m_socket.lowest_layer().close(closeEc);
+                        }
+                      }
+                    });
+}
+
+void ClientSession::start() {
+  auto self(shared_from_this());
+  m_socket.async_handshake(asio::ssl::stream_base::server,
+                           [this, self](const asio::error_code &error) {
+                             if (!error) {
+                               doRead();
+                             } else {
+                               std::cerr << "[Session " << m_sessionId
+                                         << "] TLS Handshake Failed: "
+                                         << error.message() << std::endl;
+                             }
+                           });
+}
 
 void ClientSession::doRead() {
   auto self(shared_from_this());
@@ -78,6 +107,9 @@ void ClientSession::doRead() {
         } else if (ec != asio::error::operation_aborted) {
           std::cout << "[Session " << m_sessionId
                     << "] Disconnected: " << ec.message() << std::endl;
+          if (m_onDisconnect) {
+            m_onDisconnect(m_sessionId);
+          }
           // The connection is dropped. `self` drops out of scope, destroying
           // the session.
         }
@@ -117,7 +149,7 @@ void ClientSession::onDataReceived(const char *data, size_t length) {
                 << std::endl;
       // Close socket explicitly on error
       asio::error_code closeEc;
-      m_socket.close(closeEc);
+      m_socket.lowest_layer().close(closeEc);
       return;
     }
   }

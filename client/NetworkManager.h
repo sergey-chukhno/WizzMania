@@ -4,7 +4,8 @@
 #include <QHash>
 #include <QMetaType>
 #include <QObject>
-#include <QTcpSocket>
+#include <QSslError>
+#include <QSslSocket>
 #include <atomic>
 #include <functional>
 #include <memory>
@@ -16,6 +17,7 @@ public:
   static NetworkManager &instance();
 
   bool isConnected() const;
+  QList<QPair<QString, int>> getContacts() const { return m_cachedContacts; }
 
   void initSocket();
 
@@ -31,6 +33,7 @@ public slots:
   void sendTypingPacket(const QString &target, bool isTyping);
   void sendUpdateAvatar(const QByteArray &data);
   void requestAvatar(const QString &username);
+  void sendStatusChange(int status, const QString &statusMessage = "");
 
 signals:
   // Status Signals
@@ -63,9 +66,10 @@ private:
   NetworkManager(const NetworkManager &) = delete;
   NetworkManager &operator=(const NetworkManager &) = delete;
 
-  QTcpSocket *m_socket = nullptr;
+  QSslSocket *m_socket = nullptr;
   std::vector<uint8_t> m_buffer; // Receive buffer
   std::atomic<bool> m_isConnected{false};
+  QList<QPair<QString, int>> m_cachedContacts;
 
   // Packet Handlers
   void registerHandlers();
