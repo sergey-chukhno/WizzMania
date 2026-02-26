@@ -1,5 +1,10 @@
 cmake_minimum_required(VERSION 3.16)
 
+# Ensure newer policies are enabled when available to silence warnings
+if(POLICY CMP0135)
+  cmake_policy(SET CMP0135 NEW)  # prefer extraction timestamps of download time
+endif()
+
 # Project Metadata
 project(WizzMania VERSION 0.1.0 LANGUAGES CXX)
 
