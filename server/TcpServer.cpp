@@ -117,7 +117,12 @@ void TcpServer::doAccept() {
                  const std::string &target) {
             handleGetAvatar(sender.get(), target);
           },
-          // 10. OnDisconnect Callback
+          // 10. OnGameStatus Callback
+          [this](std::shared_ptr<ClientSession> sender,
+                 const std::string &gameName, uint32_t score) {
+            handleGameStatus(sender.get(), gameName, score);
+          },
+          // 11. OnDisconnect Callback
           [this](int sessionId) { handleDisconnect(sessionId); });
 
       m_sessions[sessionId] = session;
@@ -453,6 +458,28 @@ void wizz::TcpServer::handleGetAvatar(ClientSession *sender,
                     << " bytes) to " << session->getUsername() << std::endl;
         });
   });
+}
+
+void wizz::TcpServer::handleGameStatus(ClientSession *sender,
+                                       const std::string &gameName,
+                                       uint32_t score) {
+  if (!sender)
+    return;
+  std::string username = sender->getUsername();
+
+  Packet pkt(PacketType::GameStatus);
+  pkt.writeString(username);
+  pkt.writeString(gameName);
+  pkt.writeInt(score);
+
+  // Broadcast
+  std::vector<std::string> followers = m_db.getFollowers(username);
+  for (const auto &followerName : followers) {
+    auto it = m_onlineUsers.find(followerName);
+    if (it != m_onlineUsers.end()) {
+      it->second->sendPacket(pkt);
+    }
+  }
 }
 
 void wizz::TcpServer::handleDisconnect(int sessionId) {

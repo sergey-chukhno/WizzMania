@@ -34,6 +34,7 @@ public slots:
   void sendUpdateAvatar(const QByteArray &data);
   void requestAvatar(const QString &username);
   void sendStatusChange(int status, const QString &statusMessage = "");
+  void sendGameStatus(const QString &gameName, uint32_t score);
 
 signals:
   // Status Signals
@@ -51,6 +52,8 @@ signals:
                             const std::vector<uint8_t> &data);
   void userTyping(const QString &sender, bool isTyping);
   void avatarReceived(const QString &username, const QByteArray &data);
+  void gameStatusChanged(const QString &username, const QString &gameName,
+                         uint32_t score);
 
 private slots:
   void onSocketConnected();
@@ -81,6 +84,7 @@ private:
   void handleVoiceMessagePacket(wizz::Packet &pkt);
   void handleTypingIndicatorPacket(wizz::Packet &pkt);
   void handleAvatarDataPacket(wizz::Packet &pkt);
+  void handleGameStatusPacket(wizz::Packet &pkt);
 
   QHash<wizz::PacketType, std::function<void(wizz::Packet &)>> m_packetHandlers;
 };

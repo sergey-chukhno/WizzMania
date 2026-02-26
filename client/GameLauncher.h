@@ -5,7 +5,7 @@
 
 class GameLauncher {
 public:
-  static bool launchGame(const QString &gameName);
+  static bool launchGame(const QString &gameName, const QString &username = "");
   static QString resolveWorkingDir(const QString &gameFolder);
 
 private:

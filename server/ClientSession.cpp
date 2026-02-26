@@ -22,14 +22,14 @@ ClientSession::ClientSession(
     OnTypingIndicatorCallback onTypingIndicator, GetStatusCallback getStatus,
     OnStatusChangeCallback onStatusChange,
     OnUpdateAvatarCallback onUpdateAvatar, OnGetAvatarCallback onGetAvatar,
-    OnDisconnectCallback onDisconnect)
+    OnGameStatusCallback onGameStatus, OnDisconnectCallback onDisconnect)
     : m_sessionId(sessionId), m_socket(std::move(socket), sslContext),
       m_isLoggedIn(false), m_server(server), m_onLogin(onLogin),
       m_onMessage(onMessage), m_onNudge(onNudge),
       m_onVoiceMessage(onVoiceMessage), m_onTypingIndicator(onTypingIndicator),
       m_getStatus(getStatus), m_onStatusChange(onStatusChange),
       m_onUpdateAvatar(onUpdateAvatar), m_onGetAvatar(onGetAvatar),
-      m_onDisconnect(onDisconnect) {}
+      m_onGameStatus(onGameStatus), m_onDisconnect(onDisconnect) {}
 
 ClientSession::~ClientSession() {
   if (m_socket.lowest_layer().is_open()) {
@@ -218,6 +218,10 @@ void ClientSession::processPacket(Packet &packet) {
 
   case PacketType::GetAvatar:
     handleGetAvatar(packet);
+    break;
+
+  case PacketType::GameStatus:
+    handleGameStatus(packet);
     break;
 
   default:
@@ -577,6 +581,25 @@ void ClientSession::handleGetAvatar(Packet &packet) {
 
   if (m_onGetAvatar) {
     m_onGetAvatar(shared_from_this(), targetUser);
+  }
+}
+
+void ClientSession::handleGameStatus(Packet &packet) {
+  if (!m_isLoggedIn)
+    return;
+
+  std::string gameName;
+  uint32_t score = 0;
+
+  try {
+    gameName = packet.readString();
+    score = packet.readInt();
+  } catch (...) {
+    return;
+  }
+
+  if (m_onGameStatus) {
+    m_onGameStatus(shared_from_this(), gameName, score);
   }
 }
 

@@ -51,7 +51,8 @@ QString GameLauncher::resolveWorkingDir(const QString &gameFolder) {
   return QCoreApplication::applicationDirPath();
 }
 
-bool GameLauncher::launchGame(const QString &gameName) {
+bool GameLauncher::launchGame(const QString &gameName,
+                              const QString &username) {
   QString exeName;
   QString folderName = gameName;
   if (gameName == "TileTwister") {
@@ -76,7 +77,11 @@ bool GameLauncher::launchGame(const QString &gameName) {
 
   QProcess *process = new QProcess();
   process->setWorkingDirectory(workingDir);
-  process->start(exePath);
+  QStringList args;
+  if (!username.isEmpty()) {
+    args << username;
+  }
+  process->start(exePath, args);
 
   if (!process->waitForStarted()) {
     QMessageBox::critical(nullptr, "Launch Error",

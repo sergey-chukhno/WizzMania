@@ -12,6 +12,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
+#include <cstring>
 #include <ctime>
 #include <fstream>
 #include <iostream>
@@ -285,6 +286,26 @@ void PlayingState::onEnter() {
     currentLevel_ = blockManager_->getCurrentLevel();
     std::cout << "Level " << currentLevel_ << " started" << std::endl;
 
+    // Initialize IPC
+    sharedMemory_ =
+        std::make_unique<wizz::NativeSharedMemory>(wizz::SHARED_MEMORY_KEY);
+    if (sharedMemory_->createAndMap() || sharedMemory_->openAndMap()) {
+      sharedMemory_->lock();
+      if (sharedMemory_->data()) {
+        sharedMemory_->data()->isPlaying = true;
+        sharedMemory_->data()->currentScore = score_;
+        std::strncpy(sharedMemory_->data()->gameName, "BrickBreaker",
+                     sizeof(sharedMemory_->data()->gameName) - 1);
+        sharedMemory_->data()
+            ->gameName[sizeof(sharedMemory_->data()->gameName) - 1] = '\0';
+      }
+      sharedMemory_->unlock();
+      std::cout << "BrickBreaker IPC connected successfully" << std::endl;
+    } else {
+      std::cerr << "Failed to initialize Shared Memory IPC for BrickBreaker"
+                << std::endl;
+    }
+
     std::cout << "PlayingState initialization complete" << std::endl;
   } catch (const std::exception &e) {
     std::cerr << "Error in PlayingState::onEnter(): " << e.what() << std::endl;
@@ -295,7 +316,17 @@ void PlayingState::onEnter() {
   }
 }
 
-void PlayingState::onExit() { std::cout << "Exited PlayingState" << std::endl; }
+void PlayingState::onExit() {
+  if (sharedMemory_) {
+    sharedMemory_->lock();
+    if (sharedMemory_->data()) {
+      sharedMemory_->data()->isPlaying = false;
+    }
+    sharedMemory_->unlock();
+    sharedMemory_->close();
+  }
+  std::cout << "Exited PlayingState" << std::endl;
+}
 
 void PlayingState::checkProjectileBrickCollisions() {
   if (!blockManager_) {
@@ -631,7 +662,17 @@ int PlayingState::calculateScore(int level, int brickMaxHealth) const {
   return static_cast<int>(finalScore);
 }
 
-void PlayingState::addScore(int points) { score_ += points; }
+void PlayingState::addScore(int points) {
+  score_ += points;
+
+  if (sharedMemory_) {
+    sharedMemory_->lock();
+    if (sharedMemory_->data()) {
+      sharedMemory_->data()->currentScore = score_;
+    }
+    sharedMemory_->unlock();
+  }
+}
 
 void PlayingState::updateScoreDisplay(float deltaTime) {
   // Animate score counting up

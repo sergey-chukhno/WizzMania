@@ -9,6 +9,7 @@
 #include "../engine/Window.hpp"
 #include "AnimationManager.hpp" // Added
 #include "InputManager.hpp"     // Added
+#include "NativeSharedMemory.h" // Added IPC
 #include <memory>               // Added
 #include <set>                  // Added
 
@@ -28,8 +29,8 @@ enum class GameState {
 
 class Game {
 public:
-  Game();
-  ~Game() = default;
+  explicit Game(const std::string &username = "player");
+  ~Game();
 
   void run();
 
@@ -142,6 +143,9 @@ private:
   int m_popupAchievementIndex;
   float m_popupTimer;
   void checkAchievements();
+
+  // IPC
+  std::unique_ptr<wizz::NativeSharedMemory> m_sharedMemory;
 };
 
 } // namespace Game

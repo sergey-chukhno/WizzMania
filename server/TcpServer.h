@@ -91,6 +91,8 @@ private:
   void handleUpdateAvatar(ClientSession *sender,
                           const std::vector<uint8_t> &data);
   void handleGetAvatar(ClientSession *sender, const std::string &target);
+  void handleGameStatus(ClientSession *sender, const std::string &gameName,
+                        uint32_t score);
   void handleDisconnect(int sessionId);
 };
 

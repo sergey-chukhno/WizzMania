@@ -173,6 +173,21 @@ void NetworkManager::sendStatusChange(int status,
   sendPacket(statusPkt);
 }
 
+void NetworkManager::sendGameStatus(const QString &gameName, uint32_t score) {
+  if (QThread::currentThread() != this->thread()) {
+    QMetaObject::invokeMethod(this, "sendGameStatus", Qt::QueuedConnection,
+                              Q_ARG(QString, gameName), Q_ARG(uint32_t, score));
+    return;
+  }
+  if (!isConnected())
+    return;
+
+  wizz::Packet pkt(wizz::PacketType::GameStatus);
+  pkt.writeString(gameName.toStdString());
+  pkt.writeInt(score);
+  sendPacket(pkt);
+}
+
 // --- Slots ---
 
 void NetworkManager::onSocketConnected() {
@@ -260,6 +275,9 @@ void NetworkManager::registerHandlers() {
   m_packetHandlers[wizz::PacketType::AvatarData] = [this](wizz::Packet &pkt) {
     handleAvatarDataPacket(pkt);
   };
+  m_packetHandlers[wizz::PacketType::GameStatus] = [this](wizz::Packet &pkt) {
+    handleGameStatusPacket(pkt);
+  };
 }
 
 void NetworkManager::handleContactListPacket(wizz::Packet &pkt) {
@@ -322,4 +340,12 @@ void NetworkManager::handleAvatarDataPacket(wizz::Packet &pkt) {
                      imgData.size());
     emit avatarReceived(username, qData);
   }
+}
+
+void NetworkManager::handleGameStatusPacket(wizz::Packet &pkt) {
+  // Server will relay: username(string) -> gameName(string) -> score(uint32_t)
+  QString username = QString::fromStdString(pkt.readString());
+  QString gameName = QString::fromStdString(pkt.readString());
+  uint32_t score = pkt.readInt();
+  emit gameStatusChanged(username, gameName, score);
 }

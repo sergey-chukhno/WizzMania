@@ -3,12 +3,13 @@
 #include "PersistenceManager.hpp"
 #include <SDL.h>
 #include <cmath>
+#include <cstring>
 #include <iostream>
 #include <string>
 
 namespace Game {
 
-Game::Game()
+Game::Game(const std::string &username)
     : m_context(), m_window("Tile Twister - 2048", WINDOW_WIDTH, WINDOW_HEIGHT),
       m_renderer(m_window, WINDOW_WIDTH, WINDOW_HEIGHT),
       m_font("assets/ClearSans-Bold.ttf", 40),      // Tile Font
@@ -112,6 +113,41 @@ Game::Game()
   }
 
   resetGame();
+
+  // Initialize IPC with user-scoped, sanitized key (e.g.
+  // WizzMania_Game_IPC_Mr_Krab) Sanitization replaces spaces and special chars
+  // to ensure a valid POSIX name.
+  std::string ipcKey = wizz::makeIPCKey(username);
+  m_sharedMemory = std::make_unique<wizz::NativeSharedMemory>(ipcKey);
+  if (m_sharedMemory->createAndMap() || m_sharedMemory->openAndMap()) {
+    m_sharedMemory->lock();
+    if (m_sharedMemory->data()) {
+      m_sharedMemory->data()->isPlaying = true;
+      m_sharedMemory->data()->currentScore = m_score;
+      std::strncpy(m_sharedMemory->data()->gameName, "TileTwister",
+                   sizeof(m_sharedMemory->data()->gameName) - 1);
+      m_sharedMemory->data()
+          ->gameName[sizeof(m_sharedMemory->data()->gameName) - 1] = '\0';
+    }
+    m_sharedMemory->unlock();
+    std::cout << "TileTwister IPC connected successfully" << std::endl;
+  } else {
+    std::cerr << "Failed to initialize Shared Memory IPC for TileTwister"
+              << std::endl;
+  }
+}
+
+Game::~Game() {
+  if (m_sharedMemory) {
+    m_sharedMemory->lock();
+    if (m_sharedMemory->data()) {
+      m_sharedMemory->data()->isPlaying = false;
+    }
+    m_sharedMemory->unlock();
+    // unlink() removes the POSIX segment name from the OS namespace,
+    // allowing a clean createAndMap() next time the game starts.
+    m_sharedMemory->unlink();
+  }
 }
 
 // ... (methods) ...
@@ -694,6 +730,14 @@ void Game::handleInputPlaying(Action action, int mx, int my, bool clicked) {
     m_score += result.score;
     if (m_score > m_bestScore)
       m_bestScore = m_score;
+
+    if (m_sharedMemory) {
+      m_sharedMemory->lock();
+      if (m_sharedMemory->data()) {
+        m_sharedMemory->data()->currentScore = m_score;
+      }
+      m_sharedMemory->unlock();
+    }
 
     // Process Events for Animation
     bool hasAnimations = false;

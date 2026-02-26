@@ -42,23 +42,26 @@ using OnUpdateAvatarCallback = std::function<void(
     std::shared_ptr<ClientSession>, const std::vector<uint8_t> &)>;
 using OnGetAvatarCallback =
     std::function<void(std::shared_ptr<ClientSession>, const std::string &)>;
+
+// Game Status Callback (SenderSession, GameName, Score)
+using OnGameStatusCallback = std::function<void(std::shared_ptr<ClientSession>,
+                                                const std::string &, uint32_t)>;
+
 // Callback for Disconnect
 using OnDisconnectCallback = std::function<void(int)>;
 
 class ClientSession : public std::enable_shared_from_this<ClientSession> {
 public:
   // Pass Server pointer for Async Task dispatch, and Callbacks
-  explicit ClientSession(int sessionId, asio::ip::tcp::socket socket,
-                         asio::ssl::context &sslContext, TcpServer *server,
-                         OnLoginCallback onLogin, OnMessageCallback onMessage,
-                         OnNudgeCallback onNudge,
-                         OnVoiceMessageCallback onVoiceMessage,
-                         OnTypingIndicatorCallback onTypingIndicator,
-                         GetStatusCallback getStatus,
-                         OnStatusChangeCallback onStatusChange,
-                         OnUpdateAvatarCallback onUpdateAvatar,
-                         OnGetAvatarCallback onGetAvatar,
-                         OnDisconnectCallback onDisconnect);
+  explicit ClientSession(
+      int sessionId, asio::ip::tcp::socket socket,
+      asio::ssl::context &sslContext, TcpServer *server,
+      OnLoginCallback onLogin, OnMessageCallback onMessage,
+      OnNudgeCallback onNudge, OnVoiceMessageCallback onVoiceMessage,
+      OnTypingIndicatorCallback onTypingIndicator, GetStatusCallback getStatus,
+      OnStatusChangeCallback onStatusChange,
+      OnUpdateAvatarCallback onUpdateAvatar, OnGetAvatarCallback onGetAvatar,
+      OnGameStatusCallback onGameStatus, OnDisconnectCallback onDisconnect);
   ~ClientSession(); // Closes socket if owned
 
   // Delete copy to prevent double-close of socket
@@ -96,6 +99,7 @@ private:
   void handleNudge(Packet &packet);
   void handleVoiceMessage(Packet &packet);
   void handleStatusChange(Packet &packet);
+  void handleGameStatus(Packet &packet);
 
   // Contact Handlers
   void handleAddContact(Packet &packet);
@@ -124,6 +128,7 @@ private:
   OnStatusChangeCallback m_onStatusChange;
   OnUpdateAvatarCallback m_onUpdateAvatar;
   OnGetAvatarCallback m_onGetAvatar;
+  OnGameStatusCallback m_onGameStatus;
   OnDisconnectCallback m_onDisconnect;
 
   // Buffer for incoming partial data

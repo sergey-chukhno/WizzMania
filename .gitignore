@@ -27,6 +27,10 @@ Makefile
 WizzMania.md
 rules.md
 docs/
+maquette/
+cert/
+certs/
+*.log
 
 # TLS Certificates (local only)
 certs/server.crt

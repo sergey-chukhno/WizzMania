@@ -1,4 +1,5 @@
 #include "MainWindow.h"
+#include "../common/GameIPC.h"
 #include "AddFriendDialog.h"
 #include "AvatarManager.h"
 #include "ChatWindow.h"
@@ -18,10 +19,13 @@
 #include <QTimer>
 MainWindow::MainWindow(const QString &username, const QPoint &initialPos,
                        QWidget *parent)
-    : QWidget(parent), m_username(username), m_statusMessageInput(nullptr) {
+    : QWidget(parent), m_username(username), m_statusMessageInput(nullptr),
+      m_gameIPC(wizz::makeIPCKey(username.toStdString())) {
   setWindowTitle("Wizz Mania - " + username);
   setMinimumSize(350, 500);
   resize(400, 600);
+
+  setupGameIPC();
 
   if (!initialPos.isNull()) {
     move(initialPos);
@@ -41,7 +45,7 @@ MainWindow::MainWindow(const QString &username, const QPoint &initialPos,
               if (statusInt > 3)
                 status = UserStatus::Offline; // Fail-safe
 
-              newContacts.append({name, status, "", QPixmap()});
+              newContacts.append({name, status, "", QPixmap(), false, "", 0});
             }
             setContacts(newContacts);
 
@@ -113,6 +117,13 @@ MainWindow::MainWindow(const QString &username, const QPoint &initialPos,
   // Connect Avatar Updated
   connect(&AvatarManager::instance(), &AvatarManager::avatarUpdated, this,
           &MainWindow::updateContactAvatar);
+
+  // Connect Game Status
+  connect(
+      &NetworkManager::instance(), &NetworkManager::gameStatusChanged, this,
+      [this](const QString &username, const QString &gameName, uint32_t score) {
+        updateContactGameStatus(username, gameName, score);
+      });
 
   // Initialize Dialogs
   m_addFriendDialog = new AddFriendDialog(this);
@@ -409,19 +420,28 @@ void MainWindow::setupUI() {
 }
 
 void MainWindow::setContacts(const QList<ContactInfo> &contacts) {
-  // Merge new contacts with existing ones to preserve avatars if already
-  // loaded But since setContacts usually replaces the list, we should check
-  // if we need to re-request avatars
+  // Merge new contacts with existing ones to preserve game states and avatars
+  QList<ContactInfo> mergedContacts = contacts;
+  for (int i = 0; i < mergedContacts.size(); ++i) {
+    for (const auto &existing : m_contacts) {
+      if (mergedContacts[i].username == existing.username) {
+        mergedContacts[i].avatar = existing.avatar;
+        mergedContacts[i].isPlayingGame = existing.isPlayingGame;
+        mergedContacts[i].currentGameName = existing.currentGameName;
+        mergedContacts[i].currentGameScore = existing.currentGameScore;
+        break;
+      }
+    }
+  }
 
-  // For MVP: Just replace list, but request avatars for everyone
-  // Optimization: In real app, check if we already have it.
-
-  m_contacts = contacts;
+  m_contacts = mergedContacts;
   populateContactList();
 
   // Initialize fetching avatars for all contacts
   for (const auto &contact : m_contacts) {
-    AvatarManager::instance().getAvatar(contact.username, 36);
+    if (contact.avatar.isNull()) {
+      AvatarManager::instance().getAvatar(contact.username, 36);
+    }
   }
 
   // Also request my own avatar to ensure it's up to date
@@ -474,6 +494,14 @@ void MainWindow::populateContactList() {
     QString statusText = contact.statusMessage.isEmpty()
                              ? getStatusText(contact.status)
                              : contact.statusMessage;
+
+    // Add game status if playing
+    if (contact.isPlayingGame && !contact.currentGameName.isEmpty()) {
+      statusText = QString("🎮 Playing %1 (Score: %2)")
+                       .arg(contact.currentGameName)
+                       .arg(contact.currentGameScore);
+    }
+
     QLabel *statusLabel = new QLabel(statusText);
     statusLabel->setStyleSheet(
         "font-size: 11px; color: #718096; background: transparent;");
@@ -500,6 +528,26 @@ void MainWindow::updateContactStatus(const QString &username, UserStatus status,
       contact.status = status;
       if (!statusMessage.isEmpty()) {
         contact.statusMessage = statusMessage;
+      }
+      break;
+    }
+  }
+  populateContactList();
+}
+
+void MainWindow::updateContactGameStatus(const QString &username,
+                                         const QString &gameName,
+                                         uint32_t score) {
+  for (ContactInfo &contact : m_contacts) {
+    if (contact.username == username) {
+      if (gameName.isEmpty()) {
+        contact.isPlayingGame = false;
+        contact.currentGameName = "";
+        contact.currentGameScore = 0;
+      } else {
+        contact.isPlayingGame = true;
+        contact.currentGameName = gameName;
+        contact.currentGameScore = score;
       }
       break;
     }
@@ -743,7 +791,7 @@ void MainWindow::addGameIcon(const QString &name, const QString &iconPath) {
 
   // Connect click to launch
   connect(gameBtn, &QPushButton::clicked, this,
-          [name]() { GameLauncher::launchGame(name); });
+          [this, name]() { GameLauncher::launchGame(name, m_username); });
 
   // Insert before the last stretch
   // m_gamesLayout has: stretch, [games...], stretch
@@ -778,4 +826,51 @@ bool MainWindow::eventFilter(QObject *obj, QEvent *event) {
     }
   }
   return QWidget::eventFilter(obj, event);
+}
+
+void MainWindow::setupGameIPC() {
+  m_gameIPCTimer = new QTimer(this);
+  connect(m_gameIPCTimer, &QTimer::timeout, this, &MainWindow::onPollGameIPC);
+  m_gameIPCTimer->start(100); // 100ms
+}
+
+void MainWindow::onPollGameIPC() {
+  // Try to open the shared memory segment that was created by the game
+  bool opened = m_gameIPC.data() != nullptr;
+  if (!opened) {
+    opened = m_gameIPC.openAndMap();
+    if (!opened) {
+      // The game is not running, clear status if needed
+      if (m_lastIPCIsPlaying) {
+        m_lastIPCIsPlaying = false;
+        NetworkManager::instance().sendGameStatus("", 0);
+      }
+      return;
+    }
+  }
+
+  m_gameIPC.lock();
+  const wizz::GameIPCData *data = m_gameIPC.data();
+  if (data) {
+    bool isPlaying = data->isPlaying;
+    uint32_t currentScore = data->currentScore;
+    QString gameName = QString::fromUtf8(data->gameName);
+
+    if (isPlaying != m_lastIPCIsPlaying || currentScore != m_lastIPCScore ||
+        gameName != m_lastIPCGameName) {
+      m_lastIPCIsPlaying = isPlaying;
+      m_lastIPCScore = currentScore;
+      m_lastIPCGameName = gameName;
+
+      if (isPlaying) {
+        NetworkManager::instance().sendGameStatus(gameName, currentScore);
+      } else {
+        NetworkManager::instance().sendGameStatus("", 0);
+        m_gameIPC.unlock();
+        m_gameIPC.close();
+        return;
+      }
+    }
+  }
+  m_gameIPC.unlock();
 }
