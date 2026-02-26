@@ -31,3 +31,10 @@ maquette/
 cert/
 certs/
 *.log
+
+# TLS Certificates (local only)
+certs/server.crt
+certs/server.key
+
+# database (local only)
+wizzmania.db

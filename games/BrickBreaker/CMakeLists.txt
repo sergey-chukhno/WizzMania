@@ -31,6 +31,7 @@ if(NOT SFML_FOUND)
         SFML
         GIT_REPOSITORY https://github.com/SFML/SFML.git
         GIT_TAG        3.0.0
+        DOWNLOAD_EXTRACT_TIMESTAMP TRUE
     )
     FetchContent_MakeAvailable(SFML)
 endif()

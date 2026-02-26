@@ -24,6 +24,7 @@ FetchContent_Declare(
     googletest
     URL https://github.com/google/googletest/archive/refs/tags/v1.14.0.zip
     TLS_VERIFY OFF # Bypass SSL cert checks for Windows compatibility
+    DOWNLOAD_EXTRACT_TIMESTAMP TRUE
   )
 # For Windows: Prevent GTest from overriding our compiler/linker options
 set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
@@ -47,6 +48,7 @@ if(NOT SDL2_FOUND)
       SDL2
       URL https://github.com/libsdl-org/SDL/releases/download/release-2.28.5/SDL2-2.28.5.zip
       TLS_VERIFY OFF # Bypass SSL cert checks for Windows compatibility
+      DOWNLOAD_EXTRACT_TIMESTAMP TRUE
     )
   FetchContent_MakeAvailable(SDL2)
   # SDL2 CMake creates 'SDL2::SDL2-static' or 'SDL2::SDL2' depending on settings
@@ -66,6 +68,7 @@ if(NOT Freetype_FOUND)
         GIT_REPOSITORY https://github.com/freetype/freetype.git
         GIT_TAG VER-2-13-2
         TLS_VERIFY OFF # Bypass SSL cert checks for Windows compatibility
+        DOWNLOAD_EXTRACT_TIMESTAMP TRUE
     )
   FetchContent_MakeAvailable(Freetype)
   if(TARGET freetype)
@@ -93,6 +96,7 @@ if(NOT SDL2_ttf_FOUND)
       SDL2_ttf
       URL https://github.com/libsdl-org/SDL_ttf/releases/download/release-2.22.0/SDL2_ttf-2.22.0.zip
       TLS_VERIFY OFF # Bypass SSL cert checks for Windows compatibility
+      DOWNLOAD_EXTRACT_TIMESTAMP TRUE
     )
   FetchContent_MakeAvailable(SDL2_ttf)
 
@@ -101,6 +105,7 @@ FetchContent_Declare(
     SDL2_image
     URL https://github.com/libsdl-org/SDL_image/releases/download/release-2.6.3/SDL2_image-2.6.3.zip
     TLS_VERIFY OFF # Bypass SSL cert checks for Windows compatibility
+    DOWNLOAD_EXTRACT_TIMESTAMP TRUE
   )
 set(SDL2IMAGE_VENDORED OFF CACHE BOOL "" FORCE)
 set(SDL2IMAGE_BACKEND_IMAGEIO OFF CACHE BOOL "" FORCE) # Mac fix
@@ -109,7 +114,9 @@ FetchContent_MakeAvailable(SDL2_image)
 # SDL2_mixer
 FetchContent_Declare(
   SDL2_mixer
-  URL https://github.com/libsdl-org/SDL_mixer/releases/download/release-2.6.3/SDL2_mixer-2.6.3.zip
+  GIT_REPOSITORY https://github.com/libsdl-org/SDL_mixer.git
+  GIT_TAG        release-2.6.3
+  DOWNLOAD_EXTRACT_TIMESTAMP TRUE
 )
 set(SDL2MIXER_VENDORED OFF CACHE BOOL "" FORCE)
 set(SDL2MIXER_OPUS OFF CACHE BOOL "" FORCE)     # Disable extra formats for speed
