@@ -134,6 +134,17 @@ MainWindow::MainWindow(const QString &username, const QPoint &initialPos,
 
   setupUI();
 
+  // Initialize with any cached contacts that arrived before we connected
+  QList<ContactInfo> initialContacts;
+  for (const auto &c : NetworkManager::instance().getContacts()) {
+    ContactInfo info;
+    info.username = c.first;
+    info.status = static_cast<UserStatus>(c.second);
+    info.statusMessage = "";
+    initialContacts.append(info);
+  }
+  setContacts(initialContacts);
+
   // Request my own avatar immediately
   QTimer::singleShot(
       500, [this]() { AvatarManager::instance().getAvatar(m_username, 50); });
@@ -539,14 +550,8 @@ void MainWindow::onStatusChanged(int index) {
                      m_statusMessageInput ? m_statusMessageInput->text() : "");
 
   // Inform NetworkManager
-  // We need to implement sendStatusChange in NetworkManager first, but for
-  // now we can manually construct packet or assume server knows from
-  // heartbeat? Protocol says: ContactStatusChange(203). We should send
-  // this.
-  wizz::Packet statusPkt(wizz::PacketType::ContactStatusChange);
-  statusPkt.writeInt(static_cast<uint32_t>(m_currentStatus));
-  statusPkt.writeString(""); // Optional message
-  NetworkManager::instance().sendPacket(statusPkt);
+  NetworkManager::instance().sendStatusChange(
+      static_cast<int>(m_currentStatus));
 }
 
 void MainWindow::onAddFriendClicked() {

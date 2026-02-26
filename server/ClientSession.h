@@ -2,6 +2,8 @@
 
 #include "../common/Packet.h"
 #include <asio.hpp>
+#include <asio/ssl.hpp>
+#include <deque>
 #include <functional> // For std::function
 #include <memory>
 #include <string>
@@ -40,19 +42,23 @@ using OnUpdateAvatarCallback = std::function<void(
     std::shared_ptr<ClientSession>, const std::vector<uint8_t> &)>;
 using OnGetAvatarCallback =
     std::function<void(std::shared_ptr<ClientSession>, const std::string &)>;
+// Callback for Disconnect
+using OnDisconnectCallback = std::function<void(int)>;
 
 class ClientSession : public std::enable_shared_from_this<ClientSession> {
 public:
   // Pass Server pointer for Async Task dispatch, and Callbacks
   explicit ClientSession(int sessionId, asio::ip::tcp::socket socket,
-                         TcpServer *server, OnLoginCallback onLogin,
-                         OnMessageCallback onMessage, OnNudgeCallback onNudge,
+                         asio::ssl::context &sslContext, TcpServer *server,
+                         OnLoginCallback onLogin, OnMessageCallback onMessage,
+                         OnNudgeCallback onNudge,
                          OnVoiceMessageCallback onVoiceMessage,
                          OnTypingIndicatorCallback onTypingIndicator,
                          GetStatusCallback getStatus,
                          OnStatusChangeCallback onStatusChange,
                          OnUpdateAvatarCallback onUpdateAvatar,
-                         OnGetAvatarCallback onGetAvatar);
+                         OnGetAvatarCallback onGetAvatar,
+                         OnDisconnectCallback onDisconnect);
   ~ClientSession(); // Closes socket if owned
 
   // Delete copy to prevent double-close of socket
@@ -64,7 +70,9 @@ public:
   ClientSession &operator=(ClientSession &&other) = delete;
 
   int getId() const { return m_sessionId; }
-  asio::ip::tcp::socket &getSocket() { return m_socket; }
+  asio::ip::tcp::socket::lowest_layer_type &getSocket() {
+    return m_socket.lowest_layer();
+  }
   std::string getUsername() const { return m_username; }
 
   // High-level Send Helper (must become async)
@@ -99,7 +107,7 @@ private:
 
 private:
   int m_sessionId;
-  asio::ip::tcp::socket m_socket;
+  asio::ssl::stream<asio::ip::tcp::socket> m_socket;
   std::string m_username;
   bool m_isLoggedIn;
 
@@ -116,9 +124,14 @@ private:
   OnStatusChangeCallback m_onStatusChange;
   OnUpdateAvatarCallback m_onUpdateAvatar;
   OnGetAvatarCallback m_onGetAvatar;
+  OnDisconnectCallback m_onDisconnect;
 
   // Buffer for incoming partial data
   std::vector<uint8_t> m_buffer;
+
+  // Outbound message queue to prevent overlapping async_writes on TLS stream
+  std::deque<std::vector<uint8_t>> m_outbox;
+  void doWrite();
 };
 
 } // namespace wizz

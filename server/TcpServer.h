@@ -6,6 +6,7 @@
 #include <vector>
 
 #include <asio.hpp>
+#include <asio/ssl.hpp>
 
 #include "../common/Types.h"
 #include "ClientSession.h"
@@ -46,6 +47,7 @@ private:
 
   // Boost.Asio Core
   asio::io_context m_ioContext;
+  asio::ssl::context m_sslContext;
   asio::ip::tcp::acceptor m_acceptor;
 
   int m_port;
@@ -89,6 +91,7 @@ private:
   void handleUpdateAvatar(ClientSession *sender,
                           const std::vector<uint8_t> &data);
   void handleGetAvatar(ClientSession *sender, const std::string &target);
+  void handleDisconnect(int sessionId);
 };
 
 } // namespace wizz
