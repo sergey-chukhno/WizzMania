@@ -59,6 +59,7 @@ public:
   bool addFriend(const std::string &username, const std::string &friendName);
   bool removeFriend(const std::string &username, const std::string &friendName);
   std::vector<std::string> getFriends(const std::string &username);
+  std::vector<std::string> getFollowers(const std::string &username);
 
 private:
   void workerLoop();
