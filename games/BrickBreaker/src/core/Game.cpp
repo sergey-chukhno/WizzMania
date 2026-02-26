@@ -80,6 +80,12 @@ void Game::run() {
       running_ = false;
     }
   }
+
+  // Ensure all states are properly exited and cleaned up on game close
+  while (!stateStack_.empty()) {
+    stateStack_.back()->onExit();
+    stateStack_.pop_back();
+  }
 }
 
 void Game::pushState(std::unique_ptr<GameState> state) {
