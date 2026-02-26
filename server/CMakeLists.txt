@@ -11,7 +11,7 @@ add_executable(wizz_server
 target_link_libraries(wizz_server PRIVATE wizz_common)
 # OpenSSL
 find_package(OpenSSL REQUIRED)
-target_link_libraries(wizz_server PRIVATE OpenSSL::Crypto)
+target_link_libraries(wizz_server PRIVATE OpenSSL::SSL OpenSSL::Crypto)
 
 # Asio (Standalone Header-Only via FetchContent to ensure zero local dependencies)
 include(FetchContent)
@@ -27,7 +27,7 @@ endif()
 
 # Bind headers and define Standalone mode so Asio doesn't look for Boost
 target_include_directories(wizz_server PRIVATE ${asio_SOURCE_DIR}/asio/include)
-target_compile_definitions(wizz_server PRIVATE ASIO_STANDALONE)
+target_compile_definitions(wizz_server PRIVATE ASIO_STANDALONE ASIO_HAS_OPENSSL=1)
 
 # SQLite3
 find_package(SQLite3 QUIET)
