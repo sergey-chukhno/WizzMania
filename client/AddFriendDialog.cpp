@@ -78,6 +78,7 @@ void AddFriendDialog::setupUI() {
       "font-size: 12px; color: #e53e3e; font-weight: 600; "
       "background: transparent;");
   m_errorLabel->setAlignment(Qt::AlignCenter);
+  m_errorLabel->setMinimumWidth(300);
   m_errorLabel->setFixedHeight(20);
   frameLayout->addWidget(m_errorLabel);
 
