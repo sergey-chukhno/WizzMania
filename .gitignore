@@ -7,8 +7,6 @@
 *.dylib
 *.dll
 *.so
-.crt
-.key
 
 # CMake Build Artifacts
 build/
@@ -29,3 +27,7 @@ Makefile
 WizzMania.md
 rules.md
 docs/
+
+# TLS Certificates (local only)
+certs/server.crt
+certs/server.key
