@@ -7,6 +7,8 @@
 *.dylib
 *.dll
 *.so
+.crt
+.key
 
 # CMake Build Artifacts
 build/
