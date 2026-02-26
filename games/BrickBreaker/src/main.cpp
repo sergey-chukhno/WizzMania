@@ -7,9 +7,13 @@
  *
  * Creates a Game instance and runs the main game loop.
  */
-int main() {
+int main(int argc, char *argv[]) {
   try {
-    Game game;
+    std::string username = "Guest";
+    if (argc > 1) {
+      username = argv[1];
+    }
+    Game game(username);
     game.run();
   } catch (const std::exception &e) {
     std::cerr << "Error: " << e.what() << std::endl;

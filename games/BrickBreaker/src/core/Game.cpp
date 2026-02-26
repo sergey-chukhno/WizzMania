@@ -11,10 +11,11 @@ const sf::Color Game::NEON_PURPLE(157, 78, 221);
 const sf::Color Game::NEON_GREEN(6, 255, 165);
 const sf::Color Game::BG_DARK(10, 10, 26);
 
-Game::Game()
+Game::Game(const std::string &username)
     : window_(sf::VideoMode(sf::Vector2u(WINDOW_WIDTH, WINDOW_HEIGHT)),
               WINDOW_TITLE),
-      running_(true), fadeAlpha_(1.0f) // Start fully faded (black screen)
+      running_(true), username_(username),
+      fadeAlpha_(1.0f) // Start fully faded (black screen)
       ,
       fadeSpeed_(FADE_SPEED), isFading_(true),
       fadeDirection_(true) // Fade in (black to transparent)
@@ -42,7 +43,7 @@ Game::Game()
   // Initialize UI
   initializeSoundButton();
 
-  std::cout << "Game initialized" << std::endl;
+  std::cout << "Game initialized for user: " << username_ << std::endl;
 }
 
 Game::~Game() {

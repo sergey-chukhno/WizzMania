@@ -287,8 +287,8 @@ void PlayingState::onEnter() {
     std::cout << "Level " << currentLevel_ << " started" << std::endl;
 
     // Initialize IPC
-    sharedMemory_ =
-        std::make_unique<wizz::NativeSharedMemory>(wizz::SHARED_MEMORY_KEY);
+    std::string ipcKey = wizz::makeIPCKey(game_->getUsername());
+    sharedMemory_ = std::make_unique<wizz::NativeSharedMemory>(ipcKey.c_str());
     if (sharedMemory_->createAndMap() || sharedMemory_->openAndMap()) {
       sharedMemory_->lock();
       if (sharedMemory_->data()) {
