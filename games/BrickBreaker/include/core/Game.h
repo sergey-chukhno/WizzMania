@@ -4,6 +4,7 @@
 #include "core/GameState.h"
 #include <SFML/Graphics.hpp>
 #include <memory>
+#include <string>
 #include <vector>
 
 // Forward declaration
@@ -26,8 +27,9 @@ public:
    *
    * Initializes the window with default settings and prepares
    * the game state stack.
+   * @param username The username passed from WizzMania, defaults to Guest
    */
-  Game();
+  explicit Game(const std::string &username = "Guest");
 
   /**
    * @brief Destructor.
@@ -98,6 +100,12 @@ public:
   sf::RenderWindow &getWindow() { return window_; }
 
   /**
+   * @brief Gets the user's username passed down for IPC scoped keys.
+   * @return Reference to the username string
+   */
+  const std::string &getUsername() const { return username_; }
+
+  /**
    * @brief Gets the window width.
    * @return Window width in pixels
    */
@@ -133,7 +141,8 @@ private:
 
   // Game loop control
   bool running_;
-  sf::Clock clock_; // For delta time calculation
+  sf::Clock clock_;      // For delta time calculation
+  std::string username_; // Scoped username of the player
 
   // Fade transition
   float fadeAlpha_;    // Current fade alpha (0.0 to 1.0)
