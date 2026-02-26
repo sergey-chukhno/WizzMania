@@ -15,8 +15,15 @@ namespace fs = std::filesystem;
 TcpServer::TcpServer(int port)
     : m_acceptor(m_ioContext,
                  asio::ip::tcp::endpoint(asio::ip::tcp::v4(), port)),
-      m_port(port), m_isRunning(false), m_db("wizzmania.db") // Default DB file
-{}
+      m_sslContext(asio::ssl::context::tlsv12), m_port(port),
+      m_isRunning(false), m_db("wizzmania.db") {
+  m_sslContext.set_options(asio::ssl::context::default_workarounds |
+                           asio::ssl::context::no_sslv2 |
+                           asio::ssl::context::single_dh_use);
+  m_sslContext.use_certificate_chain_file("server/certs/server.crt");
+  m_sslContext.use_private_key_file("server/certs/server.key",
+                                    asio::ssl::context::pem);
+}
 
 TcpServer::~TcpServer() { stop(); }
 
@@ -68,7 +75,7 @@ void TcpServer::doAccept() {
 
       // Create the Session wrapped in a shared_ptr
       auto session = std::make_shared<ClientSession>(
-          sessionId, std::move(socket), this,
+          sessionId, std::move(socket), m_sslContext, this,
           // 1. OnLogin
           [this](std::shared_ptr<ClientSession> s) { handleLogin(s.get()); },
           // 2. OnMessage (Routing)
@@ -109,7 +116,9 @@ void TcpServer::doAccept() {
           [this](std::shared_ptr<ClientSession> sender,
                  const std::string &target) {
             handleGetAvatar(sender.get(), target);
-          });
+          },
+          // 10. OnDisconnect Callback
+          [this](int sessionId) { handleDisconnect(sessionId); });
 
       m_sessions[sessionId] = session;
       session->start(); // Begin reading asynchronously
@@ -154,10 +163,10 @@ void wizz::TcpServer::handleLogin(ClientSession *session) {
     for (const auto &msg : pending) {
       m_db.markAsDelivered(msg.id);
     }
-    auto friends = m_db.getFriends(username);
+    auto followers = m_db.getFollowers(username);
 
     postResponse([this, username, sessionId, pending = std::move(pending),
-                  friends = std::move(friends)]() {
+                  followers = std::move(followers)]() {
       ClientSession *session = getSession(sessionId);
       if (!session)
         return;
@@ -165,12 +174,12 @@ void wizz::TcpServer::handleLogin(ClientSession *session) {
       std::cout << "[Server] User Online: " << username << std::endl;
       m_onlineUsers[username] = session;
 
-      // Broadcast Online Status to Friends
-      for (const auto &friendName : friends) {
-        auto it = m_onlineUsers.find(friendName);
+      // Broadcast Online Status to Followers
+      for (const auto &followerName : followers) {
+        auto it = m_onlineUsers.find(followerName);
         if (it != m_onlineUsers.end()) {
           Packet notify(PacketType::ContactStatusChange);
-          notify.writeInt(1); // Online
+          notify.writeInt(0); // Online
           notify.writeString(username);
           it->second->sendPacket(notify);
         }
@@ -335,18 +344,19 @@ void wizz::TcpServer::handleStatusChange(ClientSession *sender, int newStatus) {
   m_userStatuses[username] = newStatus;
 
   m_db.postTask([this, username, newStatus]() {
-    auto friends = m_db.getFriends(username);
-    postResponse([this, username, newStatus, friends = std::move(friends)]() {
-      for (const auto &friendName : friends) {
-        auto it = m_onlineUsers.find(friendName);
-        if (it != m_onlineUsers.end()) {
-          Packet notify(PacketType::ContactStatusChange);
-          notify.writeInt(static_cast<uint32_t>(newStatus));
-          notify.writeString(username);
-          it->second->sendPacket(notify);
-        }
-      }
-    });
+    auto followers = m_db.getFollowers(username);
+    postResponse(
+        [this, username, newStatus, followers = std::move(followers)]() {
+          for (const auto &followerName : followers) {
+            auto it = m_onlineUsers.find(followerName);
+            if (it != m_onlineUsers.end()) {
+              Packet notify(PacketType::ContactStatusChange);
+              notify.writeInt(static_cast<uint32_t>(newStatus));
+              notify.writeString(username);
+              it->second->sendPacket(notify);
+            }
+          }
+        });
   });
 }
 
@@ -443,4 +453,47 @@ void wizz::TcpServer::handleGetAvatar(ClientSession *sender,
                     << " bytes) to " << session->getUsername() << std::endl;
         });
   });
+}
+
+void wizz::TcpServer::handleDisconnect(int sessionId) {
+  auto it = m_sessions.find(sessionId);
+  if (it == m_sessions.end())
+    return;
+
+  std::string username = it->second->getUsername();
+  if (!username.empty()) {
+    m_db.postTask([this, username, sessionId]() {
+      auto followers = m_db.getFollowers(username);
+
+      postResponse(
+          [this, username, sessionId, followers = std::move(followers)]() {
+            // Erase from sessions
+            auto sessionIt = m_sessions.find(sessionId);
+            if (sessionIt != m_sessions.end()) {
+              m_sessions.erase(sessionIt);
+            }
+
+            // Erase from online users and broadcast if they were online
+            auto onlineIt = m_onlineUsers.find(username);
+            if (onlineIt != m_onlineUsers.end()) {
+              m_onlineUsers.erase(onlineIt);
+              m_userStatuses[username] = 3; // Offline
+              std::cout << "[Server] User Offline (Disconnected): " << username
+                        << std::endl;
+
+              for (const auto &followerName : followers) {
+                auto fIt = m_onlineUsers.find(followerName);
+                if (fIt != m_onlineUsers.end()) {
+                  Packet notify(PacketType::ContactStatusChange);
+                  notify.writeInt(3); // Offline
+                  notify.writeString(username);
+                  fIt->second->sendPacket(notify);
+                }
+              }
+            }
+          });
+    });
+  } else {
+    m_sessions.erase(it);
+  }
 }

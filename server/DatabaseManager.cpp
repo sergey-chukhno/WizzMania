@@ -260,6 +260,31 @@ bool DatabaseManager::removeFriend(const std::string &username,
 }
 
 std::vector<std::string>
+DatabaseManager::getFollowers(const std::string &username) {
+  std::vector<std::string> followers;
+  const char *sql =
+      "SELECT u.USERNAME FROM users u "
+      "JOIN friends f ON u.ID = f.user_id "
+      "WHERE f.friend_id = (SELECT ID FROM users WHERE USERNAME = ?);";
+
+  sqlite3_stmt *stmt;
+  if (sqlite3_prepare_v2(m_db, sql, -1, &stmt, nullptr) != SQLITE_OK)
+    return followers;
+
+  sqlite3_bind_text(stmt, 1, username.c_str(), -1, SQLITE_STATIC);
+
+  while (sqlite3_step(stmt) == SQLITE_ROW) {
+    const char *name =
+        reinterpret_cast<const char *>(sqlite3_column_text(stmt, 0));
+    if (name)
+      followers.emplace_back(name);
+  }
+
+  sqlite3_finalize(stmt);
+  return followers;
+}
+
+std::vector<std::string>
 DatabaseManager::getFriends(const std::string &username) {
   std::vector<std::string> friends;
   // Get Friend ID -> Join Users
