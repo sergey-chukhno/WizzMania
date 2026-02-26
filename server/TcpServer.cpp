@@ -169,9 +169,11 @@ void wizz::TcpServer::handleLogin(ClientSession *session) {
       m_db.markAsDelivered(msg.id);
     }
     auto followers = m_db.getFollowers(username);
+    auto friends = m_db.getFriends(username);
 
     postResponse([this, username, sessionId, pending = std::move(pending),
-                  followers = std::move(followers)]() {
+                  followers = std::move(followers),
+                  friends = std::move(friends)]() {
       ClientSession *session = getSession(sessionId);
       if (!session)
         return;
@@ -179,7 +181,7 @@ void wizz::TcpServer::handleLogin(ClientSession *session) {
       std::cout << "[Server] User Online: " << username << std::endl;
       m_onlineUsers[username] = session;
 
-      // Broadcast Online Status to Followers
+      // Broadcast Online Status to Followers (so they know I am online)
       for (const auto &followerName : followers) {
         auto it = m_onlineUsers.find(followerName);
         if (it != m_onlineUsers.end()) {
@@ -187,6 +189,24 @@ void wizz::TcpServer::handleLogin(ClientSession *session) {
           notify.writeInt(0); // Online
           notify.writeString(username);
           it->second->sendPacket(notify);
+        }
+      }
+
+      // Sync Initial Statuses (so I know which of my friends are already
+      // online)
+      for (const auto &friendName : friends) {
+        auto it = m_onlineUsers.find(friendName);
+        if (it != m_onlineUsers.end()) {
+          int status = 0; // Default Online
+          auto statusIt = m_userStatuses.find(friendName);
+          if (statusIt != m_userStatuses.end()) {
+            status = statusIt->second;
+          }
+
+          Packet notify(PacketType::ContactStatusChange);
+          notify.writeInt(status);
+          notify.writeString(friendName);
+          session->sendPacket(notify);
         }
       }
 
