@@ -18,6 +18,7 @@ include(FetchContent)
 FetchContent_Declare(
     asio
     URL "https://github.com/chriskohlhoff/asio/archive/refs/tags/asio-1-30-2.tar.gz"
+    DOWNLOAD_EXTRACT_TIMESTAMP TRUE
 )
 FetchContent_GetProperties(asio)
 if(NOT asio_POPULATED)
@@ -41,6 +42,7 @@ else()
     FetchContent_Declare(
         sqlite3_src
         URL "https://sqlite.org/2024/sqlite-amalgamation-3450100.zip"
+        DOWNLOAD_EXTRACT_TIMESTAMP TRUE
     )
     FetchContent_GetProperties(sqlite3_src)
     if(NOT sqlite3_src_POPULATED)
