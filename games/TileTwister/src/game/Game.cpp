@@ -9,7 +9,7 @@
 
 namespace Game {
 
-Game::Game()
+Game::Game(const std::string &username)
     : m_context(), m_window("Tile Twister - 2048", WINDOW_WIDTH, WINDOW_HEIGHT),
       m_renderer(m_window, WINDOW_WIDTH, WINDOW_HEIGHT),
       m_font("assets/ClearSans-Bold.ttf", 40),      // Tile Font
@@ -114,9 +114,11 @@ Game::Game()
 
   resetGame();
 
-  // Initialize IPC
-  m_sharedMemory =
-      std::make_unique<wizz::NativeSharedMemory>(wizz::SHARED_MEMORY_KEY);
+  // Initialize IPC with user-scoped, sanitized key (e.g.
+  // WizzMania_Game_IPC_Mr_Krab) Sanitization replaces spaces and special chars
+  // to ensure a valid POSIX name.
+  std::string ipcKey = wizz::makeIPCKey(username);
+  m_sharedMemory = std::make_unique<wizz::NativeSharedMemory>(ipcKey);
   if (m_sharedMemory->createAndMap() || m_sharedMemory->openAndMap()) {
     m_sharedMemory->lock();
     if (m_sharedMemory->data()) {
@@ -142,7 +144,9 @@ Game::~Game() {
       m_sharedMemory->data()->isPlaying = false;
     }
     m_sharedMemory->unlock();
-    m_sharedMemory->close();
+    // unlink() removes the POSIX segment name from the OS namespace,
+    // allowing a clean createAndMap() next time the game starts.
+    m_sharedMemory->unlink();
   }
 }
 

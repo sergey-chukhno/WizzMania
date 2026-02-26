@@ -3,9 +3,11 @@
 #include <SDL2/SDL.h>
 #include <iostream>
 
-int main(int /*argc*/, char * /*argv*/[]) {
+int main(int argc, char *argv[]) {
+  std::string username = (argc > 1) ? argv[1] : "player";
+
   try {
-    Game::Game game;
+    Game::Game game(username);
     game.run();
   } catch (const std::exception &e) {
     std::cerr << "Fatal Error: " << e.what() << std::endl;

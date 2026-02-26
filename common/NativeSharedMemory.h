@@ -35,6 +35,10 @@ public:
     return m_data != nullptr && m_hMutex != nullptr;
 #else
     // POSIX implementation (macOS / Linux)
+    // O_CREAT without O_EXCL: creates the segment if new, or re-opens the
+    // existing one (same physical pages). This guarantees the game and the
+    // client always share the SAME mmap region regardless of startup order,
+    // because both call shm_open() on the same name and get the same fd.
     std::string shmName = "/" + m_name;
     m_fd = shm_open(shmName.c_str(), O_CREAT | O_RDWR, 0666);
     if (m_fd == -1) {
@@ -60,6 +64,10 @@ public:
     if (m_sem == SEM_FAILED) {
       std::cerr << "NativeSharedMemory: sem_open failed" << std::endl;
       m_sem = nullptr;
+      if (m_data) {
+        munmap(m_data, sizeof(GameIPCData));
+        m_data = nullptr;
+      }
       return false;
     }
 
@@ -93,6 +101,10 @@ public:
     m_sem = sem_open(semName.c_str(), 0);
     if (m_sem == SEM_FAILED) {
       m_sem = nullptr;
+      if (m_data) {
+        munmap(m_data, sizeof(GameIPCData));
+        m_data = nullptr;
+      }
       return false;
     }
 

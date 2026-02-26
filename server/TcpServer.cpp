@@ -473,9 +473,9 @@ void wizz::TcpServer::handleGameStatus(ClientSession *sender,
   pkt.writeInt(score);
 
   // Broadcast
-  std::vector<std::string> friends = m_db.getFriends(username);
-  for (const auto &friendName : friends) {
-    auto it = m_onlineUsers.find(friendName);
+  std::vector<std::string> followers = m_db.getFollowers(username);
+  for (const auto &followerName : followers) {
+    auto it = m_onlineUsers.find(followerName);
     if (it != m_onlineUsers.end()) {
       it->second->sendPacket(pkt);
     }

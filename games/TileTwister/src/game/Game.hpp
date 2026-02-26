@@ -29,7 +29,7 @@ enum class GameState {
 
 class Game {
 public:
-  Game();
+  explicit Game(const std::string &username = "player");
   ~Game();
 
   void run();

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../common/NativeSharedMemory.h"
 #include "../common/Packet.h"
 #include <QComboBox>
 #include <QFrame>
@@ -10,7 +11,6 @@
 #include <QProcess>
 #include <QPushButton>
 #include <QScrollArea>
-#include <QSharedMemory>
 #include <QTimer>
 #include <QVBoxLayout>
 #include <QWidget>
@@ -112,7 +112,7 @@ private:
 
   // IPC (Game Status Polling)
   void setupGameIPC();
-  QSharedMemory m_gameIPC;
+  wizz::NativeSharedMemory m_gameIPC;
   QTimer *m_gameIPCTimer = nullptr;
 
   // Track last IPC state to only broadcast changes

@@ -19,7 +19,8 @@
 #include <QTimer>
 MainWindow::MainWindow(const QString &username, const QPoint &initialPos,
                        QWidget *parent)
-    : QWidget(parent), m_username(username), m_statusMessageInput(nullptr) {
+    : QWidget(parent), m_username(username), m_statusMessageInput(nullptr),
+      m_gameIPC(wizz::makeIPCKey(username.toStdString())) {
   setWindowTitle("Wizz Mania - " + username);
   setMinimumSize(350, 500);
   resize(400, 600);
@@ -44,7 +45,7 @@ MainWindow::MainWindow(const QString &username, const QPoint &initialPos,
               if (statusInt > 3)
                 status = UserStatus::Offline; // Fail-safe
 
-              newContacts.append({name, status, "", QPixmap()});
+              newContacts.append({name, status, "", QPixmap(), false, "", 0});
             }
             setContacts(newContacts);
 
@@ -419,19 +420,28 @@ void MainWindow::setupUI() {
 }
 
 void MainWindow::setContacts(const QList<ContactInfo> &contacts) {
-  // Merge new contacts with existing ones to preserve avatars if already
-  // loaded But since setContacts usually replaces the list, we should check
-  // if we need to re-request avatars
+  // Merge new contacts with existing ones to preserve game states and avatars
+  QList<ContactInfo> mergedContacts = contacts;
+  for (int i = 0; i < mergedContacts.size(); ++i) {
+    for (const auto &existing : m_contacts) {
+      if (mergedContacts[i].username == existing.username) {
+        mergedContacts[i].avatar = existing.avatar;
+        mergedContacts[i].isPlayingGame = existing.isPlayingGame;
+        mergedContacts[i].currentGameName = existing.currentGameName;
+        mergedContacts[i].currentGameScore = existing.currentGameScore;
+        break;
+      }
+    }
+  }
 
-  // For MVP: Just replace list, but request avatars for everyone
-  // Optimization: In real app, check if we already have it.
-
-  m_contacts = contacts;
+  m_contacts = mergedContacts;
   populateContactList();
 
   // Initialize fetching avatars for all contacts
   for (const auto &contact : m_contacts) {
-    AvatarManager::instance().getAvatar(contact.username, 36);
+    if (contact.avatar.isNull()) {
+      AvatarManager::instance().getAvatar(contact.username, 36);
+    }
   }
 
   // Also request my own avatar to ensure it's up to date
@@ -781,7 +791,7 @@ void MainWindow::addGameIcon(const QString &name, const QString &iconPath) {
 
   // Connect click to launch
   connect(gameBtn, &QPushButton::clicked, this,
-          [name]() { GameLauncher::launchGame(name); });
+          [this, name]() { GameLauncher::launchGame(name, m_username); });
 
   // Insert before the last stretch
   // m_gamesLayout has: stretch, [games...], stretch
@@ -819,15 +829,18 @@ bool MainWindow::eventFilter(QObject *obj, QEvent *event) {
 }
 
 void MainWindow::setupGameIPC() {
-  m_gameIPC.setKey(QString::fromStdString(wizz::SHARED_MEMORY_KEY));
   m_gameIPCTimer = new QTimer(this);
   connect(m_gameIPCTimer, &QTimer::timeout, this, &MainWindow::onPollGameIPC);
   m_gameIPCTimer->start(100); // 100ms
 }
 
 void MainWindow::onPollGameIPC() {
-  if (!m_gameIPC.isAttached()) {
-    if (!m_gameIPC.attach(QSharedMemory::ReadOnly)) {
+  // Try to open the shared memory segment that was created by the game
+  bool opened = m_gameIPC.data() != nullptr;
+  if (!opened) {
+    opened = m_gameIPC.openAndMap();
+    if (!opened) {
+      // The game is not running, clear status if needed
       if (m_lastIPCIsPlaying) {
         m_lastIPCIsPlaying = false;
         NetworkManager::instance().sendGameStatus("", 0);
@@ -836,31 +849,28 @@ void MainWindow::onPollGameIPC() {
     }
   }
 
-  if (m_gameIPC.lock()) {
-    const wizz::GameIPCData *data =
-        static_cast<const wizz::GameIPCData *>(m_gameIPC.constData());
-    if (data) {
-      bool isPlaying = data->isPlaying;
-      uint32_t currentScore = data->currentScore;
-      QString gameName = QString::fromUtf8(data->gameName);
+  m_gameIPC.lock();
+  const wizz::GameIPCData *data = m_gameIPC.data();
+  if (data) {
+    bool isPlaying = data->isPlaying;
+    uint32_t currentScore = data->currentScore;
+    QString gameName = QString::fromUtf8(data->gameName);
 
-      if (isPlaying != m_lastIPCIsPlaying || currentScore != m_lastIPCScore ||
-          gameName != m_lastIPCGameName) {
-        m_lastIPCIsPlaying = isPlaying;
-        m_lastIPCScore = currentScore;
-        m_lastIPCGameName = gameName;
+    if (isPlaying != m_lastIPCIsPlaying || currentScore != m_lastIPCScore ||
+        gameName != m_lastIPCGameName) {
+      m_lastIPCIsPlaying = isPlaying;
+      m_lastIPCScore = currentScore;
+      m_lastIPCGameName = gameName;
 
-        if (m_lastIPCIsPlaying) {
-          NetworkManager::instance().sendGameStatus(m_lastIPCGameName,
-                                                    m_lastIPCScore);
-        } else {
-          NetworkManager::instance().sendGameStatus("", 0);
-          m_gameIPC.unlock();
-          m_gameIPC.detach();
-          return;
-        }
+      if (isPlaying) {
+        NetworkManager::instance().sendGameStatus(gameName, currentScore);
+      } else {
+        NetworkManager::instance().sendGameStatus("", 0);
+        m_gameIPC.unlock();
+        m_gameIPC.close();
+        return;
       }
     }
-    m_gameIPC.unlock();
   }
+  m_gameIPC.unlock();
 }
