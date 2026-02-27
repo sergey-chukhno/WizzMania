@@ -1,0 +1,859 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Présentation de l'Architecture WizzMania</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+</head>
+
+<body>
+
+    <!-- Structure animée en arrière-plan -->
+    <div class="bg-shape shape-1"></div>
+    <div class="bg-shape shape-2"></div>
+    <div class="bg-shape shape-3"></div>
+
+    <main class="presentation-container">
+
+        <!-- Diapositive 1 : Introduction -->
+        <section class="slide active" id="slide-1">
+            <div class="glass-panel main-panel">
+                <div class="content-left">
+                    <h1 class="glitch" data-text="WizzMania">WizzMania</h1>
+                    <h2>Messagerie Haute Performance</h2>
+                    <p>Découvrez une communication ultra-fluide basée sur une architecture C++ robuste. Avec séparation
+                        des threads, boucles d'événements Boost.Asio et IPC par mémoire partagée POSIX.</p>
+                </div>
+                <div class="content-right holographic-container">
+                    <!-- City background -->
+                    <img src="assets/cyberpunk_city_bg.png" alt="Neo-Seoul City" class="city-bg">
+
+                    <!-- App in virtual 3D space -->
+                    <div class="app-3d-scene hologram-app" id="hologramApp">
+                        <!-- Neon scanlines effect -->
+                        <div class="scanlines"></div>
+
+                        <!-- Real HTML/CSS replica of the App -->
+                        <!-- 3D Extrusion Layers -->
+                        <div class="glass-layer layer-1"></div>
+                        <div class="glass-layer layer-2"></div>
+
+                        <div class="mockup-window holographic-glass">
+                            <div class="mockup-header">
+                                <div class="header-top">
+                                    <div class="brand">
+                                        <div class="brand-sparkle"></div>
+                                        <span class="logo-w">W</span>izzMania
+                                    </div>
+                                    <div class="header-search">
+                                        <span class="search-icon">⚲</span>
+                                        <input type="text" placeholder="Search">
+                                    </div>
+                                    <div class="header-profile">
+                                        <div class="notif">🔔<span class="badge">5</span></div>
+                                        <div class="avatar moi">M</div>
+                                        <div class="profile-text">
+                                            <span class="name">Moi</span>
+                                            <span class="status">Online</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="header-bottom">
+                                    <div class="header-actions">
+                                        <span class="icon">💬</span>
+                                        <span class="icon">📇</span>
+                                        <span class="icon">📄</span>
+                                        <span class="icon">📞</span>
+                                        <span class="icon">⚙️</span>
+                                    </div>
+                                    <div class="nav-tabs">
+                                        <span class="tab active">CHATS</span>
+                                        <span class="tab">CONTACTS</span>
+                                        <span class="tab">CALLS</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="mockup-body">
+                                <div class="sidebar">
+                                    <div class="chat-item">
+                                        <div class="avatar-wrap">
+                                            <div class="avatar elodie">E</div>
+                                            <div class="online-dot"></div>
+                                        </div>
+                                        <div class="chat-info">
+                                            <span class="name">Elodie</span>
+                                            <span class="preview">Parfait, la GUI est synchro...</span>
+                                        </div>
+                                        <span class="time">20:14</span>
+                                    </div>
+                                    <div class="chat-item active-pill">
+                                        <div class="avatar-wrap">
+                                            <div class="avatar louis">L</div>
+                                            <div class="online-dot active"></div>
+                                        </div>
+                                        <div class="chat-info">
+                                            <span class="name">Louis V. <i class="verified">✔</i></span>
+                                            <span class="preview">Affirmatif. Intercepting.</span>
+                                        </div>
+                                        <span class="time">20:15</span>
+                                    </div>
+                                    <div class="chat-item alert-pill">
+                                        <div class="avatar warn">!</div>
+                                        <div class="chat-info">
+                                            <span class="name">System Alerts</span>
+                                            <span class="preview">10 000 connexions ok.</span>
+                                        </div>
+                                        <span class="time">20:15</span>
+                                    </div>
+                                </div>
+                                <div class="chat-area">
+                                    <div class="chat-target">
+                                        <div class="avatar-wrap">
+                                            <div class="avatar louis">L</div>
+                                            <div class="online-dot active"></div>
+                                        </div>
+                                        <div class="target-info">
+                                            <span class="target-name">Louis V. <i class="verified">✔</i></span>
+                                            <span class="target-status">Avatar, Active Now</span>
+                                        </div>
+                                        <div class="target-actions">
+                                            <span class="icon">⚲</span>
+                                            <span class="icon">≡</span>
+                                        </div>
+                                    </div>
+                                    <div class="messages" id="chatMessages">
+                                        <!-- Messages appeared dynamically -->
+                                    </div>
+                                    <div class="input-container">
+                                        <span class="typing-indicator" id="typingIndicator">Louis est en train
+                                            d'écrire...</span>
+                                        <div class="input-box">
+                                            <span class="icon">💬</span>
+                                            <span class="icon">📄</span>
+                                            <input type="text" disabled placeholder="Live secure channel open...">
+                                            <span class="icon">🎤</span>
+                                            <span class="icon">😊</span>
+                                            <div class="send-wrap">
+                                                <button class="send-btn">➤</button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Diapositive 2 : Équipe -->
+        <section class="slide hidden" id="slide-2">
+            <h1 class="section-title">L'Équipe d'Ingénierie</h1>
+            <div class="team-grid">
+                <!-- Sergey -->
+                <div class="glass-panel team-card">
+                    <div class="avatar-ring">
+                        <img src="assets/sergey.png" alt="Sergey - Architecte Logiciel">
+                    </div>
+                    <h3>Sergey</h3>
+                    <p class="role">Architecte Logiciel</p>
+                    <p class="desc">Créateur du moteur multi-threads C++ et des systèmes IPC.</p>
+                </div>
+
+                <!-- Louis -->
+                <div class="glass-panel team-card">
+                    <div class="avatar-ring">
+                        <img src="assets/louis.png" alt="Louis - Leader Technique">
+                    </div>
+                    <h3>Louis</h3>
+                    <p class="role">Leader Technique</p>
+                    <p class="desc">Expert du serveur Asio asynchrone et de la cybersécurité TLS.</p>
+                </div>
+
+                <!-- Elodie -->
+                <div class="glass-panel team-card">
+                    <div class="avatar-ring">
+                        <img src="assets/elodie.png" alt="Elodie - Développeuse Principale">
+                    </div>
+                    <h3>Elodie</h3>
+                    <p class="role">Développeuse Principale</p>
+                    <p class="desc">Réalisation de l'interface client Qt et gestion des bases SQLite.</p>
+                </div>
+            </div>
+        </section>
+
+        <section class="slide hidden" id="slide-3">
+            <h1 class="section-title">Architecture Client-Serveur</h1>
+            <div class="glass-panel arch-panel" id="archPanel">
+                <div class="arch-info">
+                    <p>WizzMania utilise un modèle <strong>Proactor</strong> asynchrone. Le serveur gère des milliers de
+                        flux TLS avec <strong>Boost.Asio</strong>, déportant les I/O vers des threads secondaires.</p>
+                </div>
+
+                <!-- Custom Interactive Architecture Diagram -->
+                <div class="arch-grid">
+                    <!-- Row 1: Games → SharedMem → Client -->
+                    <div class="arch-row">
+                        <div class="arch-group" data-group="games">
+                            <div class="group-label">🎮 Jeux Indépendants</div>
+                            <div class="arch-nodes">
+                                <div class="arch-node" data-id="bb" data-highlight="games">
+                                    <span class="node-icon">⬛</span>
+                                    <span class="node-title">BrickBreaker</span>
+                                    <span class="node-sub">SFML • C++</span>
+                                </div>
+                                <div class="arch-node" data-id="tt" data-highlight="games">
+                                    <span class="node-icon">🟧</span>
+                                    <span class="node-title">TileTwister</span>
+                                    <span class="node-sub">SDL2 • C++</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="arch-arrow-label">
+                            <span class="arrow-text">IPC POSIX →</span>
+                            <div class="flow-dot"></div>
+                        </div>
+
+                        <div class="arch-node solo" data-id="shm" data-highlight="ipc">
+                            <span class="node-icon">📦</span>
+                            <span class="node-title">Mémoire Partagée</span>
+                            <span class="node-sub">Shared Memory</span>
+                        </div>
+
+                        <div class="arch-arrow-label">
+                            <span class="arrow-text">Synchro RAM →</span>
+                            <div class="flow-dot"></div>
+                        </div>
+
+                        <div class="arch-group" data-group="client">
+                            <div class="group-label">💻 Client WizzMania Qt</div>
+                            <div class="arch-nodes">
+                                <div class="arch-node" data-id="qshm" data-highlight="client">
+                                    <span class="node-icon">🧠</span>
+                                    <span class="node-title">QSharedMemory</span>
+                                    <span class="node-sub">Lecture scores</span>
+                                </div>
+                                <div class="arch-node" data-id="ui" data-highlight="client">
+                                    <span class="node-icon">🖼️</span>
+                                    <span class="node-title">Interface Qt</span>
+                                    <span class="node-sub">Signaux / Slots</span>
+                                </div>
+                                <div class="arch-node" data-id="nm" data-highlight="client">
+                                    <span class="node-icon">🌐</span>
+                                    <span class="node-title">NetworkManager</span>
+                                    <span class="node-sub">QThread dédié</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Vertical Connection Arrow -->
+                    <div class="arch-vertical-arrow">
+                        <span class="arrow-text-v">⬇ Sockets TLS 🔒 ⬆</span>
+                        <div class="flow-dot vertical"></div>
+                    </div>
+
+                    <!-- Row 2: Server → DB -->
+                    <div class="arch-row">
+                        <div class="arch-group wide" data-group="server">
+                            <div class="group-label">🖥️ Serveur Boost.Asio</div>
+                            <div class="arch-nodes">
+                                <div class="arch-node" data-id="tcp" data-highlight="server">
+                                    <span class="node-icon">🔌</span>
+                                    <span class="node-title">Accepteur TCP TLS</span>
+                                    <span class="node-sub">async_accept</span>
+                                </div>
+                                <div class="arch-node" data-id="router" data-highlight="server">
+                                    <span class="node-icon">🔀</span>
+                                    <span class="node-title">Routeur de Messages</span>
+                                    <span class="node-sub">Dispatch packets</span>
+                                </div>
+                                <div class="arch-node" data-id="dbw" data-highlight="server">
+                                    <span class="node-icon">⚙️</span>
+                                    <span class="node-title">Thread Base de Données</span>
+                                    <span class="node-sub">async I/O worker</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="arch-arrow-label">
+                            <span class="arrow-text">SQL →</span>
+                            <div class="flow-dot"></div>
+                        </div>
+
+                        <div class="arch-node solo db-node" data-id="db" data-highlight="db">
+                            <span class="node-icon">💾</span>
+                            <span class="node-title">SQLite DB</span>
+                            <span class="node-sub">Stockage persistant</span>
+                        </div>
+                    </div>
+                </div>
+                <p class="arch-hint">💡 Survolez un composant pour le mettre en évidence</p>
+            </div>
+        </section>
+
+        <!-- Diapositive 4 : Architecture Serveur -->
+        <section class="slide hidden" id="slide-4">
+            <h1 class="section-title">Architecture du Serveur</h1>
+            <p class="slide4-subtitle">Modèle <strong>Proactor</strong> asynchrone — 3 composants clés en C++17</p>
+
+            <div class="server-panels">
+                <!-- Panel 1: TcpServer -->
+                <div class="server-card" data-panel="tcp">
+                    <div class="card-header">
+                        <span class="card-icon">🔌</span>
+                        <div>
+                            <h3>TcpServer</h3>
+                            <span class="card-file">TcpServer.h / .cpp</span>
+                        </div>
+                    </div>
+                    <p class="card-desc">Point d'entrée du serveur. Gère le <strong>io_context</strong> Boost.Asio,
+                        l'accepteur TLS, et le registre des sessions connectées.</p>
+                    <div class="card-code">
+                        <div class="code-label">doAccept() — Boucle asynchrone</div>
+                        <pre><code><span class="kw">void</span> TcpServer::<span class="fn">doAccept</span>() {
+  m_acceptor.<span class="fn">async_accept</span>(
+    [<span class="kw">this</span>](<span class="type">asio::error_code</span> ec,
+           <span class="type">asio::ip::tcp::socket</span> socket) {
+      <span class="kw">auto</span> session = std::<span class="fn">make_shared</span>&lt;<span class="type">ClientSession</span>&gt;(
+          sessionId, std::<span class="fn">move</span>(socket),
+          m_sslContext, <span class="kw">this</span>, <span class="cm">/*callbacks*/</span>);
+      m_sessions[sessionId] = session;
+      session-&gt;<span class="fn">start</span>();
+      <span class="fn">doAccept</span>(); <span class="cm">// Recursive async</span>
+  });
+}</code></pre>
+                    </div>
+                    <div class="card-members">
+                        <span class="member"><span class="type-badge">field</span> asio::io_context</span>
+                        <span class="member"><span class="type-badge">field</span> ssl::context</span>
+                        <span class="member"><span class="type-badge">field</span> tcp::acceptor</span>
+                        <span class="member"><span class="type-badge method">method</span> doAccept()</span>
+                        <span class="member"><span class="type-badge method">method</span> handleLogin()</span>
+                        <span class="member"><span class="type-badge method">method</span> handleMessage()</span>
+                    </div>
+                </div>
+
+                <!-- Panel 2: ClientSession -->
+                <div class="server-card" data-panel="session">
+                    <div class="card-header">
+                        <span class="card-icon">🔗</span>
+                        <div>
+                            <h3>ClientSession</h3>
+                            <span class="card-file">ClientSession.h / .cpp</span>
+                        </div>
+                    </div>
+                    <p class="card-desc">Une session par client. Hérite de <strong>enable_shared_from_this</strong> pour
+                        des callbacks asynchrones sécurisés. Gère le flux TLS et le routage de paquets.</p>
+                    <div class="card-code">
+                        <div class="code-label">doRead() — Lecture async TLS</div>
+                        <pre><code><span class="kw">void</span> ClientSession::<span class="fn">doRead</span>() {
+  <span class="kw">auto</span> self(<span class="fn">shared_from_this</span>());
+  m_socket.<span class="fn">async_read_some</span>(
+    asio::<span class="fn">buffer</span>(m_buffer),
+    [<span class="kw">this</span>, self](<span class="type">asio::error_code</span> ec,
+                  <span class="type">std::size_t</span> len) {
+      <span class="kw">if</span> (!ec) {
+        <span class="fn">onDataReceived</span>(m_buffer.data(), len);
+      } <span class="kw">else</span> {
+        m_onDisconnect(m_sessionId);
+      }
+  });
+}</code></pre>
+                    </div>
+                    <div class="card-members">
+                        <span class="member"><span class="type-badge">field</span> ssl::stream&lt;tcp::socket&gt;</span>
+                        <span class="member"><span class="type-badge">field</span> deque&lt;vector&gt; m_outbox</span>
+                        <span class="member"><span class="type-badge method">method</span> doRead()</span>
+                        <span class="member"><span class="type-badge method">method</span> sendPacket()</span>
+                        <span class="member"><span class="type-badge method">method</span> processPacket()</span>
+                        <span class="member"><span class="type-badge cb">callback</span> OnLoginCallback</span>
+                    </div>
+                </div>
+
+                <!-- Panel 3: DatabaseManager -->
+                <div class="server-card" data-panel="db">
+                    <div class="card-header">
+                        <span class="card-icon">💾</span>
+                        <div>
+                            <h3>DatabaseManager</h3>
+                            <span class="card-file">DatabaseManager.h / .cpp</span>
+                        </div>
+                    </div>
+                    <p class="card-desc">Modèle <strong>Actor</strong> : un thread dédié consomme une file de tâches via
+                        <code>condition_variable</code>, isolant les I/O SQLite du thread réseau.
+                    </p>
+                    <div class="card-code">
+                        <div class="code-label">workerLoop() — Actor Pattern</div>
+                        <pre><code><span class="kw">void</span> DatabaseManager::<span class="fn">workerLoop</span>() {
+  <span class="kw">while</span> (<span class="kw">true</span>) {
+    std::<span class="type">function</span>&lt;<span class="kw">void</span>()&gt; task;
+    {
+      <span class="type">unique_lock</span>&lt;<span class="type">mutex</span>&gt; lock(m_mutex);
+      m_cv.<span class="fn">wait</span>(lock, [<span class="kw">this</span>] {
+        <span class="kw">return</span> m_stopWorker || !m_tasks.<span class="fn">empty</span>();
+      });
+      task = std::<span class="fn">move</span>(m_tasks.<span class="fn">front</span>());
+      m_tasks.<span class="fn">pop</span>();
+    }
+    <span class="kw">if</span> (task) task();
+  }
+}</code></pre>
+                    </div>
+                    <div class="card-members">
+                        <span class="member"><span class="type-badge">field</span> sqlite3* m_db</span>
+                        <span class="member"><span class="type-badge">field</span> thread m_workerThread</span>
+                        <span class="member"><span class="type-badge method">method</span> postTask()</span>
+                        <span class="member"><span class="type-badge method">method</span> storeMessage()</span>
+                        <span class="member"><span class="type-badge method">method</span> checkCredentials()</span>
+                        <span class="member"><span class="type-badge method">method</span> getFriends()</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Diapositive 5 : Architecture Client -->
+        <section class="slide hidden" id="slide-5">
+            <h1 class="section-title">Architecture du Client</h1>
+            <p class="slide4-subtitle">Application <strong>Qt 6</strong> multi-threads — Séparation GUI / Réseau</p>
+
+            <div class="server-panels">
+                <!-- Panel 1: MainWindow -->
+                <div class="server-card" data-panel="main">
+                    <div class="card-header">
+                        <span class="card-icon">🖥️</span>
+                        <div>
+                            <h3>MainWindow</h3>
+                            <span class="card-file">MainWindow.h / .cpp</span>
+                        </div>
+                    </div>
+                    <p class="card-desc">Fenêtre principale (liste de contacts). Surveille l'état des jeux via
+                        <strong>QSharedMemory</strong> + <strong>QTimer</strong> pour broadcaster le score en temps
+                        réel.
+                    </p>
+                    <div class="card-code">
+                        <div class="code-label">onPollGameIPC() — Polling mémoire partagée</div>
+                        <pre><code><span class="kw">void</span> MainWindow::<span class="fn">onPollGameIPC</span>() {
+  <span class="kw">bool</span> opened = m_gameIPC.<span class="fn">openAndMap</span>();
+  <span class="kw">if</span> (!opened) {
+    <span class="kw">if</span> (m_lastIPCIsPlaying) {
+      NetworkManager::<span class="fn">instance</span>()
+        .<span class="fn">sendGameStatus</span>(<span class="cm">""</span>, <span class="cm">0</span>);
+    }
+    <span class="kw">return</span>;
+  }
+  m_gameIPC.<span class="fn">lock</span>();
+  <span class="kw">const</span> <span class="type">GameIPCData</span>* data = m_gameIPC.<span class="fn">data</span>();
+  <span class="kw">if</span> (data-&gt;isPlaying != m_lastIPCIsPlaying)
+    <span class="fn">sendGameStatus</span>(gameName, score);
+  m_gameIPC.<span class="fn">unlock</span>();
+}</code></pre>
+                    </div>
+                    <div class="card-members">
+                        <span class="member"><span class="type-badge">field</span> QListWidget contacts</span>
+                        <span class="member"><span class="type-badge">field</span> NativeSharedMemory</span>
+                        <span class="member"><span class="type-badge">field</span> QTimer* ipcTimer</span>
+                        <span class="member"><span class="type-badge method">method</span> setupGameIPC()</span>
+                        <span class="member"><span class="type-badge method">method</span> updateContactStatus()</span>
+                        <span class="member"><span class="type-badge cb">signal</span> contactDoubleClicked</span>
+                    </div>
+                </div>
+
+                <!-- Panel 2: NetworkManager -->
+                <div class="server-card" data-panel="network">
+                    <div class="card-header">
+                        <span class="card-icon">🌐</span>
+                        <div>
+                            <h3>NetworkManager</h3>
+                            <span class="card-file">NetworkManager.h / .cpp</span>
+                        </div>
+                    </div>
+                    <p class="card-desc">Singleton sur <strong>QThread dédié</strong>. Utilise
+                        <strong>QSslSocket</strong> et un registre <code>QHash</code> de handlers pour dispatcher les
+                        paquets reçus via signaux Qt.
+                    </p>
+                    <div class="card-code">
+                        <div class="code-label">onReadyRead() — Dispatch de paquets TLS</div>
+                        <pre><code><span class="kw">void</span> NetworkManager::<span class="fn">onReadyRead</span>() {
+  <span class="type">QByteArray</span> raw = m_socket-&gt;<span class="fn">readAll</span>();
+  m_buffer.<span class="fn">insert</span>(m_buffer.<span class="fn">end</span>(),
+    raw.<span class="fn">begin</span>(), raw.<span class="fn">end</span>());
+  <span class="kw">while</span> (m_buffer.<span class="fn">size</span>() &gt;= <span class="cm">12</span>) {
+    <span class="type">wizz::Packet</span> pkt(packetData);
+    <span class="kw">if</span> (m_packetHandlers.<span class="fn">contains</span>(pkt.<span class="fn">type</span>()))
+      m_packetHandlers[pkt.<span class="fn">type</span>()](pkt);
+    <span class="kw">emit</span> <span class="fn">packetReceived</span>(pkt);
+  }
+}</code></pre>
+                    </div>
+                    <div class="card-members">
+                        <span class="member"><span class="type-badge">field</span> QSslSocket* m_socket</span>
+                        <span class="member"><span class="type-badge">field</span> QHash&lt;Type,Handler&gt;</span>
+                        <span class="member"><span class="type-badge method">method</span> sendPacket()</span>
+                        <span class="member"><span class="type-badge method">method</span> connectToHost()</span>
+                        <span class="member"><span class="type-badge cb">signal</span> messageReceived</span>
+                        <span class="member"><span class="type-badge cb">signal</span> contactStatusChanged</span>
+                    </div>
+                </div>
+
+                <!-- Panel 3: ChatWindow -->
+                <div class="server-card" data-panel="chat">
+                    <div class="card-header">
+                        <span class="card-icon">💬</span>
+                        <div>
+                            <h3>ChatWindow</h3>
+                            <span class="card-file">ChatWindow.h / .cpp</span>
+                        </div>
+                    </div>
+                    <p class="card-desc">Fenêtre de conversation individuelle. Gère les <strong>messages vocaux</strong>
+                        (<code>AudioManager</code>), les nudges avec vibration, et les indicateurs de frappe.</p>
+                    <div class="card-code">
+                        <div class="code-label">shake() — Nudge Animation</div>
+                        <pre><code><span class="kw">void</span> ChatWindow::<span class="fn">shake</span>() {
+  m_originalPos = <span class="fn">pos</span>();
+  m_vibrationSteps = <span class="cm">20</span>;
+  m_vibrationTimer = <span class="kw">new</span> <span class="type">QTimer</span>(<span class="kw">this</span>);
+  <span class="fn">connect</span>(m_vibrationTimer, &amp;<span class="type">QTimer</span>::timeout,
+    [<span class="kw">this</span>]() {
+      <span class="kw">int</span> dx = (<span class="fn">rand</span>() % <span class="cm">10</span>) - <span class="cm">5</span>;
+      <span class="kw">int</span> dy = (<span class="fn">rand</span>() % <span class="cm">10</span>) - <span class="cm">5</span>;
+      <span class="fn">move</span>(m_originalPos + <span class="type">QPoint</span>(dx, dy));
+      <span class="kw">if</span> (--m_vibrationSteps &lt;= <span class="cm">0</span>) {
+        m_vibrationTimer-&gt;<span class="fn">stop</span>();
+        <span class="fn">move</span>(m_originalPos);
+      }
+  });
+  m_vibrationTimer-&gt;<span class="fn">start</span>(<span class="cm">30</span>);
+}</code></pre>
+                    </div>
+                    <div class="card-members">
+                        <span class="member"><span class="type-badge">field</span> AudioManager*</span>
+                        <span class="member"><span class="type-badge">field</span> QTimer* typingStop</span>
+                        <span class="member"><span class="type-badge">field</span> QSoundEffect*</span>
+                        <span class="member"><span class="type-badge method">method</span> addMessage()</span>
+                        <span class="member"><span class="type-badge method">method</span> addVoiceMessage()</span>
+                        <span class="member"><span class="type-badge cb">signal</span> sendNudge</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Diapositive 6 : Sécurité -->
+        <section class="slide hidden" id="slide-6">
+            <h1 class="section-title">Sécurité — Défenses en Profondeur</h1>
+            <p class="slide4-subtitle">3 couches de protection : <strong>Base de Données</strong>,
+                <strong>Authentification</strong>, <strong>Transport</strong>
+            </p>
+
+            <div class="server-panels">
+                <!-- Panel 1: SQL Injection Prevention -->
+                <div class="server-card" data-panel="sql">
+                    <div class="card-header">
+                        <span class="card-icon">🛡️</span>
+                        <div>
+                            <h3>Anti SQL Injection</h3>
+                            <span class="card-file">DatabaseManager.cpp</span>
+                        </div>
+                    </div>
+                    <p class="card-desc">Toutes les requêtes utilisent des <strong>Prepared Statements</strong> avec
+                        <code>sqlite3_bind_text()</code>. Aucune concaténation de chaînes — les paramètres sont échappés
+                        automatiquement par SQLite.
+                    </p>
+                    <div class="card-code">
+                        <div class="code-label">createUser() — Prepared Statement</div>
+                        <pre><code><span class="kw">const char</span>* sql =
+  <span class="cm">"INSERT INTO users"</span>
+  <span class="cm">"(USERNAME, PASSWORD_HASH, SALT)"</span>
+  <span class="cm">"VALUES (?, ?, ?)"</span>;  <span class="cm">// ← Placeholders</span>
+
+<span class="type">sqlite3_stmt</span>* stmt;
+<span class="fn">sqlite3_prepare_v2</span>(m_db, sql, -<span class="cm">1</span>,
+                   &amp;stmt, <span class="kw">nullptr</span>);
+
+<span class="cm">// Bind user input safely</span>
+<span class="fn">sqlite3_bind_text</span>(stmt, <span class="cm">1</span>,
+  username.<span class="fn">c_str</span>(), -<span class="cm">1</span>, SQLITE_STATIC);
+<span class="fn">sqlite3_bind_text</span>(stmt, <span class="cm">2</span>,
+  hash.<span class="fn">c_str</span>(), -<span class="cm">1</span>, SQLITE_STATIC);
+<span class="fn">sqlite3_bind_text</span>(stmt, <span class="cm">3</span>,
+  salt.<span class="fn">c_str</span>(), -<span class="cm">1</span>, SQLITE_STATIC);</code></pre>
+                    </div>
+                    <div class="card-members">
+                        <span class="member"><span class="type-badge shield">defense</span> Prepared Statements</span>
+                        <span class="member"><span class="type-badge shield">defense</span> Parameterized Queries</span>
+                        <span class="member"><span class="type-badge">field</span> sqlite3_stmt*</span>
+                        <span class="member"><span class="type-badge method">method</span> sqlite3_bind_text()</span>
+                    </div>
+                </div>
+
+                <!-- Panel 2: Password Hashing + Salt -->
+                <div class="server-card" data-panel="hash">
+                    <div class="card-header">
+                        <span class="card-icon">🔐</span>
+                        <div>
+                            <h3>Hachage + Sel</h3>
+                            <span class="card-file">DatabaseManager.cpp</span>
+                        </div>
+                    </div>
+                    <p class="card-desc">Mots de passe hachés via <strong>SHA-256</strong> (OpenSSL EVP API) combinés à
+                        un <strong>sel aléatoire 128-bit</strong> généré par <code>RAND_bytes()</code>. Jamais stockés
+                        en clair.</p>
+                    <div class="card-code">
+                        <div class="code-label">hashPassword() + generateSalt()</div>
+                        <pre><code><span class="cm">// Sel unique de 128 bits par utilisateur</span>
+<span class="type">std::string</span> DatabaseManager::<span class="fn">generateSalt</span>() {
+  <span class="kw">unsigned char</span> salt[<span class="cm">16</span>];
+  <span class="fn">RAND_bytes</span>(salt, <span class="cm">16</span>); <span class="cm">// OpenSSL CSPRNG</span>
+  <span class="kw">return</span> <span class="fn">bytesToHex</span>(salt, <span class="cm">16</span>);
+}
+
+<span class="type">std::string</span> <span class="fn">hashPassword</span>(
+    <span class="kw">const</span> <span class="type">string</span>&amp; pw, <span class="kw">const</span> <span class="type">string</span>&amp; salt) {
+  <span class="type">string</span> combined = pw + salt;
+  <span class="type">EVP_MD_CTX</span>* ctx = <span class="fn">EVP_MD_CTX_new</span>();
+  <span class="fn">EVP_DigestInit_ex</span>(ctx, <span class="fn">EVP_sha256</span>(), <span class="kw">nullptr</span>);
+  <span class="fn">EVP_DigestUpdate</span>(ctx, combined.<span class="fn">c_str</span>(),
+                   combined.<span class="fn">size</span>());
+  <span class="fn">EVP_DigestFinal_ex</span>(ctx, hash, &amp;len);
+  <span class="kw">return</span> <span class="fn">bytesToHex</span>(hash, len);
+}</code></pre>
+                    </div>
+                    <div class="card-members">
+                        <span class="member"><span class="type-badge shield">defense</span> SHA-256 Digest</span>
+                        <span class="member"><span class="type-badge shield">defense</span> 128-bit Salt</span>
+                        <span class="member"><span class="type-badge">field</span> EVP_MD_CTX*</span>
+                        <span class="member"><span class="type-badge method">method</span> RAND_bytes()</span>
+                    </div>
+                </div>
+
+                <!-- Panel 3: TLS Configuration -->
+                <div class="server-card" data-panel="tls">
+                    <div class="card-header">
+                        <span class="card-icon">🔒</span>
+                        <div>
+                            <h3>Transport TLS 1.2</h3>
+                            <span class="card-file">TcpServer.cpp</span>
+                        </div>
+                    </div>
+                    <p class="card-desc">Toutes les communications client–serveur sont encryptées via <strong>TLS
+                            1.2</strong>. Le serveur charge un certificat X.509 et une clé privée. SSLv2 est désactivé
+                        explicitement.</p>
+                    <div class="card-code">
+                        <div class="code-label">TcpServer() — Configuration SSL</div>
+                        <pre><code><span class="type">TcpServer</span>::<span class="fn">TcpServer</span>(<span class="kw">int</span> port)
+  : m_sslContext(<span class="type">asio::ssl::context</span>::<span class="cm">tlsv12</span>) {
+
+  m_sslContext.<span class="fn">set_options</span>(
+    <span class="type">ssl::context</span>::default_workarounds |
+    <span class="type">ssl::context</span>::<span class="cm">no_sslv2</span> |  <span class="cm">// ← Kill SSLv2</span>
+    <span class="type">ssl::context</span>::single_dh_use);
+
+  m_sslContext.<span class="fn">use_certificate_chain_file</span>(
+    <span class="cm">"server/certs/server.crt"</span>);
+
+  m_sslContext.<span class="fn">use_private_key_file</span>(
+    <span class="cm">"server/certs/server.key"</span>,
+    <span class="type">ssl::context</span>::pem);
+}</code></pre>
+                    </div>
+                    <div class="card-members">
+                        <span class="member"><span class="type-badge shield">defense</span> TLS 1.2 Mandatory</span>
+                        <span class="member"><span class="type-badge shield">defense</span> SSLv2 Disabled</span>
+                        <span class="member"><span class="type-badge">field</span> asio::ssl::context</span>
+                        <span class="member"><span class="type-badge">field</span> X.509 Certificate</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Diapositive 7 : Jeux & IPC -->
+        <section class="slide hidden" id="slide-7">
+            <h1 class="section-title">Jeux Indépendants & IPC</h1>
+            <p class="slide4-subtitle"><strong>Mémoire Partagée POSIX</strong> — Score en direct broadcasté aux
+                followers</p>
+
+            <div class="server-panels">
+                <!-- Panel 1: GameIPCData -->
+                <div class="server-card" data-panel="ipc-struct">
+                    <div class="card-header">
+                        <span class="card-icon">📦</span>
+                        <div>
+                            <h3>GameIPCData</h3>
+                            <span class="card-file">common/GameIPC.h</span>
+                        </div>
+                    </div>
+                    <p class="card-desc">Structure <strong>packée</strong> partagée entre les jeux (SFML/SDL2) et le
+                        client Qt. Layout mémoire identique garanti via <code>#pragma pack(1)</code>. Clé IPC scopée par
+                        utilisateur.</p>
+                    <div class="card-code">
+                        <div class="code-label">GameIPCData + makeIPCKey()</div>
+                        <pre><code><span class="cm">// Layout identique Qt / SDL2 / SFML</span>
+<span class="kw">#pragma</span> <span class="fn">pack</span>(push, <span class="cm">1</span>)
+<span class="kw">struct</span> <span class="type">GameIPCData</span> {
+  <span class="kw">bool</span>     isPlaying;
+  <span class="type">uint32_t</span> currentScore;
+  <span class="kw">char</span>     gameName[<span class="cm">32</span>];
+};
+<span class="kw">#pragma</span> <span class="fn">pack</span>(pop)
+
+<span class="cm">// Clé unique par utilisateur</span>
+<span class="type">string</span> <span class="fn">makeIPCKey</span>(<span class="kw">const</span> <span class="type">string</span>&amp; user) {
+  <span class="kw">return</span> <span class="cm">"Wizz_IPC_"</span> +
+         <span class="fn">sanitizeIPCKey</span>(user);
+}</code></pre>
+                    </div>
+                    <div class="card-members">
+                        <span class="member"><span class="type-badge ipc">ipc</span> #pragma pack(1)</span>
+                        <span class="member"><span class="type-badge ipc">ipc</span> User-scoped Key</span>
+                        <span class="member"><span class="type-badge">field</span> isPlaying</span>
+                        <span class="member"><span class="type-badge">field</span> currentScore</span>
+                        <span class="member"><span class="type-badge">field</span> gameName[32]</span>
+                    </div>
+                </div>
+
+                <!-- Panel 2: NativeSharedMemory -->
+                <div class="server-card" data-panel="ipc-shm">
+                    <div class="card-header">
+                        <span class="card-icon">🧠</span>
+                        <div>
+                            <h3>NativeSharedMemory</h3>
+                            <span class="card-file">common/NativeSharedMemory.h</span>
+                        </div>
+                    </div>
+                    <p class="card-desc">Wrapper cross-platform pour <strong>POSIX shm_open</strong> /
+                        <strong>mmap</strong>. Le jeu crée le segment, le client Qt l'ouvre en lecture. Sémaphore POSIX
+                        pour la synchronisation.
+                    </p>
+                    <div class="card-code">
+                        <div class="code-label">createAndMap() — POSIX Writer</div>
+                        <pre><code><span class="kw">bool</span> NativeSharedMemory::<span class="fn">createAndMap</span>() {
+  <span class="type">string</span> shmName = <span class="cm">"/"</span> + m_name;
+  m_fd = <span class="fn">shm_open</span>(shmName.<span class="fn">c_str</span>(),
+    O_CREAT | O_RDWR, <span class="cm">0666</span>);
+
+  <span class="fn">ftruncate</span>(m_fd, <span class="kw">sizeof</span>(<span class="type">GameIPCData</span>));
+
+  m_data = (<span class="type">GameIPCData</span>*) <span class="fn">mmap</span>(
+    NULL, <span class="kw">sizeof</span>(<span class="type">GameIPCData</span>),
+    PROT_READ | PROT_WRITE,
+    MAP_SHARED, m_fd, <span class="cm">0</span>);
+
+  m_sem = <span class="fn">sem_open</span>(
+    semName.<span class="fn">c_str</span>(), O_CREAT, <span class="cm">0666</span>, <span class="cm">1</span>);
+  <span class="kw">return</span> <span class="kw">true</span>;
+}</code></pre>
+                    </div>
+                    <div class="card-members">
+                        <span class="member"><span class="type-badge ipc">ipc</span> shm_open()</span>
+                        <span class="member"><span class="type-badge ipc">ipc</span> mmap() MAP_SHARED</span>
+                        <span class="member"><span class="type-badge ipc">ipc</span> sem_open() Mutex</span>
+                        <span class="member"><span class="type-badge method">method</span> lock() / unlock()</span>
+                        <span class="member"><span class="type-badge method">method</span> openAndMap()</span>
+                    </div>
+                </div>
+
+                <!-- Panel 3: Broadcast -->
+                <div class="server-card" data-panel="ipc-broadcast">
+                    <div class="card-header">
+                        <span class="card-icon">📡</span>
+                        <div>
+                            <h3>Broadcast Live Score</h3>
+                            <span class="card-file">TcpServer.cpp</span>
+                        </div>
+                    </div>
+                    <p class="card-desc">Le client poll la mémoire partagée et envoie un paquet
+                        <strong>GameStatus</strong> au serveur. Celui-ci le broadcast à tous les
+                        <strong>followers</strong> en ligne du joueur.
+                    </p>
+                    <div class="card-code">
+                        <div class="code-label">handleGameStatus() — Broadcast</div>
+                        <pre><code><span class="kw">void</span> TcpServer::<span class="fn">handleGameStatus</span>(
+    <span class="type">ClientSession</span>* sender,
+    <span class="kw">const</span> <span class="type">string</span>&amp; gameName, <span class="type">uint32_t</span> score) {
+
+  <span class="type">Packet</span> pkt(<span class="type">PacketType</span>::GameStatus);
+  pkt.<span class="fn">writeString</span>(sender-&gt;<span class="fn">getUsername</span>());
+  pkt.<span class="fn">writeString</span>(gameName);
+  pkt.<span class="fn">writeInt</span>(score);
+
+  <span class="cm">// Broadcast to all followers</span>
+  <span class="kw">auto</span> followers = m_db.<span class="fn">getFollowers</span>(username);
+  <span class="kw">for</span> (<span class="kw">const auto</span>&amp; f : followers) {
+    <span class="kw">auto</span> it = m_onlineUsers.<span class="fn">find</span>(f);
+    <span class="kw">if</span> (it != m_onlineUsers.<span class="fn">end</span>())
+      it-&gt;second-&gt;<span class="fn">sendPacket</span>(pkt);
+  }
+}</code></pre>
+                    </div>
+                    <div class="card-members">
+                        <span class="member"><span class="type-badge ipc">ipc</span> GameStatus Packet</span>
+                        <span class="member"><span class="type-badge ipc">ipc</span> Follower Broadcast</span>
+                        <span class="member"><span class="type-badge method">method</span> getFollowers()</span>
+                        <span class="member"><span class="type-badge method">method</span> sendPacket()</span>
+                        <span class="member"><span class="type-badge">field</span> m_onlineUsers</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Diapositive 8 : Démo -->
+        <section class="slide hidden" id="slide-8">
+            <div class="demo-slide">
+                <div class="demo-left">
+                    <h1 class="demo-title">Démo en Direct</h1>
+                    <p class="demo-desc">Lancez deux instances du client WizzMania<br>pour une démonstration complète du
+                        système :</p>
+                    <ul class="demo-features">
+                        <li>💬 Chat en temps réel (TLS)</li>
+                        <li>🎮 Score de jeu en direct (IPC)</li>
+                        <li>👋 Nudge & messages vocaux</li>
+                        <li>👥 Statuts de présence</li>
+                    </ul>
+                    <div class="demo-actions">
+                        <a href="../launch_multiclient.sh" class="launch-btn" id="launchBtn">
+                            <span class="launch-icon">▶</span>
+                            <span>Lancer la Démo</span>
+                        </a>
+                        <div class="launch-hint">
+                            <code>./launch_multiclient.sh</code>
+                        </div>
+                    </div>
+                </div>
+                <div class="demo-right">
+                    <div class="demo-app-wrapper">
+                        <img src="assets/wizzmania_app_branded.png" alt="WizzMania Messenger" class="demo-app-img">
+                        <div class="demo-glow"></div>
+                    </div>
+                </div>
+            </div>
+            <p class="demo-footer">WizzMania — Sergey · Louis · Élodie — 2026</p>
+        </section>
+
+    </main>
+
+    <!-- Navigation -->
+    <div class="nav-trigger"></div>
+    <nav class="glass-nav">
+        <button id="prevBtn" class="nav-btn" disabled>&larr; Précédent</button>
+        <div class="slide-indicators">
+            <span class="dot active"></span>
+            <span class="dot"></span>
+            <span class="dot"></span>
+            <span class="dot"></span>
+            <span class="dot"></span>
+            <span class="dot"></span>
+            <span class="dot"></span>
+            <span class="dot"></span>
+        </div>
+        <button id="nextBtn" class="nav-btn">Suivant &rarr;</button>
+    </nav>
+
+    <script src="script.js"></script>
+</body>
+
+</html>
