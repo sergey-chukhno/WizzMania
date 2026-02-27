@@ -815,12 +815,24 @@
                         <li>👥 Statuts de présence</li>
                     </ul>
                     <div class="demo-actions">
-                        <a href="../launch_multiclient.sh" class="launch-btn" id="launchBtn">
+                        <button class="launch-btn" id="launchBtn" onclick="
+                            const span = this.querySelector('.launch-text');
+                            fetch('/launch', {method:'POST'})
+                              .then(r => r.json())
+                              .then(() => {
+                                span.textContent = '✓ Clients lancés !';
+                                setTimeout(() => span.textContent = 'Lancer la Démo', 3000);
+                              })
+                              .catch(() => {
+                                span.textContent = '⚠ Lancez serve.py d\'abord';
+                                setTimeout(() => span.textContent = 'Lancer la Démo', 3000);
+                              });
+                        ">
                             <span class="launch-icon">▶</span>
-                            <span>Lancer la Démo</span>
-                        </a>
+                            <span class="launch-text">Lancer la Démo</span>
+                        </button>
                         <div class="launch-hint">
-                            <code>./launch_multiclient.sh</code>
+                            <code>python3 Presentation/serve.py</code>
                         </div>
                     </div>
                 </div>
