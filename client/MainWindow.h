@@ -131,6 +131,7 @@ private:
   QTimer *m_tttIPCTimer = nullptr;
   QString m_tttRoomId;
   QString m_tttOpponent;
+  char m_tttSymbol;
   bool m_tttBridgeActive = false;
   bool m_tttGameOver =
       false; // True once gameOver seen; bridge stays alive for rematch/quit
