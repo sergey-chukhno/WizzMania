@@ -3,11 +3,11 @@
 #include "core/states/State.h"
 
 Game::Game(const std::string &username, const std::string &roomId, char symbol,
-           const std::string &opponent)
-    : window_(sf::VideoMode({800, 600}), "WizzMania - TicTacToe",
+           const std::string &opponent, const std::string &avatarPath)
+    : window_(sf::VideoMode({800, 610}), "WizzMania TicTacToe",
               sf::Style::Titlebar | sf::Style::Close),
       username_(username), roomId_(roomId), symbol_(symbol),
-      opponent_(opponent) {
+      opponent_(opponent), avatarPath_(avatarPath) {
 
   window_.setFramerateLimit(60);
   changeState(std::make_unique<PlayingState>(this));

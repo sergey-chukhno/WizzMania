@@ -103,7 +103,8 @@ bool GameLauncher::launchGame(const QString &gameName,
 
 QProcess *GameLauncher::launchTicTacToe(const QString &username,
                                         const QString &roomId, char symbol,
-                                        const QString &opponent) {
+                                        const QString &opponent,
+                                        const QPixmap &opponentAvatar) {
   QString exePath = resolveExecutablePath("TicTacToe");
   if (exePath.isEmpty()) {
     QMessageBox::critical(
@@ -114,6 +115,13 @@ QProcess *GameLauncher::launchTicTacToe(const QString &username,
 
   QString workingDir = resolveWorkingDir("TicTacToe");
 
+  // Export opponent avatar to a temp PNG so the SFML process can load it
+  QString avatarPath;
+  if (!opponentAvatar.isNull()) {
+    avatarPath = QString("/tmp/ttt_avatar_%1.png").arg(opponent);
+    opponentAvatar.save(avatarPath, "PNG");
+  }
+
   QProcess *process = new QProcess();
   process->setWorkingDirectory(workingDir);
 
@@ -122,6 +130,8 @@ QProcess *GameLauncher::launchTicTacToe(const QString &username,
   args << ("--room=" + roomId);
   args << ("--symbol=" + QString(symbol));
   args << ("--opponent=" + opponent);
+  if (!avatarPath.isEmpty())
+    args << ("--avatarPath=" + avatarPath);
 
   process->start(exePath, args);
 

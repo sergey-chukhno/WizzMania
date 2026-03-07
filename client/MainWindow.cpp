@@ -163,15 +163,16 @@ MainWindow::MainWindow(const QString &username, const QPoint &initialPos,
                  const QString &opponent) {
             if (gameName == "TicTacToe") {
               // Terminate any existing game window before starting a new one
-              // (handles the case where rematch was accepted while old window
-              // was still showing the end-game overlay)
               if (m_tttProcess) {
                 m_tttProcess->terminate();
                 m_tttProcess->waitForFinished(500);
                 m_tttProcess = nullptr;
               }
-              m_tttProcess = GameLauncher::launchTicTacToe(m_username, roomId,
-                                                           symbol, opponent);
+              // Fetch opponent avatar and pass to game process via /tmp PNG
+              QPixmap avatar =
+                  AvatarManager::instance().getAvatar(opponent, 64);
+              m_tttProcess = GameLauncher::launchTicTacToe(
+                  m_username, roomId, symbol, opponent, avatar);
               m_tttOpponent = opponent;
               QTimer::singleShot(1500, this, [this, roomId]() {
                 startTicTacToeIPCBridge(roomId);

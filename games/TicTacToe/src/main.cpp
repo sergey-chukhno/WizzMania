@@ -8,6 +8,8 @@ int main(int argc, char *argv[]) {
   char symbol = 'X';
   std::string opponent = "Unknown";
 
+  std::string avatarPath = "";
+
   for (int i = 1; i < argc; ++i) {
     std::string arg = argv[i];
     if (arg.find("--user=") == 0) {
@@ -18,11 +20,13 @@ int main(int argc, char *argv[]) {
       symbol = arg.substr(9)[0];
     } else if (arg.find("--opponent=") == 0) {
       opponent = arg.substr(11);
+    } else if (arg.find("--avatarPath=") == 0) {
+      avatarPath = arg.substr(13);
     }
   }
 
   try {
-    Game game(username, roomId, symbol, opponent);
+    Game game(username, roomId, symbol, opponent, avatarPath);
     game.run();
   } catch (const std::exception &e) {
     std::cerr << "Fatal error: " << e.what() << std::endl;
