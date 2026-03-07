@@ -501,6 +501,9 @@ QWidget *ChatWindow::createInviteBubble(const QString &sender,
       "color: #00ffff; font-weight: bold; font-size: 13px; background: "
       "transparent; border: none; padding: 5px;");
   titleLabel->setAlignment(Qt::AlignCenter);
+  titleLabel->setWordWrap(true);
+  titleLabel->setMinimumWidth(220);
+  titleLabel->setMinimumHeight(44);
 
   QHBoxLayout *btnLayout = new QHBoxLayout();
   QPushButton *acceptBtn = new QPushButton("Accept");

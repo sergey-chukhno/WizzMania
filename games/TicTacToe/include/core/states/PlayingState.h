@@ -52,7 +52,7 @@ private:
   sf::Text statusText_;
   sf::Texture avatarTexture_;
   // optional because sf::Sprite requires a texture at construction in SFML 3
-  std::optional<sf::Sprite> avatarSpriteOpt_;
+  std::optional<sf::CircleShape> avatarSpriteOpt_;
   sf::CircleShape avatarMask_; // circle clip ring
   bool avatarLoaded_ = false;
 

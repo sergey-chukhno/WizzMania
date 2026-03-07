@@ -84,10 +84,21 @@ void PlayingState::onEnter() {
   const std::string &ap = game_->getAvatarPath();
   if (!ap.empty() && avatarTexture_.loadFromFile(ap)) {
     avatarLoaded_ = true;
-    avatarSpriteOpt_.emplace(avatarTexture_);
-    // Scale to 72×72
+    avatarTexture_.setSmooth(true);
+
     auto sz = avatarTexture_.getSize();
-    float scale = 72.f / std::min((float)sz.x, (float)sz.y);
+    unsigned int minSize = std::min(sz.x, sz.y);
+
+    // Create a circle with radius = half the image's smallest dimension
+    avatarSpriteOpt_.emplace(static_cast<float>(minSize) / 2.0f);
+    avatarSpriteOpt_->setTexture(&avatarTexture_);
+    // Crop center square using SFML 3 vector-based Rect
+    avatarSpriteOpt_->setTextureRect(
+        sf::IntRect(sf::Vector2i((sz.x - minSize) / 2, (sz.y - minSize) / 2),
+                    sf::Vector2i(minSize, minSize)));
+
+    // Scale to exactly 72×72
+    float scale = 72.f / static_cast<float>(minSize);
     avatarSpriteOpt_->setScale(sf::Vector2f(scale, scale));
     avatarSpriteOpt_->setPosition(sf::Vector2f(20.f, 14.f));
   }
