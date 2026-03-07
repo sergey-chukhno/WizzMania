@@ -7,7 +7,6 @@
 #include <SFML/Graphics.hpp>
 #include <memory>
 #include <string>
-#include <vector>
 
 class PlayingState : public State {
 public:
@@ -21,11 +20,8 @@ public:
   void render(sf::RenderTarget &target) override;
 
 private:
-  void drawBoard(sf::RenderTarget &target);
-  void drawHUD(sf::RenderTarget &target);
   void drawSymbol(sf::RenderTarget &target, int x, int y, char sym);
   void checkWinCondition();
-  void resetGame();
 
   // IPC
   std::unique_ptr<wizz::NativeSharedMemory<wizz::TicTacToeIPCData>>
@@ -37,7 +33,14 @@ private:
   sf::Font font_;
   sf::Text titleText_;
   sf::Text statusText_;
+  sf::Text resultText_; // WIN / LOSE / DRAW message
   sf::RectangleShape boardBg_;
+
+  // End-game buttons
+  sf::RectangleShape rematchBtn_;
+  sf::Text rematchText_;
+  sf::RectangleShape quitBtn_;
+  sf::Text quitText_;
 
   // Game state
   bool isMyTurn_;

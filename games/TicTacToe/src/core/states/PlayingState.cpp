@@ -5,6 +5,7 @@ using namespace wizz;
 
 PlayingState::PlayingState(Game *game)
     : State(game), ipcData_(nullptr), titleText_(font_), statusText_(font_),
+      resultText_(font_), rematchText_(font_), quitText_(font_),
       isMyTurn_(false), mySymVal_(1), oppSymVal_(2), gameOver_(false),
       winner_(0) {
   for (int i = 0; i < 9; ++i)
@@ -31,11 +32,38 @@ void PlayingState::onEnter() {
   statusText_.setCharacterSize(22);
   statusText_.setPosition(sf::Vector2f(50, 65));
 
+  resultText_.setFont(font_);
+  resultText_.setCharacterSize(40);
+  resultText_.setPosition(sf::Vector2f(0, 200));
+
   boardBg_.setSize(sf::Vector2f(400, 400));
   boardBg_.setFillColor(sf::Color(20, 25, 40, 200));
   boardBg_.setOutlineThickness(2);
   boardBg_.setOutlineColor(sf::Color(0, 255, 255, 100));
   boardBg_.setPosition(sf::Vector2f(200, 150));
+
+  // Setup end-game buttons (hidden until gameOver_)
+  rematchBtn_.setSize(sf::Vector2f(200, 55));
+  rematchBtn_.setFillColor(sf::Color(0, 200, 100, 230));
+  rematchBtn_.setOutlineThickness(2);
+  rematchBtn_.setOutlineColor(sf::Color(0, 255, 100));
+  rematchBtn_.setPosition(sf::Vector2f(150, 460));
+
+  rematchText_.setFont(font_);
+  rematchText_.setCharacterSize(22);
+  rematchText_.setFillColor(sf::Color::White);
+  rematchText_.setString("PLAY AGAIN");
+
+  quitBtn_.setSize(sf::Vector2f(200, 55));
+  quitBtn_.setFillColor(sf::Color(200, 30, 60, 230));
+  quitBtn_.setOutlineThickness(2);
+  quitBtn_.setOutlineColor(sf::Color(255, 50, 80));
+  quitBtn_.setPosition(sf::Vector2f(450, 460));
+
+  quitText_.setFont(font_);
+  quitText_.setCharacterSize(22);
+  quitText_.setFillColor(sf::Color::White);
+  quitText_.setString("QUIT");
 
   // Determine symbol FIRST so isMyTurn_ can be set correctly
   mySymVal_ = (game_->getSymbol() == 'X' || game_->getSymbol() == 'x') ? 1 : 2;
@@ -61,6 +89,8 @@ void PlayingState::onEnter() {
     ipcData_->hasInboundMove = false;
     ipcData_->gameOver = false;
     ipcData_->winner = 0;
+    ipcData_->rematchRequested = false;
+    ipcData_->quitRequested = false;
     for (int i = 0; i < 9; ++i)
       ipcData_->board[i] = 0;
     sharedMemory_->unlock();
@@ -74,7 +104,30 @@ void PlayingState::onExit() {}
 
 void PlayingState::processEvent(const sf::Event &event) {
   if (gameOver_) {
-    // Click to restart/exit could go here
+    // Handle button clicks on the end-game overlay
+    if (const auto *mouseEvent = event.getIf<sf::Event::MouseButtonPressed>()) {
+      if (mouseEvent->button == sf::Mouse::Button::Left) {
+        sf::Vector2f mp(static_cast<float>(mouseEvent->position.x),
+                        static_cast<float>(mouseEvent->position.y));
+
+        if (rematchBtn_.getGlobalBounds().contains(mp)) {
+          // Signal the messenger to send a new invite
+          if (ipcData_ && sharedMemory_) {
+            sharedMemory_->lock();
+            ipcData_->rematchRequested = true;
+            sharedMemory_->unlock();
+          }
+        } else if (quitBtn_.getGlobalBounds().contains(mp)) {
+          // Signal the bridge to stop before closing
+          if (ipcData_ && sharedMemory_) {
+            sharedMemory_->lock();
+            ipcData_->quitRequested = true;
+            sharedMemory_->unlock();
+          }
+          game_->getWindow().close();
+        }
+      }
+    }
     return;
   }
 
@@ -116,33 +169,45 @@ void PlayingState::processEvent(const sf::Event &event) {
 }
 
 void PlayingState::update(sf::Time /*dt*/) {
-  if (gameOver_)
-    return;
-
-  // Poll IPC for opponent moves
-  if (ipcData_ && sharedMemory_) {
-    sharedMemory_->lock();
-    if (ipcData_->hasInboundMove) {
-      // Opponent made a move!
-      int opIdx = ipcData_->inboundCellIndex;
-      if (opIdx >= 0 && opIdx < 9 && board_[opIdx] == 0) {
-        board_[opIdx] = oppSymVal_;
-        ipcData_->board[opIdx] = oppSymVal_;
-        ipcData_->hasInboundMove = false;
-        isMyTurn_ = true;
+  if (!gameOver_) {
+    // Poll IPC for opponent moves
+    if (ipcData_ && sharedMemory_) {
+      sharedMemory_->lock();
+      if (ipcData_->hasInboundMove) {
+        int opIdx = ipcData_->inboundCellIndex;
+        if (opIdx >= 0 && opIdx < 9 && board_[opIdx] == 0) {
+          board_[opIdx] = oppSymVal_;
+          ipcData_->board[opIdx] = oppSymVal_;
+          ipcData_->hasInboundMove = false;
+          isMyTurn_ = true;
+        }
       }
+      sharedMemory_->unlock();
+      checkWinCondition();
     }
-    sharedMemory_->unlock();
-    checkWinCondition();
+
+    if (isMyTurn_) {
+      statusText_.setString("> YOUR TURN (" +
+                            std::string(1, game_->getSymbol()) + ")_");
+      statusText_.setFillColor(sf::Color(0, 255, 100));
+    } else {
+      statusText_.setString("WAITING FOR OPPONENT...");
+      statusText_.setFillColor(sf::Color(255, 100, 100));
+    }
   }
 
-  if (isMyTurn_) {
-    statusText_.setString("> YOUR TURN (" + std::string(1, game_->getSymbol()) +
-                          ")_");
-    statusText_.setFillColor(sf::Color(0, 255, 100)); // Neon Green
-  } else {
-    statusText_.setString("WAITING FOR OPPONENT...");
-    statusText_.setFillColor(sf::Color(255, 100, 100)); // Neon Red
+  // Position button text centred on each button (done every frame for
+  // simplicity as text bounds are stable once set)
+  if (gameOver_) {
+    auto center = [](sf::Text &txt, const sf::RectangleShape &btn) {
+      sf::FloatRect tb = txt.getLocalBounds();
+      sf::FloatRect bb = btn.getGlobalBounds();
+      txt.setPosition(sf::Vector2f(
+          bb.position.x + (bb.size.x - tb.size.x) / 2.f - tb.position.x,
+          bb.position.y + (bb.size.y - tb.size.y) / 2.f - tb.position.y));
+    };
+    center(rematchText_, rematchBtn_);
+    center(quitText_, quitBtn_);
   }
 }
 
@@ -156,7 +221,6 @@ void PlayingState::checkWinCondition() {
   for (auto &combo : winningCombos) {
     if (board_[combo[0]] != 0 && board_[combo[0]] == board_[combo[1]] &&
         board_[combo[1]] == board_[combo[2]]) {
-
       gameOver_ = true;
       winner_ = board_[combo[0]];
       break;
@@ -180,16 +244,28 @@ void PlayingState::checkWinCondition() {
 
   if (gameOver_) {
     if (winner_ == mySymVal_) {
-      statusText_.setString("YOU WIN! FATALITY.");
-      statusText_.setFillColor(sf::Color(0, 255, 255));
+      resultText_.setString("YOU WIN! FATALITY.");
+      resultText_.setFillColor(sf::Color(0, 255, 200));
+      statusText_.setString("VICTORY");
+      statusText_.setFillColor(sf::Color(0, 255, 100));
     } else if (winner_ == oppSymVal_) {
-      statusText_.setString("YOU LOSE. SYSTEM OFFLINE.");
-      statusText_.setFillColor(sf::Color(255, 0, 50));
+      resultText_.setString("YOU LOSE. SYSTEM OFFLINE.");
+      resultText_.setFillColor(sf::Color(255, 50, 80));
+      statusText_.setString("DEFEAT");
+      statusText_.setFillColor(sf::Color(255, 80, 80));
     } else {
-      statusText_.setString("DRAW. STALEMATE LOGGED.");
-      statusText_.setFillColor(sf::Color(200, 200, 200));
+      resultText_.setString("DRAW. STALEMATE LOGGED.");
+      resultText_.setFillColor(sf::Color(180, 180, 255));
+      statusText_.setString("DRAW");
+      statusText_.setFillColor(sf::Color(180, 180, 255));
     }
 
+    // Centre the result text horizontally
+    sf::FloatRect rb = resultText_.getLocalBounds();
+    resultText_.setPosition(
+        sf::Vector2f((800.f - rb.size.x) / 2.f - rb.position.x, 200.f));
+
+    // Notify IPC so the client bridge can stop cleanly
     if (ipcData_ && sharedMemory_) {
       sharedMemory_->lock();
       ipcData_->gameOver = true;
@@ -229,6 +305,20 @@ void PlayingState::render(sf::RenderTarget &target) {
         drawSymbol(target, 200 + col * 133, 150 + row * 133, 'O');
       }
     }
+  }
+
+  // End-game overlay
+  if (gameOver_) {
+    // Dim the board slightly
+    sf::RectangleShape overlay(sf::Vector2f(800, 600));
+    overlay.setFillColor(sf::Color(0, 0, 0, 140));
+    target.draw(overlay);
+
+    target.draw(resultText_);
+    target.draw(rematchBtn_);
+    target.draw(rematchText_);
+    target.draw(quitBtn_);
+    target.draw(quitText_);
   }
 }
 

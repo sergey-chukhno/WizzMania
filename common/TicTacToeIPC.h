@@ -45,6 +45,10 @@ struct TicTacToeIPCData {
   // End states
   bool gameOver;
   int winner; // 0=Draw, 1=X, 2=O
+
+  // Rematch request (Game -> Messenger)
+  bool rematchRequested; // Player pressed "Play Again" button
+  bool quitRequested;    // Player pressed "Quit" button
 };
 #pragma pack(pop)
 

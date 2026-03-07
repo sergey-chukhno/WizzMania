@@ -131,4 +131,6 @@ private:
   QString m_tttRoomId;
   QString m_tttOpponent;
   bool m_tttBridgeActive = false;
+  bool m_tttGameOver =
+      false; // True once gameOver seen; bridge stays alive for rematch/quit
 };

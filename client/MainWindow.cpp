@@ -989,6 +989,7 @@ void MainWindow::stopTicTacToeIPCBridge() {
     m_tttMemory = nullptr;
   }
   m_tttBridgeActive = false;
+  m_tttGameOver = false;
   m_tttRoomId.clear();
   qDebug() << "[TicTacToe IPC] Bridge stopped.";
 }
@@ -998,42 +999,75 @@ void MainWindow::onPollTicTacToeIPC() {
     return;
 
   m_tttMemory->lock();
-
   auto *data = m_tttMemory->data();
   if (!data) {
     m_tttMemory->unlock();
     return;
   }
 
-  // Case 1: game signals game-over — notify the chat and stop the bridge
-  if (data->gameOver) {
-    int winner = data->winner;
-    m_tttMemory->unlock();
-
-    // Notify the chat window with the result
-    if (m_openChats.contains(m_tttOpponent)) {
-      QString resultMsg;
-      if (winner == 0)
-        resultMsg = "🎮 TicTacToe ended: DRAW!";
-      else if (winner == 1)
-        resultMsg = "🎮 TicTacToe ended: X wins!";
-      else
-        resultMsg = "🎮 TicTacToe ended: O wins!";
-      m_openChats[m_tttOpponent]->addMessage("System", resultMsg, false);
+  // ── PHASE 1 (game still running) ─────────────────────────────────────────
+  if (!m_tttGameOver) {
+    // Relay outbound (local player's) move BEFORE checking gameOver.
+    // The winning move sets both hasOutboundMove AND gameOver in the same
+    // click handler; checking gameOver first would stop the bridge before
+    // the winning move is ever sent to the server.
+    if (data->hasOutboundMove) {
+      int cellIndex = data->outboundCellIndex;
+      data->hasOutboundMove = false;
+      m_tttMemory->unlock();
+      NetworkManager::instance().sendGameMove(m_tttRoomId,
+                                              static_cast<uint8_t>(cellIndex));
+      return;
     }
 
-    stopTicTacToeIPCBridge();
+    // Game signals game-over: post result to chat and SET m_tttGameOver,
+    // but do NOT stop the bridge — the player still needs to click a button.
+    if (data->gameOver) {
+      int winner = data->winner;
+      m_tttGameOver = true; // freeze the inbound-move path
+      m_tttMemory->unlock();
+
+      if (m_openChats.contains(m_tttOpponent)) {
+        QString resultMsg;
+        if (winner == 0)
+          resultMsg = "🎮 TicTacToe ended: DRAW!";
+        else if (winner == 1)
+          resultMsg = "🎮 TicTacToe ended: X wins!";
+        else
+          resultMsg = "🎮 TicTacToe ended: O wins!";
+        m_openChats[m_tttOpponent]->addMessage("System", resultMsg, false);
+      }
+      return; // bridge stays active — wait for rematch or quit
+    }
+
+    m_tttMemory->unlock();
     return;
   }
 
-  // Case 2: the local player made a move — relay it to the server
-  if (data->hasOutboundMove) {
-    int cellIndex = data->outboundCellIndex;
-    data->hasOutboundMove = false; // Consume the flag
+  // ── PHASE 2 (game over, waiting for player decision) ─────────────────────
+
+  // Player pressed "Play Again"
+  if (data->rematchRequested) {
+    data->rematchRequested = false;
+    QString opponent = m_tttOpponent;
     m_tttMemory->unlock();
 
-    NetworkManager::instance().sendGameMove(m_tttRoomId,
-                                            static_cast<uint8_t>(cellIndex));
+    NetworkManager::instance().sendGameInvite(opponent, "TicTacToe");
+    if (m_openChats.contains(opponent))
+      m_openChats[opponent]->addMessage(
+          "System",
+          "🎮 Rematch request sent — waiting for " + opponent + " to accept.",
+          false);
+
+    stopTicTacToeIPCBridge(); // bridge done; new one will start when game
+                              // accepts
+    return;
+  }
+
+  // Player pressed "Quit" (or window closed)
+  if (data->quitRequested) {
+    m_tttMemory->unlock();
+    stopTicTacToeIPCBridge();
     return;
   }
 
