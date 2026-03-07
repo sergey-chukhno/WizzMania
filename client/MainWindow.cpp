@@ -174,6 +174,7 @@ MainWindow::MainWindow(const QString &username, const QPoint &initialPos,
               m_tttProcess = GameLauncher::launchTicTacToe(
                   m_username, roomId, symbol, opponent, avatar);
               m_tttOpponent = opponent;
+              m_tttSymbol = symbol;
               QTimer::singleShot(1500, this, [this, roomId]() {
                 startTicTacToeIPCBridge(roomId);
               });
@@ -1034,13 +1035,19 @@ void MainWindow::onPollTicTacToeIPC() {
       m_tttMemory->unlock();
 
       if (m_openChats.contains(m_tttOpponent)) {
+        QString xPlayerName = (m_tttSymbol == 'X') ? m_username : m_tttOpponent;
+        QString oPlayerName = (m_tttSymbol == 'O') ? m_username : m_tttOpponent;
+
         QString resultMsg;
         if (winner == 0)
-          resultMsg = "🎮 TicTacToe ended: DRAW!";
+          resultMsg = "🎮 TicTacToe game ended: DRAW!";
         else if (winner == 1)
-          resultMsg = "🎮 TicTacToe ended: X wins!";
-        else
-          resultMsg = "🎮 TicTacToe ended: O wins!";
+          resultMsg =
+              QString("🎮 TicTacToe game ended: %1 (X) wins!").arg(xPlayerName);
+        else if (winner == 2)
+          resultMsg =
+              QString("🎮 TicTacToe game ended: %1 (O) wins!").arg(oPlayerName);
+
         m_openChats[m_tttOpponent]->addMessage("System", resultMsg, false);
       }
       return; // bridge stays active — wait for rematch or quit

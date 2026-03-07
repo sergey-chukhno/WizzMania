@@ -1,5 +1,6 @@
 #include "AuthWindow.h"
 #include "MainWindow.h"
+#include "NetworkManager.h"
 #include <QApplication>
 
 int main(int argc, char *argv[]) {
@@ -23,5 +24,10 @@ int main(int argc, char *argv[]) {
 
   authWindow->show();
 
-  return app.exec();
+  int ret = app.exec();
+
+  // Clean up the background network thread safely
+  NetworkManager::shutdown();
+
+  return ret;
 }

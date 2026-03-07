@@ -202,10 +202,15 @@ void wizz::TcpServer::handleLogin(ClientSession *session) {
       for (const auto &followerName : followers) {
         auto it = m_onlineUsers.find(followerName);
         if (it != m_onlineUsers.end()) {
+          std::cout << "[Server] Broadcasting Online Status of " << username
+                    << " to follower " << followerName << std::endl;
           Packet notify(PacketType::ContactStatusChange);
           notify.writeInt(0); // Online
           notify.writeString(username);
           it->second->sendPacket(notify);
+        } else {
+          std::cout << "[Server] Follower " << followerName << " of "
+                    << username << " is not online." << std::endl;
         }
       }
 

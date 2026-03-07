@@ -15,12 +15,37 @@ NetworkManager &NetworkManager::instance() {
   if (!_instance) {
     QThread *thread = new QThread();
     _instance = new NetworkManager();
+    _instance->m_thread = thread;
     _instance->moveToThread(thread);
+
+    // Ensure the socket is properly deleted via event loop later
+    QObject::connect(_instance, &NetworkManager::shutdownRequested, _instance,
+                     [=]() {
+                       if (_instance->m_socket) {
+                         _instance->m_socket->disconnectFromHost();
+                         _instance->m_socket->deleteLater();
+                         _instance->m_socket = nullptr;
+                       }
+                       thread->quit();
+                     });
+
     QObject::connect(thread, &QThread::started, _instance,
                      &NetworkManager::initSocket);
     thread->start();
   }
   return *_instance;
+}
+
+void NetworkManager::shutdown() {
+  // If instance was never created, nothing to do
+  static NetworkManager *_instance = &instance();
+  if (_instance && _instance->m_thread) {
+    emit _instance->shutdownRequested();
+    _instance->m_thread->wait(); // Wait for it to finish cleanly
+    // Note: _instance is intentionally leaked as it's a singleton,
+    // but its resources (socket, thread) are cleanly terminated via thread
+    // quit.
+  }
 }
 
 NetworkManager::NetworkManager(QObject *parent) : QObject(parent) {

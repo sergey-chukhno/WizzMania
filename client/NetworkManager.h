@@ -15,6 +15,7 @@ class NetworkManager : public QObject {
 
 public:
   static NetworkManager &instance();
+  static void shutdown();
 
   bool isConnected() const;
   QList<QPair<QString, int>> getContacts() const { return m_cachedContacts; }
@@ -47,6 +48,7 @@ signals:
   void connected();
   void disconnected();
   void errorOccurred(QString errorMsg);
+  void shutdownRequested(); // Internal signal for cleanup
 
   // Data Signals (To be expanded)
   void packetReceived(const wizz::Packet &packet); // Raw packet
@@ -85,6 +87,7 @@ private:
   std::vector<uint8_t> m_buffer; // Receive buffer
   std::atomic<bool> m_isConnected{false};
   QList<QPair<QString, int>> m_cachedContacts;
+  QThread *m_thread = nullptr;
 
   // Packet Handlers
   void registerHandlers();
