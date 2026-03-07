@@ -111,12 +111,14 @@ void PlayingState::processEvent(const sf::Event &event) {
                         static_cast<float>(mouseEvent->position.y));
 
         if (rematchBtn_.getGlobalBounds().contains(mp)) {
-          // Signal the messenger to send a new invite
+          // Signal the messenger to send a new invite, then close this window.
+          // A fresh window will open when the opponent accepts the rematch.
           if (ipcData_ && sharedMemory_) {
             sharedMemory_->lock();
             ipcData_->rematchRequested = true;
             sharedMemory_->unlock();
           }
+          game_->getWindow().close();
         } else if (quitBtn_.getGlobalBounds().contains(mp)) {
           // Signal the bridge to stop before closing
           if (ipcData_ && sharedMemory_) {

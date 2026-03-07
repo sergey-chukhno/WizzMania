@@ -9,6 +9,7 @@
 #include <QLineEdit>
 #include <QListWidget>
 #include <QPainter>
+#include <QPointer>
 #include <QProcess>
 #include <QPushButton>
 #include <QScrollArea>
@@ -133,4 +134,6 @@ private:
   bool m_tttBridgeActive = false;
   bool m_tttGameOver =
       false; // True once gameOver seen; bridge stays alive for rematch/quit
+  QPointer<QProcess>
+      m_tttProcess; // Weak handle — auto-nullifies when process exits
 };

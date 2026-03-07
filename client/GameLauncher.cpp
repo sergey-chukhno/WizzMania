@@ -101,15 +101,15 @@ bool GameLauncher::launchGame(const QString &gameName,
   return true;
 }
 
-bool GameLauncher::launchTicTacToe(const QString &username,
-                                   const QString &roomId, char symbol,
-                                   const QString &opponent) {
+QProcess *GameLauncher::launchTicTacToe(const QString &username,
+                                        const QString &roomId, char symbol,
+                                        const QString &opponent) {
   QString exePath = resolveExecutablePath("TicTacToe");
   if (exePath.isEmpty()) {
     QMessageBox::critical(
         nullptr, "Launch Error",
         "Could not find executable for TicTacToe!\nCheck your build paths.");
-    return false;
+    return nullptr;
   }
 
   QString workingDir = resolveWorkingDir("TicTacToe");
@@ -130,12 +130,13 @@ bool GameLauncher::launchTicTacToe(const QString &username,
                           "Failed to start TicTacToe:\n" +
                               process->errorString());
     delete process;
-    return false;
+    return nullptr;
   }
 
+  // Auto-cleanup when the process naturally finishes
   QObject::connect(
       process, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
       process, &QObject::deleteLater);
 
-  return true;
+  return process;
 }

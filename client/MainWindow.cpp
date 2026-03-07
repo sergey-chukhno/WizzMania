@@ -162,10 +162,16 @@ MainWindow::MainWindow(const QString &username, const QPoint &initialPos,
           [this](const QString &gameName, const QString &roomId, char symbol,
                  const QString &opponent) {
             if (gameName == "TicTacToe") {
-              GameLauncher::launchTicTacToe(m_username, roomId, symbol,
-                                            opponent);
-              // Start IPC bridge after a short delay to let the game process
-              // init
+              // Terminate any existing game window before starting a new one
+              // (handles the case where rematch was accepted while old window
+              // was still showing the end-game overlay)
+              if (m_tttProcess) {
+                m_tttProcess->terminate();
+                m_tttProcess->waitForFinished(500);
+                m_tttProcess = nullptr;
+              }
+              m_tttProcess = GameLauncher::launchTicTacToe(m_username, roomId,
+                                                           symbol, opponent);
               m_tttOpponent = opponent;
               QTimer::singleShot(1500, this, [this, roomId]() {
                 startTicTacToeIPCBridge(roomId);
@@ -179,8 +185,7 @@ MainWindow::MainWindow(const QString &username, const QPoint &initialPos,
             if (!m_tttBridgeActive || roomId != m_tttRoomId || !m_tttMemory)
               return;
             m_tttMemory->lock();
-            auto *data =
-                reinterpret_cast<wizz::TicTacToeIPCData *>(m_tttMemory->data());
+            auto *data = m_tttMemory->data();
             if (data) {
               data->inboundCellIndex = static_cast<int>(cellIndex);
               data->hasInboundMove = true;
