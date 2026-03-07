@@ -40,6 +40,10 @@ enum class PacketType : uint32_t {
 
   // Games
   GameStatus = 500,
+  GameInvite = 501,         // Sender -> Server -> Target
+  GameInviteResponse = 502, // Target -> Server -> Sender
+  GameStart = 503,          // Server -> Client A & Client B
+  GameMove = 504,           // Client -> Server -> Client
 
   // Errors
   Error = 999

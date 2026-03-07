@@ -6,6 +6,8 @@
 class GameLauncher {
 public:
   static bool launchGame(const QString &gameName, const QString &username = "");
+  static bool launchTicTacToe(const QString &username, const QString &roomId,
+                              char symbol, const QString &opponent);
   static QString resolveWorkingDir(const QString &gameFolder);
 
 private:

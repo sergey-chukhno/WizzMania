@@ -34,6 +34,10 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/games/BrickBreaker/CMakeLists.txt")
     add_subdirectory(games/BrickBreaker)
 endif()
 
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/games/TicTacToe/CMakeLists.txt")
+    add_subdirectory(games/TicTacToe)
+endif()
+
 # Testing
 enable_testing()
 add_subdirectory(tests)

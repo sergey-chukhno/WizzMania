@@ -188,6 +188,42 @@ void NetworkManager::sendGameStatus(const QString &gameName, uint32_t score) {
   sendPacket(pkt);
 }
 
+void NetworkManager::sendGameInvite(const QString &target,
+                                    const QString &gameName) {
+  if (QThread::currentThread() != this->thread()) {
+    QMetaObject::invokeMethod(this, "sendGameInvite", Qt::QueuedConnection,
+                              Q_ARG(QString, target), Q_ARG(QString, gameName));
+    return;
+  }
+  if (!isConnected())
+    return;
+
+  wizz::Packet pkt(wizz::PacketType::GameInvite);
+  pkt.writeString(target.toStdString());
+  pkt.writeString(gameName.toStdString());
+  sendPacket(pkt);
+}
+
+void NetworkManager::sendGameInviteResponse(const QString &originalSender,
+                                            const QString &gameName,
+                                            bool accepted) {
+  if (QThread::currentThread() != this->thread()) {
+    QMetaObject::invokeMethod(this, "sendGameInviteResponse",
+                              Qt::QueuedConnection,
+                              Q_ARG(QString, originalSender),
+                              Q_ARG(QString, gameName), Q_ARG(bool, accepted));
+    return;
+  }
+  if (!isConnected())
+    return;
+
+  wizz::Packet pkt(wizz::PacketType::GameInviteResponse);
+  pkt.writeString(originalSender.toStdString());
+  pkt.writeString(gameName.toStdString());
+  pkt.writeInt(accepted ? 1 : 0);
+  sendPacket(pkt);
+}
+
 // --- Slots ---
 
 void NetworkManager::onSocketConnected() {
@@ -278,6 +314,17 @@ void NetworkManager::registerHandlers() {
   m_packetHandlers[wizz::PacketType::GameStatus] = [this](wizz::Packet &pkt) {
     handleGameStatusPacket(pkt);
   };
+  m_packetHandlers[wizz::PacketType::GameInvite] = [this](wizz::Packet &pkt) {
+    handleGameInvitePacket(pkt);
+  };
+  m_packetHandlers[wizz::PacketType::GameInviteResponse] =
+      [this](wizz::Packet &pkt) { handleGameInviteResponsePacket(pkt); };
+  m_packetHandlers[wizz::PacketType::GameStart] = [this](wizz::Packet &pkt) {
+    handleGameStartPacket(pkt);
+  };
+  m_packetHandlers[wizz::PacketType::GameMove] = [this](wizz::Packet &pkt) {
+    handleGameMovePacket(pkt);
+  };
 }
 
 void NetworkManager::handleContactListPacket(wizz::Packet &pkt) {
@@ -348,4 +395,47 @@ void NetworkManager::handleGameStatusPacket(wizz::Packet &pkt) {
   QString gameName = QString::fromStdString(pkt.readString());
   uint32_t score = pkt.readInt();
   emit gameStatusChanged(username, gameName, score);
+}
+
+void NetworkManager::handleGameInvitePacket(wizz::Packet &pkt) {
+  QString sender = QString::fromStdString(pkt.readString());
+  QString gameName = QString::fromStdString(pkt.readString());
+  emit gameInviteReceived(sender, gameName);
+}
+
+void NetworkManager::handleGameInviteResponsePacket(wizz::Packet &pkt) {
+  QString originalTarget = QString::fromStdString(pkt.readString());
+  QString gameName = QString::fromStdString(pkt.readString());
+  bool accepted = (pkt.readInt() != 0);
+  emit gameInviteResponseReceived(originalTarget, gameName, accepted);
+}
+
+void NetworkManager::handleGameStartPacket(wizz::Packet &pkt) {
+  QString gameName = QString::fromStdString(pkt.readString());
+  QString roomId = QString::fromStdString(pkt.readString());
+  char symbol = static_cast<char>(pkt.readInt());
+  QString opponent = QString::fromStdString(pkt.readString());
+  emit gameStartReceived(gameName, roomId, symbol, opponent);
+}
+
+void NetworkManager::sendGameMove(const QString &roomId, uint8_t cellIndex) {
+  if (QThread::currentThread() != this->thread()) {
+    QMetaObject::invokeMethod(this, "sendGameMove", Qt::QueuedConnection,
+                              Q_ARG(QString, roomId),
+                              Q_ARG(uint8_t, cellIndex));
+    return;
+  }
+  if (!isConnected())
+    return;
+  wizz::Packet p(wizz::PacketType::GameMove);
+  p.writeString(roomId.toStdString());
+  p.writeInt(static_cast<uint32_t>(cellIndex));
+  sendPacket(p);
+}
+
+void NetworkManager::handleGameMovePacket(wizz::Packet &pkt) {
+  // Server relays: roomId(string) + cellIndex(uint32_t)
+  QString roomId = QString::fromStdString(pkt.readString());
+  uint8_t cellIndex = static_cast<uint8_t>(pkt.readInt());
+  emit gameMoveReceived(roomId, cellIndex);
 }

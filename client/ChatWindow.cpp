@@ -177,6 +177,17 @@ void ChatWindow::addVoiceMessage(const QString &sender, uint16_t duration,
   });
 }
 
+void ChatWindow::addGameInvite(const QString &sender, const QString &gameName) {
+  Q_UNUSED(sender);
+  QWidget *bubble = createInviteBubble(sender, gameName);
+  m_chatLayout->addWidget(bubble);
+
+  QTimer::singleShot(10, [this]() {
+    m_chatArea->verticalScrollBar()->setValue(
+        m_chatArea->verticalScrollBar()->maximum());
+  });
+}
+
 void ChatWindow::addMessage(const QString &sender, const QString &text,
                             bool isSelf) {
   Q_UNUSED(sender);
@@ -461,6 +472,93 @@ QWidget *ChatWindow::createVoiceBubble(uint16_t duration,
           }
       )");
   }
+  return container;
+}
+
+QWidget *ChatWindow::createInviteBubble(const QString &sender,
+                                        const QString &gameName) {
+  QWidget *container = new QWidget();
+  QHBoxLayout *layout = new QHBoxLayout(container);
+  layout->setContentsMargins(0, 5, 0, 5);
+
+  QWidget *contentWidget = new QWidget();
+  QVBoxLayout *contentLayout = new QVBoxLayout(contentWidget);
+  contentLayout->setContentsMargins(0, 0, 0, 0);
+  contentLayout->setSpacing(5);
+
+  // Styling for the glassmorphism card
+  contentWidget->setStyleSheet(R"(
+      QWidget {
+          background-color: rgba(20, 25, 40, 180);
+          border: 1px solid rgba(0, 255, 255, 100);
+          border-radius: 12px;
+      }
+  )");
+
+  QLabel *titleLabel =
+      new QLabel("⚡ " + sender + " challenged you to " + gameName + "! ⚡");
+  titleLabel->setStyleSheet(
+      "color: #00ffff; font-weight: bold; font-size: 13px; background: "
+      "transparent; border: none; padding: 5px;");
+  titleLabel->setAlignment(Qt::AlignCenter);
+
+  QHBoxLayout *btnLayout = new QHBoxLayout();
+  QPushButton *acceptBtn = new QPushButton("Accept");
+  QPushButton *declineBtn = new QPushButton("Decline");
+
+  QString btnStyle = R"(
+      QPushButton {
+          color: white; 
+          border-radius: 6px; 
+          padding: 8px; 
+          font-weight: bold;
+          border: none;
+      }
+  )";
+
+  acceptBtn->setStyleSheet(
+      btnStyle +
+      "QPushButton { background-color: rgba(0, 200, 100, 200); } "
+      "QPushButton:hover { background-color: rgba(0, 255, 120, 255); }");
+  declineBtn->setStyleSheet(
+      btnStyle +
+      "QPushButton { background-color: rgba(200, 50, 50, 200); } "
+      "QPushButton:hover { background-color: rgba(255, 80, 80, 255); }");
+
+  acceptBtn->setCursor(Qt::PointingHandCursor);
+  declineBtn->setCursor(Qt::PointingHandCursor);
+
+  btnLayout->addWidget(acceptBtn);
+  btnLayout->addWidget(declineBtn);
+
+  contentLayout->addWidget(titleLabel);
+  contentLayout->addLayout(btnLayout);
+
+  connect(acceptBtn, &QPushButton::clicked, this,
+          [this, sender, gameName, contentWidget]() {
+            // Send Accept
+            NetworkManager::instance().sendGameInviteResponse(sender, gameName,
+                                                              true);
+            // Disable the card to prevent double-clicking
+            contentWidget->setEnabled(false);
+            contentWidget->setStyleSheet(contentWidget->styleSheet() +
+                                         " QWidget { opacity: 0.5; }");
+          });
+
+  connect(declineBtn, &QPushButton::clicked, this,
+          [this, sender, gameName, contentWidget]() {
+            // Send Decline
+            NetworkManager::instance().sendGameInviteResponse(sender, gameName,
+                                                              false);
+            contentWidget->setEnabled(false);
+            contentWidget->setStyleSheet(contentWidget->styleSheet() +
+                                         " QWidget { opacity: 0.5; }");
+          });
+
+  // Always align left (incoming)
+  layout->addWidget(contentWidget);
+  layout->addStretch();
+
   return container;
 }
 

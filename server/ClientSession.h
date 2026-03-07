@@ -3,6 +3,7 @@
 #include "../common/Packet.h"
 #include <asio.hpp>
 #include <asio/ssl.hpp>
+#include <cstdint>
 #include <deque>
 #include <functional> // For std::function
 #include <memory>
@@ -47,6 +48,15 @@ using OnGetAvatarCallback =
 using OnGameStatusCallback = std::function<void(std::shared_ptr<ClientSession>,
                                                 const std::string &, uint32_t)>;
 
+// Multiplayer Game Callbacks
+using OnGameInviteCallback = std::function<void(
+    std::shared_ptr<ClientSession>, const std::string &, const std::string &)>;
+using OnGameInviteResponseCallback =
+    std::function<void(std::shared_ptr<ClientSession>, const std::string &,
+                       const std::string &, bool)>;
+using OnGameMoveCallback = std::function<void(std::shared_ptr<ClientSession>,
+                                              const std::string &, uint8_t)>;
+
 // Callback for Disconnect
 using OnDisconnectCallback = std::function<void(int)>;
 
@@ -61,7 +71,9 @@ public:
       OnTypingIndicatorCallback onTypingIndicator, GetStatusCallback getStatus,
       OnStatusChangeCallback onStatusChange,
       OnUpdateAvatarCallback onUpdateAvatar, OnGetAvatarCallback onGetAvatar,
-      OnGameStatusCallback onGameStatus, OnDisconnectCallback onDisconnect);
+      OnGameStatusCallback onGameStatus, OnGameInviteCallback onGameInvite,
+      OnGameInviteResponseCallback onGameInviteResp,
+      OnGameMoveCallback onGameMove, OnDisconnectCallback onDisconnect);
   ~ClientSession(); // Closes socket if owned
 
   // Delete copy to prevent double-close of socket
@@ -100,6 +112,9 @@ private:
   void handleVoiceMessage(Packet &packet);
   void handleStatusChange(Packet &packet);
   void handleGameStatus(Packet &packet);
+  void handleGameInvite(Packet &packet);
+  void handleGameInviteResponse(Packet &packet);
+  void handleGameMove(Packet &packet);
 
   // Contact Handlers
   void handleAddContact(Packet &packet);
@@ -129,6 +144,9 @@ private:
   OnUpdateAvatarCallback m_onUpdateAvatar;
   OnGetAvatarCallback m_onGetAvatar;
   OnGameStatusCallback m_onGameStatus;
+  OnGameInviteCallback m_onGameInvite;
+  OnGameInviteResponseCallback m_onGameInviteResp;
+  OnGameMoveCallback m_onGameMove;
   OnDisconnectCallback m_onDisconnect;
 
   // Buffer for incoming partial data

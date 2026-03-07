@@ -71,6 +71,11 @@ private:
   // Track Status (1=Online, 2=Busy, 3=Offline)
   std::unordered_map<std::string, int> m_userStatuses;
 
+  // Active Multiplayer Game Rooms
+  // Key: Room ID, Value: Pair of ClientSession* (Player X, Player O)
+  std::unordered_map<std::string, std::pair<ClientSession *, ClientSession *>>
+      m_gameRooms;
+
   // Asio Accept Loop
   void doAccept();
 
@@ -93,6 +98,14 @@ private:
   void handleGetAvatar(ClientSession *sender, const std::string &target);
   void handleGameStatus(ClientSession *sender, const std::string &gameName,
                         uint32_t score);
+  void handleGameInvite(ClientSession *sender, const std::string &target,
+                        const std::string &gameName);
+  void handleGameInviteResponse(ClientSession *sender,
+                                const std::string &originalSender,
+                                const std::string &gameName, bool accepted);
+  void handleGameMove(ClientSession *sender, const std::string &roomId,
+                      uint8_t cellIndex);
+
   void handleDisconnect(int sessionId);
 };
 

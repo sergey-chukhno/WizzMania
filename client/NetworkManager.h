@@ -36,6 +36,12 @@ public slots:
   void sendStatusChange(int status, const QString &statusMessage = "");
   void sendGameStatus(const QString &gameName, uint32_t score);
 
+  // Game Invitations
+  void sendGameInvite(const QString &target, const QString &gameName);
+  void sendGameInviteResponse(const QString &originalSender,
+                              const QString &gameName, bool accepted);
+  void sendGameMove(const QString &roomId, uint8_t cellIndex);
+
 signals:
   // Status Signals
   void connected();
@@ -54,6 +60,12 @@ signals:
   void avatarReceived(const QString &username, const QByteArray &data);
   void gameStatusChanged(const QString &username, const QString &gameName,
                          uint32_t score);
+  void gameInviteReceived(const QString &sender, const QString &gameName);
+  void gameInviteResponseReceived(const QString &target,
+                                  const QString &gameName, bool accepted);
+  void gameStartReceived(const QString &gameName, const QString &roomId,
+                         char symbol, const QString &opponent);
+  void gameMoveReceived(const QString &roomId, uint8_t cellIndex);
 
 private slots:
   void onSocketConnected();
@@ -85,6 +97,10 @@ private:
   void handleTypingIndicatorPacket(wizz::Packet &pkt);
   void handleAvatarDataPacket(wizz::Packet &pkt);
   void handleGameStatusPacket(wizz::Packet &pkt);
+  void handleGameInvitePacket(wizz::Packet &pkt);
+  void handleGameInviteResponsePacket(wizz::Packet &pkt);
+  void handleGameStartPacket(wizz::Packet &pkt);
+  void handleGameMovePacket(wizz::Packet &pkt);
 
   QHash<wizz::PacketType, std::function<void(wizz::Packet &)>> m_packetHandlers;
 };

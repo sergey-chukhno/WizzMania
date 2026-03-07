@@ -33,8 +33,8 @@ certs/
 *.log
 
 # TLS Certificates (local only)
-certs/server.crt
-certs/server.key
+server/certs/server.crt
+server/certs/server.key
 
 # database (local only)
 wizzmania.db
