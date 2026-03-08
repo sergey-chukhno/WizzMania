@@ -118,7 +118,7 @@ QProcess *GameLauncher::launchTicTacToe(const QString &username,
   // Export opponent avatar to a temp PNG so the SFML process can load it
   QString avatarPath;
   if (!opponentAvatar.isNull()) {
-    avatarPath = QString("/tmp/ttt_avatar_%1.png").arg(opponent);
+    avatarPath = QDir::tempPath() + QString("/ttt_avatar_%1.png").arg(opponent);
     opponentAvatar.save(avatarPath, "PNG");
   }
 
