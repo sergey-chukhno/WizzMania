@@ -22,14 +22,18 @@ ClientSession::ClientSession(
     OnTypingIndicatorCallback onTypingIndicator, GetStatusCallback getStatus,
     OnStatusChangeCallback onStatusChange,
     OnUpdateAvatarCallback onUpdateAvatar, OnGetAvatarCallback onGetAvatar,
-    OnGameStatusCallback onGameStatus, OnDisconnectCallback onDisconnect)
+    OnGameStatusCallback onGameStatus, OnGameInviteCallback onGameInvite,
+    OnGameInviteResponseCallback onGameInviteResp,
+    OnGameMoveCallback onGameMove, OnDisconnectCallback onDisconnect)
     : m_sessionId(sessionId), m_socket(std::move(socket), sslContext),
       m_isLoggedIn(false), m_server(server), m_onLogin(onLogin),
       m_onMessage(onMessage), m_onNudge(onNudge),
       m_onVoiceMessage(onVoiceMessage), m_onTypingIndicator(onTypingIndicator),
       m_getStatus(getStatus), m_onStatusChange(onStatusChange),
       m_onUpdateAvatar(onUpdateAvatar), m_onGetAvatar(onGetAvatar),
-      m_onGameStatus(onGameStatus), m_onDisconnect(onDisconnect) {}
+      m_onGameStatus(onGameStatus), m_onGameInvite(onGameInvite),
+      m_onGameInviteResp(onGameInviteResp), m_onGameMove(onGameMove),
+      m_onDisconnect(onDisconnect) {}
 
 ClientSession::~ClientSession() {
   if (m_socket.lowest_layer().is_open()) {
@@ -222,6 +226,15 @@ void ClientSession::processPacket(Packet &packet) {
 
   case PacketType::GameStatus:
     handleGameStatus(packet);
+    break;
+  case PacketType::GameInvite:
+    handleGameInvite(packet);
+    break;
+  case PacketType::GameInviteResponse:
+    handleGameInviteResponse(packet);
+    break;
+  case PacketType::GameMove:
+    handleGameMove(packet);
     break;
 
   default:
@@ -600,6 +613,62 @@ void ClientSession::handleGameStatus(Packet &packet) {
 
   if (m_onGameStatus) {
     m_onGameStatus(shared_from_this(), gameName, score);
+  }
+}
+
+void ClientSession::handleGameInvite(Packet &packet) {
+  if (!m_isLoggedIn)
+    return;
+
+  std::string targetUser;
+  std::string gameName;
+  try {
+    targetUser = packet.readString();
+    gameName = packet.readString();
+  } catch (...) {
+    return;
+  }
+
+  if (m_onGameInvite) {
+    m_onGameInvite(shared_from_this(), targetUser, gameName);
+  }
+}
+
+void ClientSession::handleGameInviteResponse(Packet &packet) {
+  if (!m_isLoggedIn)
+    return;
+
+  std::string originalSender;
+  std::string gameName;
+  bool accepted = false;
+  try {
+    originalSender = packet.readString();
+    gameName = packet.readString();
+    accepted = (packet.readInt() != 0);
+  } catch (...) {
+    return;
+  }
+
+  if (m_onGameInviteResp) {
+    m_onGameInviteResp(shared_from_this(), originalSender, gameName, accepted);
+  }
+}
+
+void ClientSession::handleGameMove(Packet &packet) {
+  if (!m_isLoggedIn)
+    return;
+
+  std::string roomId;
+  uint8_t cellIndex = 0;
+  try {
+    roomId = packet.readString();
+    cellIndex = static_cast<uint8_t>(packet.readInt());
+  } catch (...) {
+    return;
+  }
+
+  if (m_onGameMove) {
+    m_onGameMove(shared_from_this(), roomId, cellIndex);
   }
 }
 

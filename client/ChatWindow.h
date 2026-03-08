@@ -27,6 +27,7 @@ public:
   void addMessage(const QString &sender, const QString &text, bool isSelf);
   void addVoiceMessage(const QString &sender, uint16_t duration,
                        const std::vector<uint8_t> &data, bool isSelf);
+  void addGameInvite(const QString &sender, const QString &gameName);
   void flash(const QColor &color);
   void shake();
   QString getPartnerName() const { return m_partnerName; }
@@ -56,6 +57,7 @@ private:
   QWidget *createVoiceBubble(uint16_t duration,
                              const std::vector<uint8_t> &data,
                              const QString &time, bool isSelf);
+  QWidget *createInviteBubble(const QString &sender, const QString &gameName);
 
   QString m_partnerName;
   QPoint m_dragPosition;

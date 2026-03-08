@@ -52,7 +52,7 @@ private:
   std::unique_ptr<Starfield> starfield_; // Starfield background
 
   // IPC
-  std::unique_ptr<wizz::NativeSharedMemory> sharedMemory_;
+  std::unique_ptr<wizz::NativeSharedMemory<wizz::GameIPCData>> sharedMemory_;
 
   // Cannon
   std::unique_ptr<Cannon> cannon_;

@@ -122,7 +122,24 @@ void TcpServer::doAccept() {
                  const std::string &gameName, uint32_t score) {
             handleGameStatus(sender.get(), gameName, score);
           },
-          // 11. OnDisconnect Callback
+          // 11. OnGameInvite Callback
+          [this](std::shared_ptr<ClientSession> sender,
+                 const std::string &target, const std::string &gameName) {
+            handleGameInvite(sender.get(), target, gameName);
+          },
+          // 12. OnGameInviteResponse Callback
+          [this](std::shared_ptr<ClientSession> sender,
+                 const std::string &originalSender, const std::string &gameName,
+                 bool accepted) {
+            handleGameInviteResponse(sender.get(), originalSender, gameName,
+                                     accepted);
+          },
+          // 13. OnGameMove Callback
+          [this](std::shared_ptr<ClientSession> sender,
+                 const std::string &roomId, uint8_t cellIndex) {
+            handleGameMove(sender.get(), roomId, cellIndex);
+          },
+          // 14. OnDisconnect Callback
           [this](int sessionId) { handleDisconnect(sessionId); });
 
       m_sessions[sessionId] = session;
@@ -185,10 +202,15 @@ void wizz::TcpServer::handleLogin(ClientSession *session) {
       for (const auto &followerName : followers) {
         auto it = m_onlineUsers.find(followerName);
         if (it != m_onlineUsers.end()) {
+          std::cout << "[Server] Broadcasting Online Status of " << username
+                    << " to follower " << followerName << std::endl;
           Packet notify(PacketType::ContactStatusChange);
           notify.writeInt(0); // Online
           notify.writeString(username);
           it->second->sendPacket(notify);
+        } else {
+          std::cout << "[Server] Follower " << followerName << " of "
+                    << username << " is not online." << std::endl;
         }
       }
 
@@ -499,6 +521,92 @@ void wizz::TcpServer::handleGameStatus(ClientSession *sender,
     if (it != m_onlineUsers.end()) {
       it->second->sendPacket(pkt);
     }
+  }
+}
+
+void wizz::TcpServer::handleGameInvite(ClientSession *sender,
+                                       const std::string &target,
+                                       const std::string &gameName) {
+  if (!sender)
+    return;
+  std::string senderName = sender->getUsername();
+
+  auto it = m_onlineUsers.find(target);
+  if (it != m_onlineUsers.end()) {
+    Packet pkt(PacketType::GameInvite);
+    pkt.writeString(senderName); // Tell the target who sent it
+    pkt.writeString(gameName);
+    it->second->sendPacket(pkt);
+    std::cout << "[Server] Routed GameInvite from " << senderName << " to "
+              << target << std::endl;
+  }
+}
+
+void wizz::TcpServer::handleGameInviteResponse(
+    ClientSession *sender, const std::string &originalSender,
+    const std::string &gameName, bool accepted) {
+  if (!sender)
+    return;
+  std::string acceptorName = sender->getUsername();
+
+  // Always tell the original sender about the response
+  auto it = m_onlineUsers.find(originalSender);
+  if (it != m_onlineUsers.end()) {
+    Packet respPkt(PacketType::GameInviteResponse);
+    respPkt.writeString(acceptorName);
+    respPkt.writeString(gameName);
+    respPkt.writeInt(accepted ? 1 : 0);
+    it->second->sendPacket(respPkt);
+  }
+
+  // If accepted, generate a room ID and send GameStart to BOTH
+  if (accepted && it != m_onlineUsers.end()) {
+    // Generate a simple unique room ID using time and usernames
+    std::string roomId = std::to_string(std::time(nullptr)) + "_" +
+                         originalSender + "_" + acceptorName;
+
+    // Track the room explicitly in the server
+    m_gameRooms[roomId] = std::make_pair(it->second, sender);
+
+    std::cout << "[Server] Game Accepted! Creating Room: " << roomId
+              << std::endl;
+
+    // Send to Initiator (Player X)
+    Packet startUser1(PacketType::GameStart);
+    startUser1.writeString(gameName);
+    startUser1.writeString(roomId);
+    startUser1.writeInt('X'); // Symbol inside an int for simple transit
+    startUser1.writeString(acceptorName); // Opponent name
+    it->second->sendPacket(startUser1);
+
+    // Send to Acceptor (Player O)
+    Packet startUser2(PacketType::GameStart);
+    startUser2.writeString(gameName);
+    startUser2.writeString(roomId);
+    startUser2.writeInt('O');
+    startUser2.writeString(originalSender);
+    sender->sendPacket(startUser2);
+  }
+}
+
+void wizz::TcpServer::handleGameMove(ClientSession *sender,
+                                     const std::string &roomId,
+                                     uint8_t cellIndex) {
+  if (!sender)
+    return;
+
+  auto it = m_gameRooms.find(roomId);
+  if (it != m_gameRooms.end()) {
+    ClientSession *p1 = it->second.first;
+    ClientSession *p2 = it->second.second;
+
+    // Determine who is the target (the other player)
+    ClientSession *target = (sender->getId() == p1->getId()) ? p2 : p1;
+
+    Packet pkt(PacketType::GameMove);
+    pkt.writeString(roomId);
+    pkt.writeInt(cellIndex);
+    target->sendPacket(pkt);
   }
 }
 

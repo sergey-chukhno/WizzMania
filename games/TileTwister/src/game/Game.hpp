@@ -145,7 +145,10 @@ private:
   void checkAchievements();
 
   // IPC
-  std::unique_ptr<wizz::NativeSharedMemory> m_sharedMemory;
+  /**
+   * @brief Pointer to NativeSharedMemory for IPC
+   */
+  std::unique_ptr<wizz::NativeSharedMemory<wizz::GameIPCData>> m_sharedMemory;
 };
 
 } // namespace Game

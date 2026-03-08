@@ -15,6 +15,7 @@ class NetworkManager : public QObject {
 
 public:
   static NetworkManager &instance();
+  static void shutdown();
 
   bool isConnected() const;
   QList<QPair<QString, int>> getContacts() const { return m_cachedContacts; }
@@ -36,11 +37,18 @@ public slots:
   void sendStatusChange(int status, const QString &statusMessage = "");
   void sendGameStatus(const QString &gameName, uint32_t score);
 
+  // Game Invitations
+  void sendGameInvite(const QString &target, const QString &gameName);
+  void sendGameInviteResponse(const QString &originalSender,
+                              const QString &gameName, bool accepted);
+  void sendGameMove(const QString &roomId, uint8_t cellIndex);
+
 signals:
   // Status Signals
   void connected();
   void disconnected();
   void errorOccurred(QString errorMsg);
+  void shutdownRequested(); // Internal signal for cleanup
 
   // Data Signals (To be expanded)
   void packetReceived(const wizz::Packet &packet); // Raw packet
@@ -54,6 +62,12 @@ signals:
   void avatarReceived(const QString &username, const QByteArray &data);
   void gameStatusChanged(const QString &username, const QString &gameName,
                          uint32_t score);
+  void gameInviteReceived(const QString &sender, const QString &gameName);
+  void gameInviteResponseReceived(const QString &target,
+                                  const QString &gameName, bool accepted);
+  void gameStartReceived(const QString &gameName, const QString &roomId,
+                         char symbol, const QString &opponent);
+  void gameMoveReceived(const QString &roomId, uint8_t cellIndex);
 
 private slots:
   void onSocketConnected();
@@ -73,6 +87,7 @@ private:
   std::vector<uint8_t> m_buffer; // Receive buffer
   std::atomic<bool> m_isConnected{false};
   QList<QPair<QString, int>> m_cachedContacts;
+  QThread *m_thread = nullptr;
 
   // Packet Handlers
   void registerHandlers();
@@ -85,6 +100,10 @@ private:
   void handleTypingIndicatorPacket(wizz::Packet &pkt);
   void handleAvatarDataPacket(wizz::Packet &pkt);
   void handleGameStatusPacket(wizz::Packet &pkt);
+  void handleGameInvitePacket(wizz::Packet &pkt);
+  void handleGameInviteResponsePacket(wizz::Packet &pkt);
+  void handleGameStartPacket(wizz::Packet &pkt);
+  void handleGameMovePacket(wizz::Packet &pkt);
 
   QHash<wizz::PacketType, std::function<void(wizz::Packet &)>> m_packetHandlers;
 };

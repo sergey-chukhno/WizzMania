@@ -118,7 +118,8 @@ Game::Game(const std::string &username)
   // WizzMania_Game_IPC_Mr_Krab) Sanitization replaces spaces and special chars
   // to ensure a valid POSIX name.
   std::string ipcKey = wizz::makeIPCKey(username);
-  m_sharedMemory = std::make_unique<wizz::NativeSharedMemory>(ipcKey);
+  m_sharedMemory =
+      std::make_unique<wizz::NativeSharedMemory<wizz::GameIPCData>>(ipcKey);
   if (m_sharedMemory->createAndMap() || m_sharedMemory->openAndMap()) {
     m_sharedMemory->lock();
     if (m_sharedMemory->data()) {

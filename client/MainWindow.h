@@ -2,12 +2,14 @@
 
 #include "../common/NativeSharedMemory.h"
 #include "../common/Packet.h"
+#include "../common/TicTacToeIPC.h"
 #include <QComboBox>
 #include <QFrame>
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
 #include <QPainter>
+#include <QPointer>
 #include <QProcess>
 #include <QPushButton>
 #include <QScrollArea>
@@ -78,12 +80,14 @@ private slots:
 
   // IPC Slots
   void onPollGameIPC();
+  void onPollTicTacToeIPC();
 
 private:
   void setupUI();
   void populateContactList();
   QColor getStatusColor(UserStatus status);
   QString getStatusText(UserStatus status);
+  ChatWindow *openChatWindow(const QString &username);
 
   QString m_username;
   UserStatus m_currentStatus = UserStatus::Online;
@@ -112,11 +116,25 @@ private:
 
   // IPC (Game Status Polling)
   void setupGameIPC();
-  wizz::NativeSharedMemory m_gameIPC;
+  wizz::GameSharedMemory m_gameIPC;
   QTimer *m_gameIPCTimer = nullptr;
 
   // Track last IPC state to only broadcast changes
   bool m_lastIPCIsPlaying = false;
   uint32_t m_lastIPCScore = 0;
   QString m_lastIPCGameName;
+
+  // TicTacToe IPC Bridge (uses same POSIX NativeSharedMemory as the game)
+  void startTicTacToeIPCBridge(const QString &roomId);
+  void stopTicTacToeIPCBridge();
+  wizz::NativeSharedMemory<wizz::TicTacToeIPCData> *m_tttMemory = nullptr;
+  QTimer *m_tttIPCTimer = nullptr;
+  QString m_tttRoomId;
+  QString m_tttOpponent;
+  char m_tttSymbol;
+  bool m_tttBridgeActive = false;
+  bool m_tttGameOver =
+      false; // True once gameOver seen; bridge stays alive for rematch/quit
+  QPointer<QProcess>
+      m_tttProcess; // Weak handle — auto-nullifies when process exits
 };
