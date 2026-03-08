@@ -801,8 +801,112 @@
             </div>
         </section>
 
-        <!-- Diapositive 8 : Démo -->
+        <!-- Diapositive 8 : TicTacToe Multiplayer Matchmaking -->
         <section class="slide hidden" id="slide-8">
+            <h1 class="section-title">Matchmaking & TicTacToe Multijoueur</h1>
+            <p class="slide4-subtitle">Inviter un ami — <strong>Synchronisation Avatar & Board</strong> via WebSocket +
+                IPC</p>
+
+            <div class="server-panels">
+                <!-- Panel 1: UI ChatWindow Game Invites -->
+                <div class="server-card" data-panel="ttt-ui">
+                    <div class="card-header">
+                        <span class="card-icon">⚡</span>
+                        <div>
+                            <h3>Invitations In-App</h3>
+                            <span class="card-file">client/ChatWindow.cpp</span>
+                        </div>
+                    </div>
+                    <p class="card-desc">L'UI WizzMania permet de défier ses amis directement depuis la fenêtre de chat
+                        visuelle. Un clique déclenche un paquet JSON WebSocket <strong>GameInvite</strong> vers le
+                        serveur.</p>
+                    <div class="card-code">
+                        <div class="code-label">UI Challenge Flow</div>
+                        <pre><code><span class="kw">void</span> ChatWindow::<span class="fn">setupInviteButton</span>() {
+  <span class="type">QPushButton</span>* btn = <span class="kw">new</span> <span class="type">QPushButton</span>(<span class="cm">"⚡ Jouer"</span>);
+  <span class="fn">connect</span>(btn, &amp;<span class="type">QPushButton</span>::clicked, [<span class="kw">this</span>]() {
+    <span class="type">wizz::Packet</span> pkt(<span class="type">PacketType</span>::GameInvite);
+    pkt.<span class="fn">writeString</span>(<span class="cm">"TicTacToe"</span>);
+    pkt.<span class="fn">writeString</span>(m_contactUsername);
+    NetworkManager::<span class="fn">instance</span>().<span class="fn">sendPacket</span>(pkt);
+  });
+}</code></pre>
+                    </div>
+                    <div class="card-members">
+                        <span class="member"><span class="type-badge">ui</span> Game Invite Banner</span>
+                        <span class="member"><span class="type-badge ipc">socket</span> GameInvite Packet</span>
+                        <span class="member"><span class="type-badge method">method</span> acceptGame()</span>
+                    </div>
+                </div>
+
+                <!-- Panel 2: Avatar & Memory Export -->
+                <div class="server-card" data-panel="ttt-avatar">
+                    <div class="card-header">
+                        <span class="card-icon">🎭</span>
+                        <div>
+                            <h3>Export d'Avatar & Start</h3>
+                            <span class="card-file">client/GameLauncher.cpp</span>
+                        </div>
+                    </div>
+                    <p class="card-desc">Le client Qt exporte en temps réel l'avatar réseau de l'adversaire dans le
+                        <strong>QDir::tempPath()</strong>, initialisant l'IPC avant de lancer SFML via `QProcess`.</p>
+                    <div class="card-code">
+                        <div class="code-label">launchTicTacToe()</div>
+                        <pre><code><span class="cm">// Export avatar for SFML engine</span>
+<span class="type">QString</span> tmp = <span class="type">QDir</span>::<span class="fn">tempPath</span>() +
+              <span class="cm">"/ttt_avatar_%1.png"</span>.<span class="fn">arg</span>(opponent);
+opponentPixmap.<span class="fn">save</span>(tmp, <span class="cm">"PNG"</span>);
+
+<span class="cm">// Start standalone process</span>
+<span class="type">QStringList</span> args &lt;&lt; <span class="cm">"--user="</span> + username
+                 &lt;&lt; <span class="cm">"--opponent="</span> + opponent
+                 &lt;&lt; <span class="cm">"--avatarPath="</span> + tmp;
+m_process-&gt;<span class="fn">start</span>(exePath, args);</code></pre>
+                    </div>
+                    <div class="card-members">
+                        <span class="member"><span class="type-badge method">method</span> QPixmap::save()</span>
+                        <span class="member"><span class="type-badge">process</span> QProcess::start()</span>
+                        <span class="member"><span class="type-badge method">method</span> QDir::tempPath()</span>
+                    </div>
+                </div>
+
+                <!-- Panel 3: SFML PlayingState -->
+                <div class="server-card" data-panel="ttt-sfml">
+                    <div class="card-header">
+                        <span class="card-icon">🎮</span>
+                        <div>
+                            <h3>Rendu SFML + IPC Memory</h3>
+                            <span class="card-file">games/TicTacToe/.../PlayingState.cpp</span>
+                        </div>
+                    </div>
+                    <p class="card-desc">Le jeu SFML extrait les 9 cases de la mémoire POSIX et affiche l'<strong>avatar
+                            adverse</strong> dans un mask <code>sf::CircleShape</code> dynamique stylisé Cyberpunk.</p>
+                    <div class="card-code">
+                        <div class="code-label">PlayingState::update()</div>
+                        <pre><code><span class="cm">// 1. Sync from Qt memory</span>
+m_sharedMemory-&gt;<span class="fn">lock</span>();
+<span class="kw">const auto</span>* ipc = m_sharedMemory-&gt;<span class="fn">data</span>();
+<span class="kw">for</span>(<span class="kw">int</span> i = <span class="cm">0</span>; i &lt; <span class="cm">9</span>; i++) {
+  m_board[i] = ipc-&gt;board[i];
+}
+<span class="kw">bool</span> localTurn = ipc-&gt;isPlayerTurn;
+m_sharedMemory-&gt;<span class="fn">unlock</span>();
+
+<span class="cm">// 2. Render Avatar Circle Mask</span>
+avatarSpriteOpt_-&gt;<span class="fn">setTexture</span>(&amp;avatarTexture_);
+window.<span class="fn">draw</span>(*avatarSpriteOpt_);</code></pre>
+                    </div>
+                    <div class="card-members">
+                        <span class="member"><span class="type-badge ipc">ipc</span> ipc->board[9]</span>
+                        <span class="member"><span class="type-badge method">method</span> sf::CircleShape</span>
+                        <span class="member"><span class="type-badge method">method</span> m_sharedMemory->lock()</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Diapositive 9 : Démo -->
+        <section class="slide hidden" id="slide-9">
             <div class="demo-slide">
                 <div class="demo-left">
                     <h1 class="demo-title">Démo en Direct</h1>
@@ -854,6 +958,7 @@
         <button id="prevBtn" class="nav-btn" disabled>&larr; Précédent</button>
         <div class="slide-indicators">
             <span class="dot active"></span>
+            <span class="dot"></span>
             <span class="dot"></span>
             <span class="dot"></span>
             <span class="dot"></span>
