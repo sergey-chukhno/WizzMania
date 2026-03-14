@@ -145,6 +145,10 @@ void TcpServer::doAccept() {
           [this](std::shared_ptr<ClientSession> sender,
                  const std::string &status) {
             handleUpdateStatus(sender.get(), status);
+          },
+          // 16. GetCustomStatus Callback
+          [this](const std::string &username) -> std::string {
+            return handleGetCustomStatus(username);
           });
 
       m_sessions[sessionId] = session;
@@ -420,13 +424,20 @@ void wizz::TcpServer::handleTypingIndicator(ClientSession *sender,
 }
 
 int wizz::TcpServer::handleGetStatus(const std::string &username) {
-  if (m_userStatuses.find(username) != m_userStatuses.end()) {
-    return m_userStatuses[username];
+  auto it = m_userStatuses.find(username);
+  if (it != m_userStatuses.end()) {
+    return it->second;
   }
-  if (m_onlineUsers.find(username) != m_onlineUsers.end()) {
-    return 0; // Online default (UserStatus::Online = 0)
+  return 3; // Offline
+}
+
+std::string
+wizz::TcpServer::handleGetCustomStatus(const std::string &username) {
+  auto it = m_customStatuses.find(username);
+  if (it != m_customStatuses.end()) {
+    return it->second;
   }
-  return 3; // Offline (UserStatus::Offline = 3)
+  return "";
 }
 
 void wizz::TcpServer::handleStatusChange(ClientSession *sender, int newStatus) {

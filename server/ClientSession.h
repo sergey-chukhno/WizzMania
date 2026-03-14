@@ -39,6 +39,7 @@ using OnStatusChangeCallback =
     std::function<void(std::shared_ptr<ClientSession>, int)>;
 using OnUpdateStatusCallback =
     std::function<void(std::shared_ptr<ClientSession>, const std::string &)>;
+using GetCustomStatusCallback = std::function<std::string(const std::string &)>;
 
 // Avatar Callbacks
 using OnUpdateAvatarCallback = std::function<void(
@@ -76,7 +77,7 @@ public:
       OnGameStatusCallback onGameStatus, OnGameInviteCallback onGameInvite,
       OnGameInviteResponseCallback onGameInviteResp,
       OnGameMoveCallback onGameMove, OnDisconnectCallback onDisconnect,
-      OnUpdateStatusCallback onUpdateStatus);
+      OnUpdateStatusCallback onUpdateStatus, GetCustomStatusCallback getCustomStatus);
   ~ClientSession(); // Closes socket if owned
 
   // Delete copy to prevent double-close of socket
@@ -153,6 +154,7 @@ private:
   OnGameMoveCallback m_onGameMove;
   OnDisconnectCallback m_onDisconnect;
   OnUpdateStatusCallback m_onUpdateStatus;
+  GetCustomStatusCallback m_getCustomStatus;
 
   // Buffer for incoming partial data
   std::vector<uint8_t> m_buffer;

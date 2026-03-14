@@ -25,7 +25,7 @@ ClientSession::ClientSession(
     OnGameStatusCallback onGameStatus, OnGameInviteCallback onGameInvite,
     OnGameInviteResponseCallback onGameInviteResp,
     OnGameMoveCallback onGameMove, OnDisconnectCallback onDisconnect,
-    OnUpdateStatusCallback onUpdateStatus)
+    OnUpdateStatusCallback onUpdateStatus, GetCustomStatusCallback getCustomStatus)
     : m_sessionId(sessionId), m_socket(std::move(socket), sslContext),
       m_isLoggedIn(false), m_server(server), m_onLogin(onLogin),
       m_onMessage(onMessage), m_onNudge(onNudge),
@@ -34,7 +34,8 @@ ClientSession::ClientSession(
       m_onUpdateAvatar(onUpdateAvatar), m_onGetAvatar(onGetAvatar),
       m_onGameStatus(onGameStatus), m_onGameInvite(onGameInvite),
       m_onGameInviteResp(onGameInviteResp), m_onGameMove(onGameMove),
-      m_onDisconnect(onDisconnect), m_onUpdateStatus(onUpdateStatus) {}
+      m_onDisconnect(onDisconnect), m_onUpdateStatus(onUpdateStatus),
+      m_getCustomStatus(getCustomStatus) {}
 
 ClientSession::~ClientSession() {
   if (m_socket.lowest_layer().is_open()) {
@@ -415,6 +416,9 @@ void ClientSession::handleAddContact(Packet &packet) {
           resp.writeString(name);
           int status = session->m_getStatus ? session->m_getStatus(name) : 3;
           resp.writeInt(static_cast<uint32_t>(status));
+          std::string customStatus =
+              session->m_getCustomStatus ? session->m_getCustomStatus(name) : "";
+          resp.writeString(customStatus);
         }
         session->sendPacket(resp);
       } else {
@@ -464,6 +468,9 @@ void ClientSession::handleRemoveContact(Packet &packet) {
           resp.writeString(name);
           int status = session->m_getStatus ? session->m_getStatus(name) : 3;
           resp.writeInt(static_cast<uint32_t>(status));
+          std::string customStatus =
+              session->m_getCustomStatus ? session->m_getCustomStatus(name) : "";
+          resp.writeString(customStatus);
         }
         session->sendPacket(resp);
       }

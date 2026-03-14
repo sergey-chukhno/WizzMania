@@ -100,6 +100,7 @@ private:
   void handleTypingIndicator(ClientSession *sender, const std::string &target,
                              bool isTyping);
   int handleGetStatus(const std::string &username);
+  std::string handleGetCustomStatus(const std::string &username);
   void handleStatusChange(ClientSession *sender, int newStatus);
   void handleUpdateStatus(ClientSession *sender, const std::string &status);
   void handleUpdateAvatar(ClientSession *sender,
