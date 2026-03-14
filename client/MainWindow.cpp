@@ -26,7 +26,8 @@ MainWindow::MainWindow(const QString &username, const QPoint &initialPos,
   std::cout << "[MainWindow] Constructing for user: " << username.toStdString() << std::endl;
   setWindowTitle("Wizz Mania - " + username);
   setMinimumSize(350, 500);
-  resize(400, 600);
+  resize(350, 700);
+  setAttribute(Qt::WA_DeleteOnClose);
 
   setupGameIPC();
   std::cout << "[MainWindow] IPC Setup complete" << std::endl;
@@ -251,6 +252,38 @@ MainWindow::MainWindow(const QString &username, const QPoint &initialPos,
   // Request my own avatar immediately
   QTimer::singleShot(
       500, [this]() { AvatarManager::instance().getAvatar(m_username, 50); });
+}
+
+MainWindow::~MainWindow() {
+  std::cout << "[MainWindow] Destructor starting..." << std::endl;
+
+  // Cleanup TicTacToe IPC
+  stopTicTacToeIPCBridge();
+  if (m_tttProcess) {
+    m_tttProcess->terminate();
+    m_tttProcess->waitForFinished(500);
+    delete m_tttProcess;
+    m_tttProcess = nullptr;
+  }
+
+  // Cleanup active chats
+  for (auto chatW : m_openChats) {
+    if (chatW) {
+      chatW->close();
+      // Since ChatWindow likely has WA_DeleteOnClose, we don't delete here
+    }
+  }
+  m_openChats.clear();
+
+  // Stop polling timers
+  if (m_gameIPCTimer) {
+    m_gameIPCTimer->stop();
+  }
+  if (m_tttIPCTimer) {
+    m_tttIPCTimer->stop();
+  }
+
+  std::cout << "[MainWindow] Destructor complete." << std::endl;
 }
 void MainWindow::paintEvent(QPaintEvent *event) {
   QPainter painter(this);

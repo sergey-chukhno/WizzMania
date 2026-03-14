@@ -40,11 +40,20 @@ void NetworkManager::shutdown() {
   // If instance was never created, nothing to do
   static NetworkManager *_instance = &instance();
   if (_instance && _instance->m_thread) {
+    qDebug() << "[Network] Initiating shutdown...";
     emit _instance->shutdownRequested();
-    _instance->m_thread->wait(); // Wait for it to finish cleanly
-    // Note: _instance is intentionally leaked as it's a singleton,
-    // but its resources (socket, thread) are cleanly terminated via thread
-    // quit.
+    _instance->m_thread->quit(); // Signal event loop to exit
+
+    // Wait for thread to finish with a timeout
+    if (!_instance->m_thread->wait(2000)) {
+      qDebug() << "[Network] Shutdown timeout! Forcing socket abort.";
+      if (_instance->m_socket) {
+        _instance->m_socket->abort();
+      }
+      _instance->m_thread->terminate();
+      _instance->m_thread->wait(1000);
+    }
+    qDebug() << "[Network] Shutdown complete.";
   }
 }
 
