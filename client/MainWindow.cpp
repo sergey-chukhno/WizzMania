@@ -626,7 +626,12 @@ void MainWindow::populateContactList() {
 
     QHBoxLayout *itemLayout = new QHBoxLayout(itemWidget);
     itemLayout->setContentsMargins(12, 10, 12, 10);
-    itemLayout->setSpacing(12);
+    itemLayout->setSpacing(15);
+
+    // Group Avatar and Status Dot (Horizontal)
+    QHBoxLayout *avatarGroup = new QHBoxLayout();
+    avatarGroup->setSpacing(6);
+    avatarGroup->setAlignment(Qt::AlignCenter);
 
     // Avatar
     QLabel *avatar = new QLabel();
@@ -642,18 +647,21 @@ void MainWindow::populateContactList() {
 
     // Status indicator
     QLabel *statusDot = new QLabel();
-    statusDot->setFixedSize(10, 10);
+    statusDot->setFixedSize(8, 8);
     statusDot->setStyleSheet(
-        QString("background-color: %1; border-radius: 5px;")
+        QString("background-color: %1; border-radius: 4px;")
             .arg(getStatusColor(contact.status).name()));
+
+    avatarGroup->addWidget(avatar);
+    avatarGroup->addWidget(statusDot, 0, Qt::AlignVCenter);
 
     // Name and status message
     QVBoxLayout *textLayout = new QVBoxLayout();
     textLayout->setSpacing(2);
 
     QLabel *nameLabel = new QLabel(contact.username);
-    nameLabel->setStyleSheet("font-size: 13px; font-weight: 700; color: "
-                             "#ffffff; background: transparent;");
+    nameLabel->setStyleSheet("font-size: 14px; font-weight: 700; color: "
+                             "#2c3e50; background: transparent;");
 
     QString statusText = contact.statusMessage.isEmpty()
                              ? getStatusText(contact.status)
@@ -668,20 +676,17 @@ void MainWindow::populateContactList() {
 
     QLabel *statusLabel = new QLabel(statusText);
     statusLabel->setStyleSheet(
-        "font-size: 11px; color: rgba(255, 255, 255, 0.7); background: transparent;");
-    statusLabel->setMaximumWidth(250);
-    // Elide text if too long
-    QFontMetrics metrics(statusLabel->font());
-    QString elidedText = metrics.elidedText(statusText, Qt::ElideRight, 250);
-    statusLabel->setText(elidedText);
-    statusLabel->setToolTip(statusText); // Show full text on hover
+        "font-size: 12px; color: #5d6d7e; background: transparent;");
+    statusLabel->setWordWrap(true);
+    statusLabel->setToolTip(statusText);
 
     textLayout->addWidget(nameLabel);
     textLayout->addWidget(statusLabel);
-    // Add TicTacToe Invite Button on its own line if user is Online
+    // Add TicTacToe Invite Button if user is Online
     if (contact.status == UserStatus::Online) {
-      QPushButton *inviteBtn = new QPushButton("🎮 INVITE TO PLAY");
-      inviteBtn->setFixedWidth(120);
+      QPushButton *inviteBtn = new QPushButton();
+      inviteBtn->setText("🎮 Invite to Play\nTic Tac Toe");
+      inviteBtn->setFixedWidth(150);
       inviteBtn->setToolTip("Challenge " + contact.username + " to Tic Tac Toe");
       inviteBtn->setCursor(Qt::PointingHandCursor);
       inviteBtn->setStyleSheet(R"(
@@ -689,15 +694,15 @@ void MainWindow::populateContactList() {
           background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #ff0080, stop:1 #e01e5a);
           color: white;
           border: none;
-          border-radius: 8px;
-          padding: 3px 8px;
-          font-weight: 900;
-          font-size: 9px;
-          margin-top: 6px;
+          border-radius: 18px;
+          padding: 8px 12px;
+          font-weight: 800;
+          font-size: 10px;
+          margin-top: 8px;
+          text-align: center;
         }
         QPushButton:hover {
           background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #ff4da6, stop:1 #ff0080);
-          transform: translateY(-1px);
         }
       )");
       connect(inviteBtn, &QPushButton::clicked, this, [this, name = contact.username]() {
@@ -706,8 +711,7 @@ void MainWindow::populateContactList() {
       textLayout->addWidget(inviteBtn);
     }
 
-    itemLayout->addWidget(avatar);
-    itemLayout->addWidget(statusDot, 0, Qt::AlignVCenter);
+    itemLayout->addLayout(avatarGroup);
     itemLayout->addLayout(textLayout, 1);
 
     QListWidgetItem *item = new QListWidgetItem(m_contactList);
