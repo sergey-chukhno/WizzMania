@@ -167,6 +167,20 @@ void NetworkManager::sendUpdateAvatar(const QByteArray &data) {
   sendPacket(p);
 }
 
+void NetworkManager::sendUpdateStatus(const QString &status) {
+  if (QThread::currentThread() != this->thread()) {
+    QMetaObject::invokeMethod(this, "sendUpdateStatus", Qt::QueuedConnection,
+                              Q_ARG(QString, status));
+    return;
+  }
+  if (!isConnected())
+    return;
+
+  wizz::Packet p(wizz::PacketType::UpdateStatus);
+  p.writeString(status.toStdString());
+  sendPacket(p);
+}
+
 void NetworkManager::requestAvatar(const QString &username) {
   if (QThread::currentThread() != this->thread()) {
     QMetaObject::invokeMethod(this, "requestAvatar", Qt::QueuedConnection,
@@ -367,7 +381,8 @@ void NetworkManager::handleContactListPacket(wizz::Packet &pkt) {
 void NetworkManager::handleContactStatusChangePacket(wizz::Packet &pkt) {
   int status = static_cast<int>(pkt.readInt());
   QString username = QString::fromStdString(pkt.readString());
-  emit contactStatusChanged(username, status);
+  QString statusMsg = QString::fromStdString(pkt.readString());
+  emit contactStatusChanged(username, status, statusMsg);
 }
 
 void NetworkManager::handleErrorPacket(wizz::Packet &pkt) {

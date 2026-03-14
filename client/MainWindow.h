@@ -69,6 +69,7 @@ protected:
 
 private slots:
   void onStatusChanged(int index);
+  void onStatusMessageSubmitted();
   void onSendMessage();
   void onAddFriendClicked();
   void onRemoveFriendClicked();

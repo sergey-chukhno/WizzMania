@@ -33,6 +33,7 @@ public slots:
                         const std::vector<uint8_t> &data);
   void sendTypingPacket(const QString &target, bool isTyping);
   void sendUpdateAvatar(const QByteArray &data);
+  void sendUpdateStatus(const QString &status);
   void requestAvatar(const QString &username);
   void sendStatusChange(int status, const QString &statusMessage = "");
   void sendGameStatus(const QString &gameName, uint32_t score);
@@ -53,7 +54,8 @@ signals:
   // Data Signals (To be expanded)
   void packetReceived(const wizz::Packet &packet); // Raw packet
   void contactListReceived(const QList<QPair<QString, int>> &contacts);
-  void contactStatusChanged(const QString &username, int status);
+  void contactStatusChanged(const QString &username, int status,
+                            const QString &statusMessage);
   void messageReceived(const QString &sender, const QString &text);
   void nudgeReceived(const QString &sender);
   void voiceMessageReceived(const QString &sender, uint16_t duration,

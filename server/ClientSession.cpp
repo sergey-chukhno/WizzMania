@@ -24,7 +24,8 @@ ClientSession::ClientSession(
     OnUpdateAvatarCallback onUpdateAvatar, OnGetAvatarCallback onGetAvatar,
     OnGameStatusCallback onGameStatus, OnGameInviteCallback onGameInvite,
     OnGameInviteResponseCallback onGameInviteResp,
-    OnGameMoveCallback onGameMove, OnDisconnectCallback onDisconnect)
+    OnGameMoveCallback onGameMove, OnDisconnectCallback onDisconnect,
+    OnUpdateStatusCallback onUpdateStatus)
     : m_sessionId(sessionId), m_socket(std::move(socket), sslContext),
       m_isLoggedIn(false), m_server(server), m_onLogin(onLogin),
       m_onMessage(onMessage), m_onNudge(onNudge),
@@ -33,7 +34,7 @@ ClientSession::ClientSession(
       m_onUpdateAvatar(onUpdateAvatar), m_onGetAvatar(onGetAvatar),
       m_onGameStatus(onGameStatus), m_onGameInvite(onGameInvite),
       m_onGameInviteResp(onGameInviteResp), m_onGameMove(onGameMove),
-      m_onDisconnect(onDisconnect) {}
+      m_onDisconnect(onDisconnect), m_onUpdateStatus(onUpdateStatus) {}
 
 ClientSession::~ClientSession() {
   if (m_socket.lowest_layer().is_open()) {
@@ -190,6 +191,9 @@ void ClientSession::processPacket(Packet &packet) {
 
   case PacketType::ContactStatusChange:
     handleStatusChange(packet);
+    break;
+  case PacketType::UpdateStatus:
+    handleUpdateStatus(packet);
     break;
 
   case PacketType::Nudge:
@@ -496,6 +500,25 @@ void ClientSession::handleStatusChange(Packet &packet) {
 
   if (m_onStatusChange) {
     m_onStatusChange(shared_from_this(), newStatus);
+  }
+}
+
+void ClientSession::handleUpdateStatus(Packet &packet) {
+  if (!m_isLoggedIn)
+    return;
+
+  std::string newStatusText;
+  try {
+    newStatusText = packet.readString();
+  } catch (...) {
+    return;
+  }
+
+  std::cout << "[Session] Update Custom Status: " << m_username << " -> "
+            << newStatusText << std::endl;
+
+  if (m_onUpdateStatus) {
+    m_onUpdateStatus(shared_from_this(), newStatusText);
   }
 }
 

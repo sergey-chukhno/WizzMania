@@ -59,8 +59,8 @@ MainWindow::MainWindow(const QString &username, const QPoint &initialPos,
 
   // Connect Status Change
   connect(&NetworkManager::instance(), &NetworkManager::contactStatusChanged,
-          this, [this](const QString &username, int status) {
-            updateContactStatus(username, static_cast<UserStatus>(status), "");
+          this, [this](const QString &username, int status, const QString &statusMsg) {
+            updateContactStatus(username, static_cast<UserStatus>(status), statusMsg);
           });
 
   // Connect Error
@@ -387,8 +387,31 @@ void MainWindow::setupUI() {
   connect(m_statusCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
           this, &MainWindow::onStatusChanged);
 
+  m_statusMessageInput = new QLineEdit(profileFrame);
+  m_statusMessageInput->setPlaceholderText("Share a quick thought...");
+  m_statusMessageInput->setStyleSheet(R"(
+        QLineEdit {
+            background-color: rgba(255, 255, 255, 80);
+            border: 1px solid rgba(200, 220, 240, 150);
+            border-radius: 10px;
+            padding: 4px 10px;
+            font-size: 11px;
+            color: #4a5568;
+            font-style: italic;
+        }
+        QLineEdit:focus {
+            background-color: white;
+            border: 1px solid rgba(100, 180, 255, 200);
+            font-style: normal;
+        }
+    )");
+  m_statusMessageInput->setFixedWidth(160);
+  connect(m_statusMessageInput, &QLineEdit::returnPressed, this,
+          &MainWindow::onStatusMessageSubmitted);
+
   userInfoLayout->addWidget(m_usernameLabel);
   userInfoLayout->addWidget(m_statusCombo);
+  userInfoLayout->addWidget(m_statusMessageInput);
 
   profileLayout->addWidget(m_avatarLabel);
   profileLayout->addLayout(userInfoLayout);
@@ -629,7 +652,9 @@ void MainWindow::updateContactStatus(const QString &username, UserStatus status,
   for (ContactInfo &contact : m_contacts) {
     if (contact.username == username) {
       contact.status = status;
-      if (!statusMessage.isEmpty()) {
+      if (status == UserStatus::Offline) {
+        contact.statusMessage = "";
+      } else if (!statusMessage.isEmpty()) {
         contact.statusMessage = statusMessage;
       }
       break;
@@ -697,12 +722,18 @@ void MainWindow::updateContactAvatar(const QString &username,
 
 void MainWindow::onStatusChanged(int index) {
   m_currentStatus = static_cast<UserStatus>(index);
-  emit statusChanged(m_currentStatus,
-                     m_statusMessageInput ? m_statusMessageInput->text() : "");
+  QString statusMessage = m_statusMessageInput ? m_statusMessageInput->text() : "";
+  emit statusChanged(m_currentStatus, statusMessage);
 
   // Inform NetworkManager
-  NetworkManager::instance().sendStatusChange(
-      static_cast<int>(m_currentStatus));
+  NetworkManager::instance().sendStatusChange(static_cast<int>(m_currentStatus), statusMessage);
+  std::cout << "[MainWindow] Direct Status change to index: " << index << std::endl;
+}
+
+void MainWindow::onStatusMessageSubmitted() {
+  QString msg = m_statusMessageInput->text();
+  NetworkManager::instance().sendUpdateStatus(msg);
+  m_statusMessageInput->clearFocus();
 }
 
 void MainWindow::onAddFriendClicked() {

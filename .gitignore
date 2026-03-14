@@ -38,3 +38,4 @@ server/certs/server.key
 
 # database (local only)
 wizzmania.db
+docs/

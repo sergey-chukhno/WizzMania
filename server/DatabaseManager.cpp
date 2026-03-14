@@ -120,7 +120,8 @@ bool DatabaseManager::init() {
                          "USERNAME TEXT NOT NULL UNIQUE,"
                          "PASSWORD_HASH TEXT NOT NULL,"
                          "SALT TEXT NOT NULL,"
-                         "AVATAR_PATH TEXT);";
+                         "AVATAR_PATH TEXT,"
+                         "CUSTOM_STATUS TEXT DEFAULT '');";
 
   char *errMsg = nullptr;
   if (sqlite3_exec(m_db, sqlUsers, nullptr, 0, &errMsg) != SQLITE_OK) {
@@ -128,6 +129,9 @@ bool DatabaseManager::init() {
     sqlite3_free(errMsg);
     return false;
   }
+
+  // Migration: Add CUSTOM_STATUS if it doesn't exist (in case of table already exists)
+  sqlite3_exec(m_db, "ALTER TABLE users ADD COLUMN CUSTOM_STATUS TEXT DEFAULT '';", nullptr, 0, nullptr);
 
   // 3. Create Messages Table
   const char *sqlMsgs = "CREATE TABLE IF NOT EXISTS messages ("
@@ -477,6 +481,38 @@ std::string DatabaseManager::getUserAvatar(const std::string &username) {
   }
   sqlite3_finalize(stmt);
   return path;
+}
+
+bool DatabaseManager::updateCustomStatus(const std::string &username,
+                                         const std::string &status) {
+  const char *sql = "UPDATE users SET CUSTOM_STATUS = ? WHERE USERNAME = ?;";
+  sqlite3_stmt *stmt;
+  if (sqlite3_prepare_v2(m_db, sql, -1, &stmt, nullptr) != SQLITE_OK) {
+    return false;
+  }
+  sqlite3_bind_text(stmt, 1, status.c_str(), -1, SQLITE_STATIC);
+  sqlite3_bind_text(stmt, 2, username.c_str(), -1, SQLITE_STATIC);
+
+  bool ok = (sqlite3_step(stmt) == SQLITE_DONE);
+  sqlite3_finalize(stmt);
+  return ok;
+}
+
+std::string DatabaseManager::getCustomStatus(const std::string &username) {
+  const char *sql = "SELECT CUSTOM_STATUS FROM users WHERE USERNAME = ?;";
+  sqlite3_stmt *stmt;
+  std::string status = "";
+  if (sqlite3_prepare_v2(m_db, sql, -1, &stmt, nullptr) == SQLITE_OK) {
+    sqlite3_bind_text(stmt, 1, username.c_str(), -1, SQLITE_STATIC);
+    if (sqlite3_step(stmt) == SQLITE_ROW) {
+      const unsigned char *text = sqlite3_column_text(stmt, 0);
+      if (text) {
+        status = reinterpret_cast<const char *>(text);
+      }
+    }
+    sqlite3_finalize(stmt);
+  }
+  return status;
 }
 
 } // namespace wizz

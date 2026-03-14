@@ -70,6 +70,7 @@ private:
   std::unordered_map<std::string, ClientSession *> m_onlineUsers;
   // Track Status (1=Online, 2=Busy, 3=Offline)
   std::unordered_map<std::string, int> m_userStatuses;
+  std::unordered_map<std::string, std::string> m_customStatuses;
 
   // Active Multiplayer Game Rooms
   // Key: Room ID, Value: Pair of ClientSession* (Player X, Player O)
@@ -93,6 +94,7 @@ private:
                              bool isTyping);
   int handleGetStatus(const std::string &username);
   void handleStatusChange(ClientSession *sender, int newStatus);
+  void handleUpdateStatus(ClientSession *sender, const std::string &status);
   void handleUpdateAvatar(ClientSession *sender,
                           const std::vector<uint8_t> &data);
   void handleGetAvatar(ClientSession *sender, const std::string &target);

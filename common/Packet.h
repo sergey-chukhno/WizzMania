@@ -25,6 +25,7 @@ enum class PacketType : uint32_t {
   RemoveContact = 201,
   ContactList = 202,
   ContactStatusChange = 203,
+  UpdateStatus = 204,
 
   // Messaging
   DirectMessage = 300,
