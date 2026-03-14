@@ -23,11 +23,13 @@ MainWindow::MainWindow(const QString &username, const QPoint &initialPos,
                        QWidget *parent)
     : QWidget(parent), m_username(username), m_statusMessageInput(nullptr),
       m_gameIPC(wizz::makeIPCKey(username.toStdString())) {
+  std::cout << "[MainWindow] Constructing for user: " << username.toStdString() << std::endl;
   setWindowTitle("Wizz Mania - " + username);
   setMinimumSize(350, 500);
   resize(400, 600);
 
   setupGameIPC();
+  std::cout << "[MainWindow] IPC Setup complete" << std::endl;
 
   if (!initialPos.isNull()) {
     move(initialPos);
@@ -38,16 +40,20 @@ MainWindow::MainWindow(const QString &username, const QPoint &initialPos,
 
   // Connect to NetworkManager for contact updates
   connect(&NetworkManager::instance(), &NetworkManager::contactListReceived,
-          this, [this](const QList<QPair<QString, int>> &friends) {
+          this,
+          [this](const QList<std::tuple<QString, int, QString>> &friends) {
             QList<ContactInfo> newContacts;
-            for (const auto &pair : friends) {
-              QString name = pair.first;
-              int statusInt = pair.second;
+            for (const auto &tup : friends) {
+              QString name = std::get<0>(tup);
+              int statusInt = std::get<1>(tup);
+              QString statusMsg = std::get<2>(tup);
+
               UserStatus status = static_cast<UserStatus>(statusInt);
               if (statusInt > 3)
                 status = UserStatus::Offline; // Fail-safe
 
-              newContacts.append({name, status, "", QPixmap(), false, "", 0});
+              newContacts.append(
+                  {name, status, statusMsg, QPixmap(), false, "", 0});
             }
             setContacts(newContacts);
 
@@ -173,6 +179,21 @@ MainWindow::MainWindow(const QString &username, const QPoint &initialPos,
                   AvatarManager::instance().getAvatar(opponent, 64);
               m_tttProcess = GameLauncher::launchTicTacToe(
                   m_username, roomId, symbol, opponent, avatar);
+              if (m_tttProcess) {
+                connect(m_tttProcess, &QProcess::finished, this, [this]() {
+                  stopTicTacToeIPCBridge();
+                  NetworkManager::instance().sendGameStatus("", 0);
+                  if (m_statusMessageInput) {
+                    m_statusMessageInput->setText("");
+                    m_statusMessageInput->setReadOnly(false);
+                    m_statusMessageInput->setPlaceholderText(
+                        "Share a quick thought...");
+                  }
+                  m_lastIPCGameName.clear();
+                  populateContactList(); // Refresh list to show they are no
+                                         // longer playing
+                });
+              }
               m_tttOpponent = opponent;
               m_tttSymbol = symbol;
               QTimer::singleShot(1500, this, [this, roomId]() {
@@ -214,14 +235,15 @@ MainWindow::MainWindow(const QString &username, const QPoint &initialPos,
       });
 
   setupUI();
+  std::cout << "[MainWindow] UI Setup complete" << std::endl;
 
   // Initialize with any cached contacts that arrived before we connected
   QList<ContactInfo> initialContacts;
   for (const auto &c : NetworkManager::instance().getContacts()) {
     ContactInfo info;
-    info.username = c.first;
-    info.status = static_cast<UserStatus>(c.second);
-    info.statusMessage = "";
+    info.username = std::get<0>(c);
+    info.status = static_cast<UserStatus>(std::get<1>(c));
+    info.statusMessage = std::get<2>(c);
     initialContacts.append(info);
   }
   setContacts(initialContacts);
@@ -391,17 +413,17 @@ void MainWindow::setupUI() {
   m_statusMessageInput->setPlaceholderText("Share a quick thought...");
   m_statusMessageInput->setStyleSheet(R"(
         QLineEdit {
-            background-color: rgba(255, 255, 255, 80);
-            border: 1px solid rgba(200, 220, 240, 150);
-            border-radius: 10px;
-            padding: 4px 10px;
+            background-color: rgba(220, 240, 255, 120);
+            border: none;
+            border-radius: 15px;
+            border-bottom-left-radius: 5px;
+            padding: 5px 12px;
             font-size: 11px;
-            color: #4a5568;
+            color: #2d3748;
             font-style: italic;
         }
         QLineEdit:focus {
-            background-color: white;
-            border: 1px solid rgba(100, 180, 255, 200);
+            background-color: rgba(255, 255, 255, 200);
             font-style: normal;
         }
     )");
@@ -518,7 +540,11 @@ void MainWindow::setContacts(const QList<ContactInfo> &contacts) {
   for (int i = 0; i < mergedContacts.size(); ++i) {
     for (const auto &existing : m_contacts) {
       if (mergedContacts[i].username == existing.username) {
-        mergedContacts[i].avatar = existing.avatar;
+        // If the new list doesn't have an avatar but the existing one does, keep it
+        if (mergedContacts[i].avatar.isNull() && !existing.avatar.isNull()) {
+          mergedContacts[i].avatar = existing.avatar;
+        }
+        // Preserve game states
         mergedContacts[i].isPlayingGame = existing.isPlayingGame;
         mergedContacts[i].currentGameName = existing.currentGameName;
         mergedContacts[i].currentGameScore = existing.currentGameScore;
@@ -542,6 +568,7 @@ void MainWindow::setContacts(const QList<ContactInfo> &contacts) {
 }
 
 void MainWindow::populateContactList() {
+  std::cout << "[MainWindow] Populating contact list (count: " << m_contacts.size() << ")" << std::endl;
   m_contactList->clear();
 
   // Sort: Online first, then Away, then Busy, then Offline
@@ -553,9 +580,20 @@ void MainWindow::populateContactList() {
 
   for (const ContactInfo &contact : sorted) {
     QWidget *itemWidget = new QWidget();
+    itemWidget->setObjectName("contactItem");
+    itemWidget->setStyleSheet(R"(
+        QWidget#contactItem {
+            background: transparent;
+            border-radius: 10px;
+        }
+        QWidget#contactItem:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+    )");
+
     QHBoxLayout *itemLayout = new QHBoxLayout(itemWidget);
-    itemLayout->setContentsMargins(15, 12, 15, 12);
-    itemLayout->setSpacing(15);
+    itemLayout->setContentsMargins(12, 10, 12, 10);
+    itemLayout->setSpacing(12);
 
     // Avatar
     QLabel *avatar = new QLabel();
@@ -581,8 +619,8 @@ void MainWindow::populateContactList() {
     textLayout->setSpacing(2);
 
     QLabel *nameLabel = new QLabel(contact.username);
-    nameLabel->setStyleSheet("font-size: 13px; font-weight: 600; color: "
-                             "#1a2530; background: transparent;");
+    nameLabel->setStyleSheet("font-size: 13px; font-weight: 700; color: "
+                             "#ffffff; background: transparent;");
 
     QString statusText = contact.statusMessage.isEmpty()
                              ? getStatusText(contact.status)
@@ -597,48 +635,47 @@ void MainWindow::populateContactList() {
 
     QLabel *statusLabel = new QLabel(statusText);
     statusLabel->setStyleSheet(
-        "font-size: 11px; color: #718096; background: transparent;");
+        "font-size: 11px; color: rgba(255, 255, 255, 0.7); background: transparent;");
+    statusLabel->setMaximumWidth(250);
+    // Elide text if too long
+    QFontMetrics metrics(statusLabel->font());
+    QString elidedText = metrics.elidedText(statusText, Qt::ElideRight, 250);
+    statusLabel->setText(elidedText);
+    statusLabel->setToolTip(statusText); // Show full text on hover
 
     textLayout->addWidget(nameLabel);
     textLayout->addWidget(statusLabel);
-
-    itemLayout->addWidget(avatar);
-    itemLayout->addWidget(statusDot, 0, Qt::AlignVCenter);
-    itemLayout->addLayout(textLayout);
-    itemLayout->addStretch();
-
-    // Add TicTacToe Invite Button if user is Online
+    // Add TicTacToe Invite Button on its own line if user is Online
     if (contact.status == UserStatus::Online) {
-      QPushButton *inviteBtn = new QPushButton("🎮 Invite");
-      inviteBtn->setToolTip("Invite " + contact.username +
-                            " to play Tic Tac Toe");
+      QPushButton *inviteBtn = new QPushButton("🎮 INVITE TO PLAY");
+      inviteBtn->setFixedWidth(120);
+      inviteBtn->setToolTip("Challenge " + contact.username + " to Tic Tac Toe");
       inviteBtn->setCursor(Qt::PointingHandCursor);
       inviteBtn->setStyleSheet(R"(
         QPushButton {
-          background-color: rgba(255, 105, 180, 0.8);
+          background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #ff0080, stop:1 #e01e5a);
           color: white;
           border: none;
-          border-radius: 6px;
-          padding: 4px 8px;
-          font-weight: bold;
-          font-size: 11px;
+          border-radius: 8px;
+          padding: 3px 8px;
+          font-weight: 900;
+          font-size: 9px;
+          margin-top: 6px;
         }
         QPushButton:hover {
-          background-color: rgba(255, 20, 147, 0.9);
-        }
-        QPushButton:pressed {
-          background-color: rgba(199, 21, 133, 1.0);
+          background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #ff4da6, stop:1 #ff0080);
+          transform: translateY(-1px);
         }
       )");
-
-      connect(inviteBtn, &QPushButton::clicked, this, [contact]() {
-        // Send the game invite when clicked
-        NetworkManager::instance().sendGameInvite(contact.username,
-                                                  "TicTacToe");
+      connect(inviteBtn, &QPushButton::clicked, this, [this, name = contact.username]() {
+        NetworkManager::instance().sendGameInvite(name, "TicTacToe");
       });
-
-      itemLayout->addWidget(inviteBtn, 0, Qt::AlignVCenter);
+      textLayout->addWidget(inviteBtn);
     }
+
+    itemLayout->addWidget(avatar);
+    itemLayout->addWidget(statusDot, 0, Qt::AlignVCenter);
+    itemLayout->addLayout(textLayout, 1);
 
     QListWidgetItem *item = new QListWidgetItem(m_contactList);
     item->setData(Qt::UserRole, contact.username);
@@ -1045,6 +1082,17 @@ void MainWindow::onPollTicTacToeIPC() {
 
   // ── PHASE 1 (game still running) ─────────────────────────────────────────
   if (!m_tttGameOver) {
+    // Report status to server so friends can see we are playing
+    QString tttStatus = "TicTacToe vs " + m_tttOpponent;
+    if (tttStatus != m_lastIPCGameName) {
+      m_lastIPCGameName = tttStatus;
+      NetworkManager::instance().sendGameStatus(tttStatus, 0);
+      if (m_statusMessageInput) {
+        m_statusMessageInput->setText("🎮 Playing " + tttStatus);
+        m_statusMessageInput->setReadOnly(true);
+      }
+    }
+
     // Relay outbound (local player's) move BEFORE checking gameOver.
     // The winning move sets both hasOutboundMove AND gameOver in the same
     // click handler; checking gameOver first would stop the bridge before
@@ -1081,6 +1129,16 @@ void MainWindow::onPollTicTacToeIPC() {
 
         m_openChats[m_tttOpponent]->addMessage("System", resultMsg, false);
       }
+
+      // Clear gaming status on game over
+      NetworkManager::instance().sendGameStatus("", 0);
+      if (m_statusMessageInput) {
+        m_statusMessageInput->setText("");
+        m_statusMessageInput->setReadOnly(false);
+        m_statusMessageInput->setPlaceholderText("Share a quick thought...");
+      }
+      m_lastIPCGameName.clear();
+
       return; // bridge stays active — wait for rematch or quit
     }
 
@@ -1148,8 +1206,19 @@ void MainWindow::onPollGameIPC() {
 
       if (isPlaying) {
         NetworkManager::instance().sendGameStatus(gameName, currentScore);
+        if (m_statusMessageInput) {
+          m_statusMessageInput->setText(QString("🎮 Playing %1 (Score: %2)")
+                                            .arg(gameName)
+                                            .arg(currentScore));
+          m_statusMessageInput->setReadOnly(true);
+        }
       } else {
         NetworkManager::instance().sendGameStatus("", 0);
+        if (m_statusMessageInput) {
+          m_statusMessageInput->setText("");
+          m_statusMessageInput->setReadOnly(false);
+          m_statusMessageInput->setPlaceholderText("Share a quick thought...");
+        }
         m_gameIPC.unlock();
         m_gameIPC.close();
         return;

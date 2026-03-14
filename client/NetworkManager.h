@@ -9,6 +9,7 @@
 #include <atomic>
 #include <functional>
 #include <memory>
+#include <tuple>
 
 class NetworkManager : public QObject {
   Q_OBJECT
@@ -18,7 +19,9 @@ public:
   static void shutdown();
 
   bool isConnected() const;
-  QList<QPair<QString, int>> getContacts() const { return m_cachedContacts; }
+  QList<std::tuple<QString, int, QString>> getContacts() const {
+    return m_cachedContacts;
+  }
 
   void initSocket();
 
@@ -53,7 +56,8 @@ signals:
 
   // Data Signals (To be expanded)
   void packetReceived(const wizz::Packet &packet); // Raw packet
-  void contactListReceived(const QList<QPair<QString, int>> &contacts);
+  void contactListReceived(
+      const QList<std::tuple<QString, int, QString>> &contacts);
   void contactStatusChanged(const QString &username, int status,
                             const QString &statusMessage);
   void messageReceived(const QString &sender, const QString &text);
@@ -88,7 +92,7 @@ private:
   QSslSocket *m_socket = nullptr;
   std::vector<uint8_t> m_buffer; // Receive buffer
   std::atomic<bool> m_isConnected{false};
-  QList<QPair<QString, int>> m_cachedContacts;
+  QList<std::tuple<QString, int, QString>> m_cachedContacts;
   QThread *m_thread = nullptr;
 
   // Packet Handlers

@@ -2,6 +2,7 @@
 
 #include <mutex>
 #include <string>
+#include <set>
 #include <unordered_map>
 #include <vector>
 
@@ -71,6 +72,12 @@ private:
   // Track Status (1=Online, 2=Busy, 3=Offline)
   std::unordered_map<std::string, int> m_userStatuses;
   std::unordered_map<std::string, std::string> m_customStatuses;
+
+  struct GameStatusInfo {
+    std::string gameName;
+    uint32_t score;
+  };
+  std::unordered_map<std::string, GameStatusInfo> m_gameStatuses;
 
   // Active Multiplayer Game Rooms
   // Key: Room ID, Value: Pair of ClientSession* (Player X, Player O)

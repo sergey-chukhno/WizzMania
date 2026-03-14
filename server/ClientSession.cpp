@@ -364,17 +364,6 @@ void ClientSession::handleLogin(Packet &packet) {
         resp.writeString("Welcome to WizzMania, " + username + "!");
         session->sendPacket(resp);
 
-        if (!friends.empty()) {
-          Packet contactList(PacketType::ContactList);
-          contactList.writeInt(static_cast<uint32_t>(friends.size()));
-          for (const auto &name : friends) {
-            contactList.writeString(name);
-            int status = session->m_getStatus ? session->m_getStatus(name) : 3;
-            contactList.writeInt(static_cast<uint32_t>(status));
-          }
-          session->sendPacket(contactList);
-        }
-
         if (session->m_onLogin) {
           session->m_onLogin(session->shared_from_this());
         }

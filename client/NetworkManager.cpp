@@ -52,6 +52,8 @@ NetworkManager::NetworkManager(QObject *parent) : QObject(parent) {
   qRegisterMetaType<wizz::Packet>("wizz::Packet");
   qRegisterMetaType<std::vector<uint8_t>>("std::vector<uint8_t>");
   qRegisterMetaType<uint16_t>("uint16_t");
+  qRegisterMetaType<QList<std::tuple<QString, int, QString>>>(
+      "QList<std::tuple<QString, int, QString>>");
 }
 
 void NetworkManager::initSocket() {
@@ -368,11 +370,12 @@ void NetworkManager::registerHandlers() {
 
 void NetworkManager::handleContactListPacket(wizz::Packet &pkt) {
   uint32_t count = pkt.readInt();
-  QList<QPair<QString, int>> contacts;
+  QList<std::tuple<QString, int, QString>> contacts;
   for (uint32_t i = 0; i < count; ++i) {
     QString name = QString::fromStdString(pkt.readString());
     int status = static_cast<int>(pkt.readInt());
-    contacts.append({name, status});
+    QString statusMsg = QString::fromStdString(pkt.readString());
+    contacts.append(std::make_tuple(name, status, statusMsg));
   }
   m_cachedContacts = contacts;
   emit contactListReceived(contacts);
