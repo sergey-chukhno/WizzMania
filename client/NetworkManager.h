@@ -9,6 +9,7 @@
 #include <atomic>
 #include <functional>
 #include <memory>
+#include <tuple>
 
 class NetworkManager : public QObject {
   Q_OBJECT
@@ -18,7 +19,9 @@ public:
   static void shutdown();
 
   bool isConnected() const;
-  QList<QPair<QString, int>> getContacts() const { return m_cachedContacts; }
+  QList<std::tuple<QString, int, QString>> getContacts() const {
+    return m_cachedContacts;
+  }
 
   void initSocket();
 
@@ -33,6 +36,7 @@ public slots:
                         const std::vector<uint8_t> &data);
   void sendTypingPacket(const QString &target, bool isTyping);
   void sendUpdateAvatar(const QByteArray &data);
+  void sendUpdateStatus(const QString &status);
   void requestAvatar(const QString &username);
   void sendStatusChange(int status, const QString &statusMessage = "");
   void sendGameStatus(const QString &gameName, uint32_t score);
@@ -52,8 +56,10 @@ signals:
 
   // Data Signals (To be expanded)
   void packetReceived(const wizz::Packet &packet); // Raw packet
-  void contactListReceived(const QList<QPair<QString, int>> &contacts);
-  void contactStatusChanged(const QString &username, int status);
+  void contactListReceived(
+      const QList<std::tuple<QString, int, QString>> &contacts);
+  void contactStatusChanged(const QString &username, int status,
+                            const QString &statusMessage);
   void messageReceived(const QString &sender, const QString &text);
   void nudgeReceived(const QString &sender);
   void voiceMessageReceived(const QString &sender, uint16_t duration,
@@ -86,7 +92,7 @@ private:
   QSslSocket *m_socket = nullptr;
   std::vector<uint8_t> m_buffer; // Receive buffer
   std::atomic<bool> m_isConnected{false};
-  QList<QPair<QString, int>> m_cachedContacts;
+  QList<std::tuple<QString, int, QString>> m_cachedContacts;
   QThread *m_thread = nullptr;
 
   // Packet Handlers

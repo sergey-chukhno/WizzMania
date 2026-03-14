@@ -40,11 +40,20 @@ void NetworkManager::shutdown() {
   // If instance was never created, nothing to do
   static NetworkManager *_instance = &instance();
   if (_instance && _instance->m_thread) {
+    qDebug() << "[Network] Initiating shutdown...";
     emit _instance->shutdownRequested();
-    _instance->m_thread->wait(); // Wait for it to finish cleanly
-    // Note: _instance is intentionally leaked as it's a singleton,
-    // but its resources (socket, thread) are cleanly terminated via thread
-    // quit.
+    _instance->m_thread->quit(); // Signal event loop to exit
+
+    // Wait for thread to finish with a timeout
+    if (!_instance->m_thread->wait(2000)) {
+      qDebug() << "[Network] Shutdown timeout! Forcing socket abort.";
+      if (_instance->m_socket) {
+        _instance->m_socket->abort();
+      }
+      _instance->m_thread->terminate();
+      _instance->m_thread->wait(1000);
+    }
+    qDebug() << "[Network] Shutdown complete.";
   }
 }
 
@@ -52,6 +61,8 @@ NetworkManager::NetworkManager(QObject *parent) : QObject(parent) {
   qRegisterMetaType<wizz::Packet>("wizz::Packet");
   qRegisterMetaType<std::vector<uint8_t>>("std::vector<uint8_t>");
   qRegisterMetaType<uint16_t>("uint16_t");
+  qRegisterMetaType<QList<std::tuple<QString, int, QString>>>(
+      "QList<std::tuple<QString, int, QString>>");
 }
 
 void NetworkManager::initSocket() {
@@ -164,6 +175,20 @@ void NetworkManager::sendUpdateAvatar(const QByteArray &data) {
   p.writeInt(static_cast<uint32_t>(data.size()));
   // access raw data
   p.writeData(reinterpret_cast<const uint8_t *>(data.data()), data.size());
+  sendPacket(p);
+}
+
+void NetworkManager::sendUpdateStatus(const QString &status) {
+  if (QThread::currentThread() != this->thread()) {
+    QMetaObject::invokeMethod(this, "sendUpdateStatus", Qt::QueuedConnection,
+                              Q_ARG(QString, status));
+    return;
+  }
+  if (!isConnected())
+    return;
+
+  wizz::Packet p(wizz::PacketType::UpdateStatus);
+  p.writeString(status.toStdString());
   sendPacket(p);
 }
 
@@ -354,11 +379,12 @@ void NetworkManager::registerHandlers() {
 
 void NetworkManager::handleContactListPacket(wizz::Packet &pkt) {
   uint32_t count = pkt.readInt();
-  QList<QPair<QString, int>> contacts;
+  QList<std::tuple<QString, int, QString>> contacts;
   for (uint32_t i = 0; i < count; ++i) {
     QString name = QString::fromStdString(pkt.readString());
     int status = static_cast<int>(pkt.readInt());
-    contacts.append({name, status});
+    QString statusMsg = QString::fromStdString(pkt.readString());
+    contacts.append(std::make_tuple(name, status, statusMsg));
   }
   m_cachedContacts = contacts;
   emit contactListReceived(contacts);
@@ -367,7 +393,8 @@ void NetworkManager::handleContactListPacket(wizz::Packet &pkt) {
 void NetworkManager::handleContactStatusChangePacket(wizz::Packet &pkt) {
   int status = static_cast<int>(pkt.readInt());
   QString username = QString::fromStdString(pkt.readString());
-  emit contactStatusChanged(username, status);
+  QString statusMsg = QString::fromStdString(pkt.readString());
+  emit contactStatusChanged(username, status, statusMsg);
 }
 
 void NetworkManager::handleErrorPacket(wizz::Packet &pkt) {

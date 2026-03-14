@@ -61,6 +61,10 @@ public:
   std::vector<std::string> getFriends(const std::string &username);
   std::vector<std::string> getFollowers(const std::string &username);
 
+  // Status Management
+  bool updateCustomStatus(const std::string &username, const std::string &status);
+  std::string getCustomStatus(const std::string &username);
+
 private:
   void workerLoop();
 

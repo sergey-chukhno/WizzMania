@@ -47,6 +47,7 @@ public:
   explicit MainWindow(const QString &username,
                       const QPoint &initialPos = QPoint(),
                       QWidget *parent = nullptr);
+  virtual ~MainWindow();
 
   void setContacts(const QList<ContactInfo> &contacts);
   void updateContactStatus(const QString &username, UserStatus status,
@@ -69,6 +70,7 @@ protected:
 
 private slots:
   void onStatusChanged(int index);
+  void onStatusMessageSubmitted();
   void onSendMessage();
   void onAddFriendClicked();
   void onRemoveFriendClicked();
