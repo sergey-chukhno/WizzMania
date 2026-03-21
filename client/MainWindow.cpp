@@ -33,6 +33,10 @@ MainWindow::MainWindow(const QString &username, const QPoint &initialPos,
   connect(m_gameBridge, &GameBridge::localGameStatusChanged, this, &MainWindow::onLocalGameStatusChanged);
   connect(m_gameBridge, &GameBridge::localMoveMade, this, &MainWindow::onLocalMoveMade);
   connect(m_gameBridge, &GameBridge::ticTacToeFinished, this, &MainWindow::onTicTacToeFinished);
+  connect(m_gameBridge, &GameBridge::rematchRequested, this, [this](const QString& opponent) {
+    // Player pressed "Play Again" inside the game — send a fresh TicTacToe invite
+    NetworkManager::instance().sendGameInvite(opponent, "TicTacToe");
+  });
   m_gameBridge->startGameIPC();
 
   std::cout << "[MainWindow] GameBridge Setup complete" << std::endl;

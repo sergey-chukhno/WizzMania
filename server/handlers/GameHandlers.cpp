@@ -25,27 +25,22 @@ void GameStatusHandler::handle(ClientSession* session, Packet& packet) {
         server->getGameRoomManager().updateGameStatus(username, gameName, score);
     }
 
-    server->getDb().postTask([server, username, gameName, score]() {
-        auto followers = server->getDb().getFollowers(username);
-        auto friends = server->getDb().getFriends(username);
+    // Use the cached contact list from the session — no DB round-trip needed.
+    // This runs on the server's IO thread which is the same thread that processes
+    // all session callbacks, so the contact cache is safe to read directly.
+    Packet pkt(PacketType::GameStatus);
+    pkt.writeString(username);
+    pkt.writeString(gameName);
+    pkt.writeInt(score);
 
-        server->postResponse([server, username, gameName, score, followers = std::move(followers), friends = std::move(friends)]() {
-            Packet pkt(PacketType::GameStatus);
-            pkt.writeString(username);
-            pkt.writeString(gameName);
-            pkt.writeInt(score);
-
-            std::set<std::string> contacts;
-            for (const auto &f : followers) contacts.insert(f);
-            for (const auto &f : friends) contacts.insert(f);
-
-            for (const auto &contactName : contacts) {
-                ClientSession *targetSession = server->getSessionManager().getSessionByUsername(contactName);
-                if (targetSession) targetSession->sendPacket(pkt);
-            }
-        });
-    });
+    for (const auto& contactName : session->getContacts()) {
+        ClientSession* targetSession = server->getSessionManager().getSessionByUsername(contactName);
+        if (targetSession) {
+            targetSession->sendPacket(pkt);
+        }
+    }
 }
+
 
 void GameInviteHandler::handle(ClientSession* session, Packet& packet) {
     if (!session->isLoggedIn()) return;

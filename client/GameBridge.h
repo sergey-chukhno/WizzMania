@@ -37,6 +37,9 @@ signals:
   // Fired when game ends or is aborted
   void ticTacToeFinished();
 
+  // Fired specifically when the local player presses "Play Again"
+  void rematchRequested(const QString& opponent);
+
 private slots:
   void onPollGameIPC();
   void onPollTicTacToeIPC();

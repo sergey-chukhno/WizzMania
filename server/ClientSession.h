@@ -7,6 +7,7 @@
 #include <deque>
 #include <functional> // For std::function
 #include <memory>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -43,6 +44,10 @@ public:
   void setLoggedIn(bool b) { m_isLoggedIn = b; }
   TcpServer* getServer() const { return m_server; }
 
+  // Contact list cache – populated at login, used for fast broadcasts
+  void setContacts(std::set<std::string> contacts) { m_contacts = std::move(contacts); }
+  const std::set<std::string>& getContacts() const { return m_contacts; }
+
   // High-level Send Helper (must become async)
   void sendPacket(const Packet &packet);
 
@@ -64,6 +69,7 @@ private:
   asio::ssl::stream<asio::ip::tcp::socket> m_socket;
   std::string m_username;
   bool m_isLoggedIn;
+  std::set<std::string> m_contacts; // cached at login
 
   // Pointer to the Server for Async Task Queue access
   TcpServer *m_server;

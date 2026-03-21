@@ -58,6 +58,12 @@ void LoginHandler::handle(ClientSession* session, Packet& packet) {
             std::cout << "[Server] User Online: " << username << std::endl;
             server->getSessionManager().setUserOnline(username, s, customStatus);
 
+            // Cache the full contact list in the session for fast broadcasts (avoids repeated DB queries)
+            std::set<std::string> contactSet;
+            for (const auto &f : followers) contactSet.insert(f);
+            for (const auto &f : friends) contactSet.insert(f);
+            s->setContacts(std::move(contactSet));
+
             Packet resp(PacketType::LoginSuccess);
             s->sendPacket(resp);
 

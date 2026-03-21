@@ -37,35 +37,42 @@ void GameBridge::startTicTacToe(const QString& username, const QString& roomId, 
   m_tttBridgeActive = true;
   m_tttGameOver = false;
 
+  // Step 1: Launch the game process FIRST so it can create the shared memory segment
+  qDebug() << "[TicTacToe IPC] Launching TicTacToe process for room" << roomId;
+  m_tttProcess = GameLauncher::launchTicTacToe(m_username, m_tttRoomId, m_tttSymbol, m_tttOpponent, opponentAvatar);
+  if (!m_tttProcess) {
+    qDebug() << "[TicTacToe IPC] Failed to launch TicTacToe process.";
+    m_tttBridgeActive = false;
+    return;
+  }
+  connect(m_tttProcess.data(), &QProcess::finished, this, [this]() {
+    stopTicTacToe();
+    emit ticTacToeFinished();
+  });
+
+  // Step 2: Now wait for the game to create its POSIX shared memory
   const std::string ipcKey = wizz::makeTicTacToeIPCKey(
       roomId.toStdString() + "_" + m_username.toStdString());
 
   m_tttMemory = new wizz::NativeSharedMemory<wizz::TicTacToeIPCData>(ipcKey);
 
   bool attached = false;
-  for (int retry = 0; retry < 10 && !attached; ++retry) {
+  for (int retry = 0; retry < 20 && !attached; ++retry) { // up to 4 seconds
     attached = m_tttMemory->openAndMap();
     if (!attached)
       QThread::msleep(200);
   }
   if (!attached) {
     qDebug() << "[TicTacToe IPC] Could not open POSIX shared memory for room"
-             << roomId << "- game may not have started yet.";
+             << roomId << "after" << "4s - IPC bridge disabled.";
     delete m_tttMemory;
     m_tttMemory = nullptr;
+    // Game process is still running, just no IPC bridge
     m_tttBridgeActive = false;
     return;
   }
 
-  qDebug() << "[TicTacToe IPC] Bridge started for room" << roomId;
-
-  m_tttProcess = GameLauncher::launchTicTacToe(m_username, m_tttRoomId, m_tttSymbol, m_tttOpponent, opponentAvatar);
-  if (m_tttProcess) {
-    connect(m_tttProcess.data(), &QProcess::finished, this, [this]() {
-      stopTicTacToe();
-      emit ticTacToeFinished();
-    });
-  }
+  qDebug() << "[TicTacToe IPC] Bridge attached for room" << roomId;
 
   m_tttIPCTimer = new QTimer(this);
   connect(m_tttIPCTimer, &QTimer::timeout, this, &GameBridge::onPollTicTacToeIPC);
@@ -140,9 +147,14 @@ void GameBridge::onPollTicTacToeIPC() {
   }
 
   if (data->rematchRequested || data->quitRequested) {
+    bool isRematch = data->rematchRequested;
+    QString opponent = m_tttOpponent; // capture before stopTicTacToe clears it
     m_tttMemory->unlock();
     stopTicTacToe();
     emit ticTacToeFinished();
+    if (isRematch) {
+      emit rematchRequested(opponent); // tell MainWindow to send a new invite
+    }
     return;
   }
 
