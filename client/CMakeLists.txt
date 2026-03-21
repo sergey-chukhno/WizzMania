@@ -19,6 +19,7 @@ set(CLIENT_SOURCES
     ChatWindow.cpp
     MainWindow.cpp
     GameLauncher.cpp
+    GameBridge.cpp
     AvatarManager.cpp
     resources.qrc
 )

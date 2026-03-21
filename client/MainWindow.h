@@ -80,9 +80,10 @@ private slots:
   // Avatar Slots
   void onAvatarClicked();
 
-  // IPC Slots
-  void onPollGameIPC();
-  void onPollTicTacToeIPC();
+  // GameBridge Slots
+  void onLocalGameStatusChanged(bool isPlaying, const QString& gameName, uint32_t score);
+  void onLocalMoveMade(const QString& roomId, uint8_t cellIndex);
+  void onTicTacToeFinished();
 
 private:
   void setupUI();
@@ -116,27 +117,5 @@ private:
   // Active Chats
   QMap<QString, ChatWindow *> m_openChats;
 
-  // IPC (Game Status Polling)
-  void setupGameIPC();
-  wizz::GameSharedMemory m_gameIPC;
-  QTimer *m_gameIPCTimer = nullptr;
-
-  // Track last IPC state to only broadcast changes
-  bool m_lastIPCIsPlaying = false;
-  uint32_t m_lastIPCScore = 0;
-  QString m_lastIPCGameName;
-
-  // TicTacToe IPC Bridge (uses same POSIX NativeSharedMemory as the game)
-  void startTicTacToeIPCBridge(const QString &roomId);
-  void stopTicTacToeIPCBridge();
-  wizz::NativeSharedMemory<wizz::TicTacToeIPCData> *m_tttMemory = nullptr;
-  QTimer *m_tttIPCTimer = nullptr;
-  QString m_tttRoomId;
-  QString m_tttOpponent;
-  char m_tttSymbol;
-  bool m_tttBridgeActive = false;
-  bool m_tttGameOver =
-      false; // True once gameOver seen; bridge stays alive for rematch/quit
-  QPointer<QProcess>
-      m_tttProcess; // Weak handle — auto-nullifies when process exits
+  class GameBridge* m_gameBridge = nullptr;
 };
