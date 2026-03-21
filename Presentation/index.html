@@ -5,7 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Présentation de l'Architecture WizzMania</title>
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="style.css?v=2">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
 </head>
@@ -543,8 +543,179 @@
             </div>
         </section>
 
-        <!-- Diapositive 6 : Sécurité -->
+        <!-- Diapositive 6 : Design Patterns OOP -->
         <section class="slide hidden" id="slide-6">
+            <h1 class="section-title">Design Patterns &amp; Principes OOP</h1>
+            <p class="slide4-subtitle"><strong>6 patterns</strong> implémentés pour respecter SOLID, DRY &amp; KISS</p>
+            <div class="arch-footer">
+                <div class="arch-links">
+                    <a href="mermaid_view.html" class="arch-pill-link" target="_blank">
+                        Technical Architecture (Mermaid UML)
+                    </a>
+                </div>
+            </div>
+
+            <div class="server-panels-grid">
+                <!-- Card 1: Command Pattern -->
+                <div class="server-card" data-panel="cmd-pattern">
+                    <div class="card-header">
+                        <span class="card-icon">🔀</span>
+                        <div>
+                            <h3>Command Pattern</h3>
+                            <span class="card-file">server/handlers/*</span>
+                        </div>
+                    </div>
+                    <p class="card-desc">Remplace le <code>switch</code> monolithique par des classes de commande isolées. Chaque handler traite un type de paquet unique.</p>
+                    <div class="card-code">
+                        <div class="code-label">PacketRouter Registration</div>
+                        <pre><code>m_router.<span class="fn">registerHandler</span>(
+  <span class="type">PacketType</span>::Login, 
+  <span class="fn">make_unique</span>&lt;LoginHandler&gt;()
+);
+m_router.<span class="fn">registerHandler</span>(
+  <span class="type">PacketType</span>::GameInvite, 
+  <span class="fn">make_unique</span>&lt;GameInviteHandler&gt;()
+);</code></pre>
+                    </div>
+                    <div class="card-members">
+                        <span class="member"><span class="type-badge">cmd</span> IPacketHandler</span>
+                        <span class="member"><span class="type-badge">cmd</span> PacketRouter</span>
+                        <span class="member"><span class="type-badge">sol</span> Open/Closed</span>
+                    </div>
+                </div>
+
+                <!-- Card 2: Service Layer -->
+                <div class="server-card" data-panel="service-layer">
+                    <div class="card-header">
+                        <span class="card-icon">🏢</span>
+                        <div>
+                            <h3>Service Layer</h3>
+                            <span class="card-file">server/SessionManager.h</span>
+                        </div>
+                    </div>
+                    <p class="card-desc">Extraction des responsabilités métier hors de <code>TcpServer</code>. <code>SessionManager</code> gère les connexions et l'état global.</p>
+                    <div class="card-code">
+                        <div class="code-label">SessionManager Facade</div>
+                        <pre><code><span class="kw">class</span> <span class="type">SessionManager</span> {
+<span class="kw">public</span>:
+  <span class="kw">void</span> <span class="fn">setUserOnline</span>(<span class="kw">const</span> <span class="type">string</span>&amp; u, 
+                     <span class="type">ClientSession</span>* s);
+  <span class="type">ClientSession</span>* <span class="fn">getSession</span>(<span class="kw">const</span> <span class="type">string</span>&amp; u);
+<span class="kw">private</span>:
+  <span class="type">unordered_map</span>&lt;<span class="type">string</span>, <span class="type">ClientSession</span>*&gt; m_users;
+};</code></pre>
+                    </div>
+                    <div class="card-members">
+                        <span class="member"><span class="type-badge">srv</span> SessionManager</span>
+                        <span class="member"><span class="type-badge">srv</span> GameRoomManager</span>
+                        <span class="member"><span class="type-badge">sol</span> Single Resp</span>
+                    </div>
+                </div>
+
+                <!-- Card 3: Actor Model -->
+                <div class="server-card" data-panel="actor-model">
+                    <div class="card-header">
+                        <span class="card-icon">🎭</span>
+                        <div>
+                            <h3>Actor Model</h3>
+                            <span class="card-file">server/DatabaseManager.h</span>
+                        </div>
+                    </div>
+                    <p class="card-desc">Un thread dédié SQLite consomme une file de tâches. Le réseau ne se bloque jamais sur les I/O disque lents.</p>
+                    <div class="card-code">
+                        <div class="code-label">Database Worker Loop</div>
+                        <pre><code><span class="kw">void</span> <span class="type">DatabaseManager</span>::<span class="fn">workerLoop</span>() {
+  <span class="kw">while</span>(m_running) {
+    <span class="kw">auto</span> task = m_queue.<span class="fn">pop</span>();
+    <span class="fn">task</span>(); <span class="cm">// Exec SQL context</span>
+  }
+}</code></pre>
+                    </div>
+                    <div class="card-members">
+                        <span class="member"><span class="type-badge">db</span> WorkerThread</span>
+                        <span class="member"><span class="type-badge">db</span> TaskQueue</span>
+                        <span class="member"><span class="type-badge">sol</span> Non-blocking</span>
+                    </div>
+                </div>
+
+                <!-- Card 4: Adapter / Bridge -->
+                <div class="server-card" data-panel="game-bridge">
+                    <div class="card-header">
+                        <span class="card-icon">🌉</span>
+                        <div>
+                            <h3>Adapter / Bridge</h3>
+                            <span class="card-file">client/GameBridge.h</span>
+                        </div>
+                    </div>
+                    <p class="card-desc">Découple l'UI Qt de la logique IPC POSIX. Le pont gère le cycle de vie du jeu et convertit la mémoire en signaux Qt.</p>
+                    <div class="card-code">
+                        <div class="code-label">GameBridge Signal Flow</div>
+                        <pre><code><span class="kw">class</span> <span class="type">GameBridge</span> : <span class="kw">public</span> <span class="type">QObject</span> {
+  <span class="kw">Q_OBJECT</span>
+<span class="kw">signals</span>:
+  <span class="kw">void</span> <span class="fn">localMoveMade</span>(<span class="type">uint8_t</span> cell);
+  <span class="kw">void</span> <span class="fn">rematchRequested</span>(<span class="kw">const</span> <span class="type">QString</span>&amp; opp);
+};</code></pre>
+                    </div>
+                    <div class="card-members">
+                        <span class="member"><span class="type-badge">ipc</span> NativeSharedMemory</span>
+                        <span class="member"><span class="type-badge cb">signal</span> rematchReq</span>
+                        <span class="member"><span class="type-badge">sol</span> Dependency Inv</span>
+                    </div>
+                </div>
+
+                <!-- Card 5: Observer Pattern -->
+                <div class="server-card" data-panel="observer-pattern">
+                    <div class="card-header">
+                        <span class="card-icon">📡</span>
+                        <div>
+                            <h3>Observer Pattern</h3>
+                            <span class="card-file">client/NetworkManager.h</span>
+                        </div>
+                    </div>
+                    <p class="card-desc">Tous les événements cross-composants passent par des signaux Qt. Couplage nul entre émetteurs et récepteurs.</p>
+                    <div class="card-code">
+                        <div class="code-label">Qt Signals & Slots</div>
+                        <pre><code><span class="fn">connect</span>(
+  &amp;<span class="type">NetworkManager</span>::<span class="fn">instance</span>(), 
+  &amp;<span class="type">NetworkManager</span>::<span class="fn">nudgeReceived</span>,
+  <span class="kw">this</span>, 
+  &amp;<span class="type">MainWindow</span>::<span class="fn">handleNudge</span>
+);</code></pre>
+                    </div>
+                    <div class="card-members">
+                        <span class="member"><span class="type-badge cb">signal</span> loginSuccess</span>
+                        <span class="member"><span class="type-badge cb">signal</span> gameStart</span>
+                        <span class="member"><span class="type-badge">sol</span> Interf Segreg</span>
+                    </div>
+                </div>
+
+                <!-- Card 6: Singleton Pattern -->
+                <div class="server-card" data-panel="singleton-pattern">
+                    <div class="card-header">
+                        <span class="card-icon">⚙️</span>
+                        <div>
+                            <h3>Singleton Pattern</h3>
+                            <span class="card-file">client/NetworkManager.h</span>
+                        </div>
+                    </div>
+                    <p class="card-desc">Un seul socket TLS par processus. Meyer's Singleton garantit un accès global thread-safe et paresseux.</p>
+                    <div class="card-code">
+                        <div class="code-label">Network Singleton</div>
+                        <pre><code><span class="kw">static</span> <span class="type">NetworkManager</span>&amp; <span class="fn">instance</span>() {
+  <span class="kw">static</span> <span class="type">NetworkManager</span> inst; 
+  <span class="kw">return</span> inst;
+}</code></pre>
+                    </div>
+                    <div class="card-members">
+                        <span class="member"><span class="type-badge">sol</span> DRY Principle</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Diapositive 7 : Sécurité -->
+        <section class="slide hidden" id="slide-7">
             <h1 class="section-title">Sécurité — Défenses en Profondeur</h1>
             <p class="slide4-subtitle">3 couches de protection : <strong>Base de Données</strong>,
                 <strong>Authentification</strong>, <strong>Transport</strong>
@@ -671,8 +842,8 @@
             </div>
         </section>
 
-        <!-- Diapositive 7 : Jeux & IPC -->
-        <section class="slide hidden" id="slide-7">
+        <!-- Diapositive 8 : Jeux & IPC -->
+        <section class="slide hidden" id="slide-8">
             <h1 class="section-title">Jeux Indépendants & IPC</h1>
             <p class="slide4-subtitle"><strong>Mémoire Partagée POSIX</strong> — Score en direct broadcasté aux
                 followers</p>
@@ -801,8 +972,8 @@
             </div>
         </section>
 
-        <!-- Diapositive 8 : TicTacToe Multiplayer Matchmaking -->
-        <section class="slide hidden" id="slide-8">
+        <!-- Diapositive 9 : TicTacToe Multiplayer Matchmaking -->
+        <section class="slide hidden" id="slide-9">
             <h1 class="section-title">Matchmaking & TicTacToe Multijoueur</h1>
             <p class="slide4-subtitle">Inviter un ami — <strong>Synchronisation Avatar & Board</strong> via WebSocket +
                 IPC</p>
@@ -905,8 +1076,8 @@ window.<span class="fn">draw</span>(*avatarSpriteOpt_);</code></pre>
             </div>
         </section>
 
-        <!-- Diapositive 9 : Démo -->
-        <section class="slide hidden" id="slide-9">
+        <!-- Diapositive 10 : Démo -->
+        <section class="slide hidden" id="slide-10">
             <div class="demo-slide">
                 <div class="demo-left">
                     <h1 class="demo-title">Démo en Direct</h1>
@@ -950,8 +1121,8 @@ window.<span class="fn">draw</span>(*avatarSpriteOpt_);</code></pre>
             <p class="demo-footer">WizzMania — Sergey · Louis · Élodie — 2026</p>
         </section>
 
-        <!-- Diapositive 10 : La Route à Suivre -->
-        <section class="slide hidden" id="slide-10">
+        <!-- Diapositive 11 : La Route à Suivre -->
+        <section class="slide hidden" id="slide-11">
             <h1 class="section-title">La Route à Suivre — Innovations WizzMania</h1>
             <div class="roadmap-container">
                 <div class="roadmap-grid">
@@ -1037,11 +1208,12 @@ window.<span class="fn">draw</span>(*avatarSpriteOpt_);</code></pre>
             <span class="dot"></span>
             <span class="dot"></span>
             <span class="dot"></span>
+            <span class="dot"></span>
         </div>
         <button id="nextBtn" class="nav-btn">Suivant &rarr;</button>
     </nav>
 
-    <script src="script.js"></script>
+    <script src="script.js?v=2"></script>
 </body>
 
 </html>

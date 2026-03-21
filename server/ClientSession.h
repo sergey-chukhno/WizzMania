@@ -7,6 +7,7 @@
 #include <deque>
 #include <functional> // For std::function
 #include <memory>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -17,67 +18,12 @@ class TcpServer;
 
 namespace wizz {
 
-class ClientSession; // Forward decl
-using OnLoginCallback = std::function<void(std::shared_ptr<ClientSession>)>;
-// Callback for Routing: (Sender, TargetUsername, Hash/Body)
-using OnMessageCallback = std::function<void(
-    std::shared_ptr<ClientSession>, const std::string &, const std::string &)>;
-// Callback for Nudge: (Sender, TargetUsername)
-using OnNudgeCallback =
-    std::function<void(std::shared_ptr<ClientSession>, const std::string &)>;
-// New: Voice Message Callback (Sender, Recipient, Duration, Data)
-using OnVoiceMessageCallback =
-    std::function<void(std::shared_ptr<ClientSession>, const std::string &,
-                       uint16_t, const std::vector<uint8_t> &)>;
-
-using OnTypingIndicatorCallback = std::function<void(
-    std::shared_ptr<ClientSession>, const std::string &, bool)>;
-// Callback for Status: (Username) -> Status Int
-using GetStatusCallback = std::function<int(const std::string &)>;
-// Callback for Status Change: (Sender, NewStatus)
-using OnStatusChangeCallback =
-    std::function<void(std::shared_ptr<ClientSession>, int)>;
-using OnUpdateStatusCallback =
-    std::function<void(std::shared_ptr<ClientSession>, const std::string &)>;
-using GetCustomStatusCallback = std::function<std::string(const std::string &)>;
-
-// Avatar Callbacks
-using OnUpdateAvatarCallback = std::function<void(
-    std::shared_ptr<ClientSession>, const std::vector<uint8_t> &)>;
-using OnGetAvatarCallback =
-    std::function<void(std::shared_ptr<ClientSession>, const std::string &)>;
-
-// Game Status Callback (SenderSession, GameName, Score)
-using OnGameStatusCallback = std::function<void(std::shared_ptr<ClientSession>,
-                                                const std::string &, uint32_t)>;
-
-// Multiplayer Game Callbacks
-using OnGameInviteCallback = std::function<void(
-    std::shared_ptr<ClientSession>, const std::string &, const std::string &)>;
-using OnGameInviteResponseCallback =
-    std::function<void(std::shared_ptr<ClientSession>, const std::string &,
-                       const std::string &, bool)>;
-using OnGameMoveCallback = std::function<void(std::shared_ptr<ClientSession>,
-                                              const std::string &, uint8_t)>;
-
-// Callback for Disconnect
-using OnDisconnectCallback = std::function<void(int)>;
-
 class ClientSession : public std::enable_shared_from_this<ClientSession> {
 public:
   // Pass Server pointer for Async Task dispatch, and Callbacks
   explicit ClientSession(
       int sessionId, asio::ip::tcp::socket socket,
-      asio::ssl::context &sslContext, TcpServer *server,
-      OnLoginCallback onLogin, OnMessageCallback onMessage,
-      OnNudgeCallback onNudge, OnVoiceMessageCallback onVoiceMessage,
-      OnTypingIndicatorCallback onTypingIndicator, GetStatusCallback getStatus,
-      OnStatusChangeCallback onStatusChange,
-      OnUpdateAvatarCallback onUpdateAvatar, OnGetAvatarCallback onGetAvatar,
-      OnGameStatusCallback onGameStatus, OnGameInviteCallback onGameInvite,
-      OnGameInviteResponseCallback onGameInviteResp,
-      OnGameMoveCallback onGameMove, OnDisconnectCallback onDisconnect,
-      OnUpdateStatusCallback onUpdateStatus, GetCustomStatusCallback getCustomStatus);
+      asio::ssl::context &sslContext, TcpServer *server);
   ~ClientSession(); // Closes socket if owned
 
   // Delete copy to prevent double-close of socket
@@ -93,6 +39,14 @@ public:
     return m_socket.lowest_layer();
   }
   std::string getUsername() const { return m_username; }
+  void setUsername(const std::string& name) { m_username = name; }
+  bool isLoggedIn() const { return m_isLoggedIn; }
+  void setLoggedIn(bool b) { m_isLoggedIn = b; }
+  TcpServer* getServer() const { return m_server; }
+
+  // Contact list cache – populated at login, used for fast broadcasts
+  void setContacts(std::set<std::string> contacts) { m_contacts = std::move(contacts); }
+  const std::set<std::string>& getContacts() const { return m_contacts; }
 
   // High-level Send Helper (must become async)
   void sendPacket(const Packet &packet);
@@ -108,53 +62,19 @@ private:
   void onDataReceived(const char *data, size_t length);
   void processPacket(Packet &packet);
 
-  // Handlers
-  void handleLogin(Packet &packet);
-  void handleRegister(Packet &packet);
-  void handleDirectMessage(Packet &packet);
-  void handleNudge(Packet &packet);
-  void handleVoiceMessage(Packet &packet);
-  void handleStatusChange(Packet &packet);
-  void handleUpdateStatus(Packet &packet);
-  void handleGameStatus(Packet &packet);
-  void handleGameInvite(Packet &packet);
-  void handleGameInviteResponse(Packet &packet);
-  void handleGameMove(Packet &packet);
-
-  // Contact Handlers
-  void handleAddContact(Packet &packet);
-  void handleRemoveContact(Packet &packet);
-
-  // Avatar Handlers
-  void handleUpdateAvatar(Packet &packet);
-  void handleGetAvatar(Packet &packet);
+  // Forward packets to router
 
 private:
   int m_sessionId;
   asio::ssl::stream<asio::ip::tcp::socket> m_socket;
   std::string m_username;
   bool m_isLoggedIn;
+  std::set<std::string> m_contacts; // cached at login
 
   // Pointer to the Server for Async Task Queue access
   TcpServer *m_server;
 
-  // Callbacks
-  OnLoginCallback m_onLogin;
-  OnMessageCallback m_onMessage;
-  OnNudgeCallback m_onNudge;
-  OnVoiceMessageCallback m_onVoiceMessage;
-  OnTypingIndicatorCallback m_onTypingIndicator;
-  GetStatusCallback m_getStatus;
-  OnStatusChangeCallback m_onStatusChange;
-  OnUpdateAvatarCallback m_onUpdateAvatar;
-  OnGetAvatarCallback m_onGetAvatar;
-  OnGameStatusCallback m_onGameStatus;
-  OnGameInviteCallback m_onGameInvite;
-  OnGameInviteResponseCallback m_onGameInviteResp;
-  OnGameMoveCallback m_onGameMove;
-  OnDisconnectCallback m_onDisconnect;
-  OnUpdateStatusCallback m_onUpdateStatus;
-  GetCustomStatusCallback m_getCustomStatus;
+
 
   // Buffer for incoming partial data
   std::vector<uint8_t> m_buffer;

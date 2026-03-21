@@ -5,6 +5,7 @@
 #include "AvatarManager.h"
 #include "ChatWindow.h"
 #include "GameLauncher.h"
+#include "GameBridge.h"
 #include "NetworkManager.h"
 #include <QBuffer>
 #include <QCoreApplication>
@@ -21,16 +22,24 @@
 #include <QTimer>
 MainWindow::MainWindow(const QString &username, const QPoint &initialPos,
                        QWidget *parent)
-    : QWidget(parent), m_username(username), m_statusMessageInput(nullptr),
-      m_gameIPC(wizz::makeIPCKey(username.toStdString())) {
+    : QWidget(parent), m_username(username), m_statusMessageInput(nullptr) {
   std::cout << "[MainWindow] Constructing for user: " << username.toStdString() << std::endl;
   setWindowTitle("Wizz Mania - " + username);
   setMinimumSize(350, 500);
   resize(350, 700);
   setAttribute(Qt::WA_DeleteOnClose);
 
-  setupGameIPC();
-  std::cout << "[MainWindow] IPC Setup complete" << std::endl;
+  m_gameBridge = new GameBridge(m_username, this);
+  connect(m_gameBridge, &GameBridge::localGameStatusChanged, this, &MainWindow::onLocalGameStatusChanged);
+  connect(m_gameBridge, &GameBridge::localMoveMade, this, &MainWindow::onLocalMoveMade);
+  connect(m_gameBridge, &GameBridge::ticTacToeFinished, this, &MainWindow::onTicTacToeFinished);
+  connect(m_gameBridge, &GameBridge::rematchRequested, this, [this](const QString& opponent) {
+    // Player pressed "Play Again" inside the game — send a fresh TicTacToe invite
+    NetworkManager::instance().sendGameInvite(opponent, "TicTacToe");
+  });
+  m_gameBridge->startGameIPC();
+
+  std::cout << "[MainWindow] GameBridge Setup complete" << std::endl;
 
   if (!initialPos.isNull()) {
     move(initialPos);
@@ -169,52 +178,15 @@ MainWindow::MainWindow(const QString &username, const QPoint &initialPos,
           [this](const QString &gameName, const QString &roomId, char symbol,
                  const QString &opponent) {
             if (gameName == "TicTacToe") {
-              // Terminate any existing game window before starting a new one
-              if (m_tttProcess) {
-                m_tttProcess->terminate();
-                m_tttProcess->waitForFinished(500);
-                m_tttProcess = nullptr;
-              }
-              // Fetch opponent avatar and pass to game process via /tmp PNG
-              QPixmap avatar =
-                  AvatarManager::instance().getAvatar(opponent, 64);
-              m_tttProcess = GameLauncher::launchTicTacToe(
-                  m_username, roomId, symbol, opponent, avatar);
-              if (m_tttProcess) {
-                connect(m_tttProcess, &QProcess::finished, this, [this]() {
-                  stopTicTacToeIPCBridge();
-                  NetworkManager::instance().sendGameStatus("", 0);
-                  if (m_statusMessageInput) {
-                    m_statusMessageInput->setText("");
-                    m_statusMessageInput->setReadOnly(false);
-                    m_statusMessageInput->setPlaceholderText(
-                        "Share a quick thought...");
-                  }
-                  m_lastIPCGameName.clear();
-                  populateContactList(); // Refresh list to show they are no
-                                         // longer playing
-                });
-              }
-              m_tttOpponent = opponent;
-              m_tttSymbol = symbol;
-              QTimer::singleShot(1500, this, [this, roomId]() {
-                startTicTacToeIPCBridge(roomId);
-              });
+              QPixmap avatar = AvatarManager::instance().getAvatar(opponent, 64);
+              m_gameBridge->startTicTacToe(m_username, roomId, opponent, symbol, avatar);
             }
           });
 
   // Relay incoming opponent moves into shared memory
   connect(&NetworkManager::instance(), &NetworkManager::gameMoveReceived, this,
           [this](const QString &roomId, uint8_t cellIndex) {
-            if (!m_tttBridgeActive || roomId != m_tttRoomId || !m_tttMemory)
-              return;
-            m_tttMemory->lock();
-            auto *data = m_tttMemory->data();
-            if (data) {
-              data->inboundCellIndex = static_cast<int>(cellIndex);
-              data->hasInboundMove = true;
-            }
-            m_tttMemory->unlock();
+            m_gameBridge->receiveNetworkMove(cellIndex);
           });
 
   // Initialize Dialogs
@@ -257,31 +229,12 @@ MainWindow::MainWindow(const QString &username, const QPoint &initialPos,
 MainWindow::~MainWindow() {
   std::cout << "[MainWindow] Destructor starting..." << std::endl;
 
-  // Cleanup TicTacToe IPC
-  stopTicTacToeIPCBridge();
-  if (m_tttProcess) {
-    m_tttProcess->terminate();
-    m_tttProcess->waitForFinished(500);
-    delete m_tttProcess;
-    m_tttProcess = nullptr;
-  }
-
-  // Cleanup active chats
   for (auto chatW : m_openChats) {
     if (chatW) {
       chatW->close();
-      // Since ChatWindow likely has WA_DeleteOnClose, we don't delete here
     }
   }
   m_openChats.clear();
-
-  // Stop polling timers
-  if (m_gameIPCTimer) {
-    m_gameIPCTimer->stop();
-  }
-  if (m_tttIPCTimer) {
-    m_tttIPCTimer->stop();
-  }
 
   std::cout << "[MainWindow] Destructor complete." << std::endl;
 }
@@ -1043,224 +996,30 @@ bool MainWindow::eventFilter(QObject *obj, QEvent *event) {
   return QWidget::eventFilter(obj, event);
 }
 
-void MainWindow::setupGameIPC() {
-  m_gameIPCTimer = new QTimer(this);
-  connect(m_gameIPCTimer, &QTimer::timeout, this, &MainWindow::onPollGameIPC);
-  m_gameIPCTimer->start(100); // 100ms
+void MainWindow::onLocalGameStatusChanged(bool isPlaying, const QString& gameName, uint32_t score) {
+  NetworkManager::instance().sendGameStatus(isPlaying ? gameName : "", score);
+  if (m_statusMessageInput) {
+    if (isPlaying) {
+      m_statusMessageInput->setText(QString("🎮 Playing %1 (Score: %2)").arg(gameName).arg(score));
+      m_statusMessageInput->setReadOnly(true);
+    } else {
+      m_statusMessageInput->setText("");
+      m_statusMessageInput->setReadOnly(false);
+      m_statusMessageInput->setPlaceholderText("Share a quick thought...");
+    }
+  }
 }
 
-void MainWindow::startTicTacToeIPCBridge(const QString &roomId) {
-  stopTicTacToeIPCBridge(); // Clean up any existing session
-
-  m_tttRoomId = roomId;
-  m_tttBridgeActive = true;
-
-  // Build the exact same POSIX key the SFML game process uses:
-  // roomId + "_" + username ensures each player's game process has its
-  // own private segment, even when both run on the same machine.
-  const std::string ipcKey = wizz::makeTicTacToeIPCKey(
-      roomId.toStdString() + "_" + m_username.toStdString());
-
-  m_tttMemory = new wizz::NativeSharedMemory<wizz::TicTacToeIPCData>(ipcKey);
-
-  // Game creates the segment; we attach to it via openAndMap.
-  // Retry up to 10 times (2 s) in case the game process hasn't initialised yet.
-  bool attached = false;
-  for (int retry = 0; retry < 10 && !attached; ++retry) {
-    attached = m_tttMemory->openAndMap();
-    if (!attached)
-      QThread::msleep(200);
-  }
-  if (!attached) {
-    qDebug() << "[TicTacToe IPC] Could not open POSIX shared memory for room"
-             << roomId << "- game may not have started yet.";
-    delete m_tttMemory;
-    m_tttMemory = nullptr;
-    m_tttBridgeActive = false;
-    return;
-  }
-
-  qDebug() << "[TicTacToe IPC] Bridge started for room" << roomId;
-
-  // Start polling at 50ms (20 Hz)
-  m_tttIPCTimer = new QTimer(this);
-  connect(m_tttIPCTimer, &QTimer::timeout, this,
-          &MainWindow::onPollTicTacToeIPC);
-  m_tttIPCTimer->start(50);
+void MainWindow::onLocalMoveMade(const QString& roomId, uint8_t cellIndex) {
+  NetworkManager::instance().sendGameMove(roomId, cellIndex);
 }
 
-void MainWindow::stopTicTacToeIPCBridge() {
-  if (m_tttIPCTimer) {
-    m_tttIPCTimer->stop();
-    m_tttIPCTimer->deleteLater();
-    m_tttIPCTimer = nullptr;
+void MainWindow::onTicTacToeFinished() {
+  NetworkManager::instance().sendGameStatus("", 0);
+  if (m_statusMessageInput) {
+    m_statusMessageInput->setText("");
+    m_statusMessageInput->setReadOnly(false);
+    m_statusMessageInput->setPlaceholderText("Share a quick thought...");
   }
-  if (m_tttMemory) {
-    m_tttMemory->close();
-    delete m_tttMemory;
-    m_tttMemory = nullptr;
-  }
-  m_tttBridgeActive = false;
-  m_tttGameOver = false;
-  m_tttRoomId.clear();
-  qDebug() << "[TicTacToe IPC] Bridge stopped.";
-}
-
-void MainWindow::onPollTicTacToeIPC() {
-  if (!m_tttMemory || !m_tttBridgeActive)
-    return;
-
-  m_tttMemory->lock();
-  auto *data = m_tttMemory->data();
-  if (!data) {
-    m_tttMemory->unlock();
-    return;
-  }
-
-  // ── PHASE 1 (game still running) ─────────────────────────────────────────
-  if (!m_tttGameOver) {
-    // Report status to server so friends can see we are playing
-    QString tttStatus = "TicTacToe vs " + m_tttOpponent;
-    if (tttStatus != m_lastIPCGameName) {
-      m_lastIPCGameName = tttStatus;
-      NetworkManager::instance().sendGameStatus(tttStatus, 0);
-      if (m_statusMessageInput) {
-        m_statusMessageInput->setText("🎮 Playing " + tttStatus);
-        m_statusMessageInput->setReadOnly(true);
-      }
-    }
-
-    // Relay outbound (local player's) move BEFORE checking gameOver.
-    // The winning move sets both hasOutboundMove AND gameOver in the same
-    // click handler; checking gameOver first would stop the bridge before
-    // the winning move is ever sent to the server.
-    if (data->hasOutboundMove) {
-      int cellIndex = data->outboundCellIndex;
-      data->hasOutboundMove = false;
-      m_tttMemory->unlock();
-      NetworkManager::instance().sendGameMove(m_tttRoomId,
-                                              static_cast<uint8_t>(cellIndex));
-      return;
-    }
-
-    // Game signals game-over: post result to chat and SET m_tttGameOver,
-    // but do NOT stop the bridge — the player still needs to click a button.
-    if (data->gameOver) {
-      int winner = data->winner;
-      m_tttGameOver = true; // freeze the inbound-move path
-      m_tttMemory->unlock();
-
-      if (m_openChats.contains(m_tttOpponent)) {
-        QString xPlayerName = (m_tttSymbol == 'X') ? m_username : m_tttOpponent;
-        QString oPlayerName = (m_tttSymbol == 'O') ? m_username : m_tttOpponent;
-
-        QString resultMsg;
-        if (winner == 0)
-          resultMsg = "🎮 TicTacToe game ended: DRAW!";
-        else if (winner == 1)
-          resultMsg =
-              QString("🎮 TicTacToe game ended: %1 (X) wins!").arg(xPlayerName);
-        else if (winner == 2)
-          resultMsg =
-              QString("🎮 TicTacToe game ended: %1 (O) wins!").arg(oPlayerName);
-
-        m_openChats[m_tttOpponent]->addMessage("System", resultMsg, false);
-      }
-
-      // Clear gaming status on game over
-      NetworkManager::instance().sendGameStatus("", 0);
-      if (m_statusMessageInput) {
-        m_statusMessageInput->setText("");
-        m_statusMessageInput->setReadOnly(false);
-        m_statusMessageInput->setPlaceholderText("Share a quick thought...");
-      }
-      m_lastIPCGameName.clear();
-
-      return; // bridge stays active — wait for rematch or quit
-    }
-
-    m_tttMemory->unlock();
-    return;
-  }
-
-  // ── PHASE 2 (game over, waiting for player decision) ─────────────────────
-
-  // Player pressed "Play Again"
-  if (data->rematchRequested) {
-    data->rematchRequested = false;
-    QString opponent = m_tttOpponent;
-    m_tttMemory->unlock();
-
-    NetworkManager::instance().sendGameInvite(opponent, "TicTacToe");
-    if (m_openChats.contains(opponent))
-      m_openChats[opponent]->addMessage(
-          "System",
-          "🎮 Rematch request sent — waiting for " + opponent + " to accept.",
-          false);
-
-    stopTicTacToeIPCBridge(); // bridge done; new one will start when game
-                              // accepts
-    return;
-  }
-
-  // Player pressed "Quit" (or window closed)
-  if (data->quitRequested) {
-    m_tttMemory->unlock();
-    stopTicTacToeIPCBridge();
-    return;
-  }
-
-  m_tttMemory->unlock();
-}
-
-void MainWindow::onPollGameIPC() {
-  // Try to open the shared memory segment that was created by the game
-  bool opened = m_gameIPC.data() != nullptr;
-  if (!opened) {
-    opened = m_gameIPC.openAndMap();
-    if (!opened) {
-      // The game is not running, clear status if needed
-      if (m_lastIPCIsPlaying) {
-        m_lastIPCIsPlaying = false;
-        NetworkManager::instance().sendGameStatus("", 0);
-      }
-      return;
-    }
-  }
-
-  m_gameIPC.lock();
-  const wizz::GameIPCData *data = m_gameIPC.data();
-  if (data) {
-    bool isPlaying = data->isPlaying;
-    uint32_t currentScore = data->currentScore;
-    QString gameName = QString::fromUtf8(data->gameName);
-
-    if (isPlaying != m_lastIPCIsPlaying || currentScore != m_lastIPCScore ||
-        gameName != m_lastIPCGameName) {
-      m_lastIPCIsPlaying = isPlaying;
-      m_lastIPCScore = currentScore;
-      m_lastIPCGameName = gameName;
-
-      if (isPlaying) {
-        NetworkManager::instance().sendGameStatus(gameName, currentScore);
-        if (m_statusMessageInput) {
-          m_statusMessageInput->setText(QString("🎮 Playing %1 (Score: %2)")
-                                            .arg(gameName)
-                                            .arg(currentScore));
-          m_statusMessageInput->setReadOnly(true);
-        }
-      } else {
-        NetworkManager::instance().sendGameStatus("", 0);
-        if (m_statusMessageInput) {
-          m_statusMessageInput->setText("");
-          m_statusMessageInput->setReadOnly(false);
-          m_statusMessageInput->setPlaceholderText("Share a quick thought...");
-        }
-        m_gameIPC.unlock();
-        m_gameIPC.close();
-        return;
-      }
-    }
-  }
-  m_gameIPC.unlock();
+  populateContactList();
 }

@@ -1,4 +1,7 @@
 #include "TcpServer.h"
+#include "handlers/AuthHandlers.h"
+#include "handlers/SocialHandlers.h"
+#include "handlers/GameHandlers.h"
 #include <cstring>
 #include <iostream>
 #include <stdexcept>
@@ -13,9 +16,10 @@ namespace wizz {
 namespace fs = std::filesystem;
 
 TcpServer::TcpServer(int port)
-    : m_acceptor(m_ioContext,
-                 asio::ip::tcp::endpoint(asio::ip::tcp::v4(), port)),
-      m_sslContext(asio::ssl::context::tlsv12), m_port(port),
+    : m_ioContext(),
+      m_sslContext(asio::ssl::context::tlsv12),
+      m_acceptor(m_ioContext, asio::ip::tcp::endpoint(asio::ip::tcp::v4(), port)),
+      m_port(port),
       m_isRunning(false), m_db("wizzmania.db") {
   m_sslContext.set_options(asio::ssl::context::default_workarounds |
                            asio::ssl::context::no_sslv2 |
@@ -23,46 +27,56 @@ TcpServer::TcpServer(int port)
   m_sslContext.use_certificate_chain_file("server/certs/server.crt");
   m_sslContext.use_private_key_file("server/certs/server.key",
                                     asio::ssl::context::pem);
+
+  m_packetRouter.registerHandler(PacketType::Login, std::make_unique<LoginHandler>());
+  m_packetRouter.registerHandler(PacketType::Register, std::make_unique<RegisterHandler>());
+  m_packetRouter.registerHandler(PacketType::DirectMessage, std::make_unique<MessageHandler>());
+  m_packetRouter.registerHandler(PacketType::Nudge, std::make_unique<NudgeHandler>());
+  m_packetRouter.registerHandler(PacketType::VoiceMessage, std::make_unique<VoiceMessageHandler>());
+  m_packetRouter.registerHandler(PacketType::TypingIndicator, std::make_unique<TypingIndicatorHandler>());
+  m_packetRouter.registerHandler(PacketType::ContactStatusChange, std::make_unique<StatusChangeHandler>());
+  m_packetRouter.registerHandler(PacketType::UpdateStatus, std::make_unique<UpdateStatusHandler>());
+  m_packetRouter.registerHandler(PacketType::UpdateAvatar, std::make_unique<UpdateAvatarHandler>());
+  m_packetRouter.registerHandler(PacketType::GetAvatar, std::make_unique<GetAvatarHandler>());
+  m_packetRouter.registerHandler(PacketType::AddContact, std::make_unique<AddContactHandler>());
+  m_packetRouter.registerHandler(PacketType::RemoveContact, std::make_unique<RemoveContactHandler>());
+  m_packetRouter.registerHandler(PacketType::GameStatus, std::make_unique<GameStatusHandler>());
+  m_packetRouter.registerHandler(PacketType::GameInvite, std::make_unique<GameInviteHandler>());
+  m_packetRouter.registerHandler(PacketType::GameInviteResponse, std::make_unique<GameInviteResponseHandler>());
+  m_packetRouter.registerHandler(PacketType::GameMove, std::make_unique<GameMoveHandler>());
 }
 
 TcpServer::~TcpServer() { stop(); }
 
 void TcpServer::start() {
   try {
-    // 1. Initialize Database
     if (!m_db.init()) {
       throw std::runtime_error("Failed to initialize Database!");
     }
 
-    setupVoiceStorage(); // Create storage directory
+    setupVoiceStorage();
 
     std::cout << "[Server] Listening on port " << m_port << std::endl;
     m_isRunning = true;
 
-    // Start accepting connections
     doAccept();
 
-    // 2. Run the Main Event Loop
     run();
   } catch (const std::exception &e) {
     std::cerr << "[Server] Fatal Error: " << e.what() << std::endl;
-    stop(); // Ensure cleanup
-    throw;  // Re-throw to caller
+    stop();
+    throw;
   }
 }
 
 void TcpServer::stop() {
   m_isRunning = false;
-  m_ioContext.stop(); // Stop Boost.Asio event loop
+  m_ioContext.stop();
   std::cout << "[Server] Stopped." << std::endl;
 }
 
 ClientSession *TcpServer::getSession(int sessionId) {
-  auto it = m_sessions.find(sessionId);
-  if (it != m_sessions.end()) {
-    return it->second.get();
-  }
-  return nullptr;
+  return m_sessionManager.getSessionById(sessionId);
 }
 
 void TcpServer::doAccept() {
@@ -73,88 +87,12 @@ void TcpServer::doAccept() {
       std::cout << "[Server] New Connection (Session ID: " << sessionId << ")"
                 << std::endl;
 
-      // Create the Session wrapped in a shared_ptr
       auto session = std::make_shared<ClientSession>(
-          sessionId, std::move(socket), m_sslContext, this,
-          // 1. OnLogin
-          [this](std::shared_ptr<ClientSession> s) { handleLogin(s.get()); },
-          // 2. OnMessage (Routing)
-          [this](std::shared_ptr<ClientSession> sender,
-                 const std::string &target, const std::string &msg) {
-            handleMessage(sender.get(), target, msg);
-          },
-          // 3. OnNudge Callback
-          [this](std::shared_ptr<ClientSession> sender,
-                 const std::string &target) {
-            handleNudge(sender.get(), target);
-          },
-          // 4. OnVoiceMessage Callback
-          [this](std::shared_ptr<ClientSession> sender,
-                 const std::string &target, uint16_t duration,
-                 const std::vector<uint8_t> &data) {
-            handleVoiceMessage(sender.get(), target, duration, data);
-          },
-          // 5. OnTypingIndicator Callback
-          [this](std::shared_ptr<ClientSession> sender,
-                 const std::string &target, bool isTyping) {
-            handleTypingIndicator(sender.get(), target, isTyping);
-          },
-          // 6. GetStatus Callback
-          [this](const std::string &username) -> int {
-            return handleGetStatus(username);
-          },
-          // 7. OnStatusChange Callback
-          [this](std::shared_ptr<ClientSession> sender, int newStatus) {
-            handleStatusChange(sender.get(), newStatus);
-          },
-          // 8. OnUpdateAvatar Callback
-          [this](std::shared_ptr<ClientSession> sender,
-                 const std::vector<uint8_t> &data) {
-            handleUpdateAvatar(sender.get(), data);
-          },
-          // 9. OnGetAvatar Callback
-          [this](std::shared_ptr<ClientSession> sender,
-                 const std::string &target) {
-            handleGetAvatar(sender.get(), target);
-          },
-          // 10. OnGameStatus Callback
-          [this](std::shared_ptr<ClientSession> sender,
-                 const std::string &gameName, uint32_t score) {
-            handleGameStatus(sender.get(), gameName, score);
-          },
-          // 11. OnGameInvite Callback
-          [this](std::shared_ptr<ClientSession> sender,
-                 const std::string &target, const std::string &gameName) {
-            handleGameInvite(sender.get(), target, gameName);
-          },
-          // 12. OnGameInviteResponse Callback
-          [this](std::shared_ptr<ClientSession> sender,
-                 const std::string &originalSender, const std::string &gameName,
-                 bool accepted) {
-            handleGameInviteResponse(sender.get(), originalSender, gameName,
-                                     accepted);
-          },
-          // 13. OnGameMove Callback
-          [this](std::shared_ptr<ClientSession> sender,
-                 const std::string &roomId, uint8_t cellIndex) {
-            handleGameMove(sender.get(), roomId, cellIndex);
-          },
-          // 14. OnDisconnect Callback
-          [this](int sessionId) { handleDisconnect(sessionId); },
-          // 15. OnUpdateStatus Callback
-          [this](std::shared_ptr<ClientSession> sender,
-                 const std::string &status) {
-            handleUpdateStatus(sender.get(), status);
-          },
-          // 16. GetCustomStatus Callback
-          [this](const std::string &username) -> std::string {
-            return handleGetCustomStatus(username);
-          });
+          sessionId, std::move(socket), m_sslContext, this);
 
-      m_sessions[sessionId] = session;
-      session->start(); // Begin reading asynchronously
+      m_sessionManager.addSession(sessionId, session);
+      session->start();
 
-      // Queue the next accept
       doAccept();
     } else {
       std::cerr << "[Server] Accept Error: " << ec.message() << std::endl;
@@ -163,628 +101,56 @@ void TcpServer::doAccept() {
 }
 
 void TcpServer::run() {
-  // Main Event Loop is now handled by Boost.Asio
-  while (m_isRunning) {
-    try {
-      m_ioContext.run(); // Block and process all events until stopped
-      break;             // `run()` exits normally when stopped or out of work
-    } catch (std::exception &e) {
-      std::cerr << "[Server] io_context exception: " << e.what() << std::endl;
-    }
-  }
+  m_ioContext.run();
+}
+
+void TcpServer::cleanup() {
 }
 
 void TcpServer::setupVoiceStorage() {
-  fs::path storageDir = fs::path("server") / "storage";
-  if (!fs::exists(storageDir)) {
-    fs::create_directories(storageDir);
-    std::cout << "[Server] Created storage directory: " << storageDir.string()
-              << std::endl;
+  std::string dir = "server/storage/avatars";
+  if (!fs::exists(dir)) {
+    fs::create_directories(dir);
+  }
+}
+
+void TcpServer::handleDisconnect(int sessionId) {
+  ClientSession* session = m_sessionManager.getSessionById(sessionId);
+  if (!session) return;
+
+  std::string username = session->getUsername();
+  m_sessionManager.removeSession(sessionId);
+  if (!username.empty()) {
+    m_sessionManager.setUserOffline(username);
+    m_sessionManager.updateStatus(username, 3);
+    std::cout << "[Server] User Offline: " << username << std::endl;
+    
+    m_db.postTask([this, username]() {
+      auto followers = m_db.getFollowers(username);
+      auto friends = m_db.getFriends(username);
+
+      postResponse([
+          this, username, followers = std::move(followers),
+          friends = std::move(friends)]() {
+
+        Packet notify(PacketType::ContactStatusChange);
+        notify.writeInt(3);
+        notify.writeString(username);
+        notify.writeString("");
+
+        std::set<std::string> contacts;
+        for (const auto &f : followers) contacts.insert(f);
+        for (const auto &f : friends)   contacts.insert(f);
+
+        for (const auto &contactName : contacts) {
+          ClientSession *target = m_sessionManager.getSessionByUsername(contactName);
+          if (target) {
+            target->sendPacket(notify);
+          }
+        }
+      });
+    });
   }
 }
 
 } // namespace wizz
-
-void wizz::TcpServer::handleLogin(ClientSession *session) {
-  std::string username = session->getUsername();
-  int sessionId = session->getId();
-  // Move immediate registration into the DB callback to prevent race conditions
-
-  m_db.postTask([this, username, sessionId]() {
-    auto pending = m_db.fetchPendingMessages(username);
-    for (const auto &msg : pending) {
-      m_db.markAsDelivered(msg.id);
-    }
-    auto followers = m_db.getFollowers(username);
-    auto friends = m_db.getFriends(username);
-    auto customStatus = m_db.getCustomStatus(username);
-
-    postResponse([this, username, sessionId, customStatus = std::move(customStatus),
-                  pending = std::move(pending),
-                  followers = std::move(followers),
-                  friends = std::move(friends)]() {
-      ClientSession *session = getSession(sessionId);
-      if (!session)
-        return;
-
-      std::cout << "[Server] User Online: " << username << std::endl;
-      m_onlineUsers[username] = session;
-      m_customStatuses[username] = customStatus;
-      m_userStatuses[username] = 0; // Online
-
-      // Broadcast Online Status to Union of Followers and Friends
-      std::set<std::string> contacts;
-      for (const auto &f : followers)
-        contacts.insert(f);
-      for (const auto &f : friends)
-        contacts.insert(f);
-
-      for (const auto &contactName : contacts) {
-        auto it = m_onlineUsers.find(contactName);
-        if (it != m_onlineUsers.end()) {
-          std::cout << "[Server] Broadcasting Online Status of " << username
-                    << " to contact " << contactName << std::endl;
-          Packet notify(PacketType::ContactStatusChange);
-          notify.writeInt(0); // Online
-          notify.writeString(username);
-          notify.writeString(customStatus);
-          it->second->sendPacket(notify);
-        }
-      }
-
-      // RICH CONTACT LIST SYNC (Includes Status + Custom Message)
-      if (!friends.empty()) {
-        Packet contactList(PacketType::ContactList);
-        contactList.writeInt(static_cast<uint32_t>(friends.size()));
-        for (const auto &friendName : friends) {
-          contactList.writeString(friendName);
-          contactList.writeInt(static_cast<uint32_t>(handleGetStatus(friendName)));
-          contactList.writeString(m_customStatuses[friendName]);
-        }
-        session->sendPacket(contactList);
-      }
-
-      // Sync Initial Statuses (so I know who is already online)
-      // We iterate over ALL online users to be absolutely sure we don't miss anyone
-      // who might have us as a contact even if they aren't in our explicit list yet.
-      for (auto const& [onlineUser, onlineSession] : m_onlineUsers) {
-        if (onlineUser == username) continue;
-
-        // Check if we are "interested" in this user
-        bool isInterested = (contacts.find(onlineUser) != contacts.end());
-        
-        // If they are in our contact list, sync their status to us
-        if (isInterested) {
-          int status = 0;
-          auto statusIt = m_userStatuses.find(onlineUser);
-          if (statusIt != m_userStatuses.end()) {
-            status = statusIt->second;
-          }
-
-          Packet notify(PacketType::ContactStatusChange);
-          notify.writeInt(status);
-          notify.writeString(onlineUser);
-          notify.writeString(m_customStatuses[onlineUser]);
-          session->sendPacket(notify);
-
-          // Also sync game status
-          auto itGame = m_gameStatuses.find(onlineUser);
-          if (itGame != m_gameStatuses.end()) {
-            Packet gamePkt(PacketType::GameStatus);
-            gamePkt.writeString(onlineUser);
-            gamePkt.writeString(itGame->second.gameName);
-            gamePkt.writeInt(itGame->second.score);
-            session->sendPacket(gamePkt);
-          }
-        }
-      }
-
-      // Check for Offline Messages
-      if (!pending.empty()) {
-        std::cout << "[Server] Flushing " << pending.size()
-                  << " offline messages to " << username << std::endl;
-        for (const auto &msg : pending) {
-          if (msg.body.rfind("VOICE:", 0) == 0) {
-            std::vector<std::string> parts;
-            std::stringstream ss(msg.body);
-            std::string item;
-            while (std::getline(ss, item, ':')) {
-              parts.push_back(item);
-            }
-            if (parts.size() >= 3) {
-              uint16_t duration = static_cast<uint16_t>(std::stoi(parts[1]));
-              std::string filename = parts[2];
-              std::ifstream infile(filename, std::ios::binary | std::ios::ate);
-              if (infile.is_open()) {
-                std::streamsize size = infile.tellg();
-                infile.seekg(0, std::ios::beg);
-                std::vector<uint8_t> buffer(size);
-                if (infile.read(reinterpret_cast<char *>(buffer.data()),
-                                size)) {
-                  Packet outPacket(PacketType::VoiceMessage);
-                  outPacket.writeString(msg.sender);
-                  outPacket.writeInt(static_cast<uint32_t>(duration));
-                  outPacket.writeInt(static_cast<uint32_t>(buffer.size()));
-                  outPacket.writeData(buffer.data(), buffer.size());
-                  session->sendPacket(outPacket);
-                }
-              }
-            }
-          } else {
-            Packet outPacket(PacketType::DirectMessage);
-            outPacket.writeString(msg.sender);
-            outPacket.writeString(msg.body);
-            session->sendPacket(outPacket);
-          }
-        }
-      }
-    });
-  });
-}
-
-void wizz::TcpServer::handleMessage(ClientSession *sender,
-                                    const std::string &target,
-                                    const std::string &msg) {
-  bool delivered = false;
-  auto it = m_onlineUsers.find(target);
-  if (it != m_onlineUsers.end()) {
-    ClientSession *targetSession = it->second;
-    Packet outPacket(PacketType::DirectMessage);
-    outPacket.writeString(sender->getUsername());
-    outPacket.writeString(msg);
-    targetSession->sendPacket(outPacket);
-    delivered = true;
-    std::cout << "[Router] Routed msg from " << sender->getUsername() << " to "
-              << target << std::endl;
-  } else {
-    std::cout << "[Router] User " << target << " not found (Offline). Storing."
-              << std::endl;
-  }
-
-  // Fire and forget DB insertion
-  m_db.postTask(
-      [this, senderName = sender->getUsername(), target, msg, delivered]() {
-        m_db.storeMessage(senderName, target, msg, delivered);
-      });
-}
-
-void wizz::TcpServer::handleNudge(ClientSession *sender,
-                                  const std::string &target) {
-  int status = 3; // Default Offline
-  if (m_userStatuses.find(target) != m_userStatuses.end()) {
-    status = m_userStatuses[target];
-  }
-  bool isOnline = m_onlineUsers.find(target) != m_onlineUsers.end();
-
-  if (!isOnline) {
-    Packet err(PacketType::Error);
-    err.writeString("User " + target + " is offline.");
-    sender->sendPacket(err);
-    return;
-  }
-  if (status == 2) { // Busy
-    Packet err(PacketType::Error);
-    err.writeString("User " + target + " is busy and cannot be nudged.");
-    sender->sendPacket(err);
-    return;
-  }
-  ClientSession *targetSession = m_onlineUsers[target];
-  Packet p(PacketType::Nudge);
-  p.writeString(sender->getUsername());
-  targetSession->sendPacket(p);
-  std::cout << "[Server] Wizz sent from " << sender->getUsername() << " to "
-            << target << std::endl;
-}
-
-void wizz::TcpServer::handleVoiceMessage(ClientSession *sender,
-                                         const std::string &target,
-                                         uint16_t duration,
-                                         const std::vector<uint8_t> &data) {
-  long long timestamp = std::time(nullptr);
-  fs::path storageDir = fs::path("server") / "storage";
-  std::string filename = "voice_" + sender->getUsername() + "_" +
-                         std::to_string(timestamp) + ".wav";
-  std::string filepath = (storageDir / filename).string();
-
-  std::ofstream outfile(filepath, std::ios::binary);
-  if (outfile.is_open()) {
-    outfile.write(reinterpret_cast<const char *>(data.data()), data.size());
-    outfile.close();
-  }
-
-  auto it = m_onlineUsers.find(target);
-  if (it != m_onlineUsers.end()) {
-    ClientSession *targetSession = it->second;
-    Packet p(PacketType::VoiceMessage);
-    p.writeString(sender->getUsername());
-    p.writeInt(static_cast<uint32_t>(duration));
-    p.writeInt(static_cast<uint32_t>(data.size()));
-    p.writeData(data.data(), data.size());
-    targetSession->sendPacket(p);
-  } else {
-    std::string proxyMsg = "VOICE:" + std::to_string(duration) + ":" + filepath;
-    m_db.postTask(
-        [this, senderName = sender->getUsername(), target, proxyMsg]() {
-          m_db.storeMessage(senderName, target, proxyMsg, false);
-        });
-  }
-}
-
-void wizz::TcpServer::handleTypingIndicator(ClientSession *sender,
-                                            const std::string &target,
-                                            bool isTyping) {
-  auto it = m_onlineUsers.find(target);
-  if (it != m_onlineUsers.end()) {
-    ClientSession *targetSession = it->second;
-    Packet p(PacketType::TypingIndicator);
-    p.writeString(sender->getUsername());
-    p.writeInt(isTyping ? 1 : 0);
-    targetSession->sendPacket(p);
-  }
-}
-
-int wizz::TcpServer::handleGetStatus(const std::string &username) {
-  auto it = m_userStatuses.find(username);
-  if (it != m_userStatuses.end()) {
-    return it->second;
-  }
-  return 3; // Offline
-}
-
-std::string
-wizz::TcpServer::handleGetCustomStatus(const std::string &username) {
-  auto it = m_customStatuses.find(username);
-  if (it != m_customStatuses.end()) {
-    return it->second;
-  }
-  return "";
-}
-
-void wizz::TcpServer::handleStatusChange(ClientSession *sender, int newStatus) {
-  std::string username = sender->getUsername();
-  m_userStatuses[username] = newStatus;
-
-  m_db.postTask([this, username, newStatus]() {
-    auto followers = m_db.getFollowers(username);
-    auto friends = m_db.getFriends(username);
-
-    postResponse(
-        [this, username, newStatus, followers = std::move(followers), 
-         friends = std::move(friends)]() {
-          std::string customStatus = m_customStatuses[username];
-          std::set<std::string> contacts;
-          for (const auto &f : followers) contacts.insert(f);
-          for (const auto &f : friends) contacts.insert(f);
-
-          for (const auto &contactName : contacts) {
-            auto it = m_onlineUsers.find(contactName);
-            if (it != m_onlineUsers.end()) {
-              Packet notify(PacketType::ContactStatusChange);
-              notify.writeInt(static_cast<uint32_t>(newStatus));
-              notify.writeString(username);
-              notify.writeString(customStatus);
-              it->second->sendPacket(notify);
-            }
-          }
-        });
-  });
-}
-
-void wizz::TcpServer::handleUpdateStatus(ClientSession *sender,
-                                         const std::string &statusMsg) {
-  if (!sender)
-    return;
-  std::string username = sender->getUsername();
-  m_customStatuses[username] = statusMsg;
-
-  m_db.postTask([this, username, statusMsg]() {
-    m_db.updateCustomStatus(username, statusMsg);
-    auto followers = m_db.getFollowers(username);
-    auto friends = m_db.getFriends(username);
-
-    postResponse([this, username, statusMsg, followers = std::move(followers),
-                  friends = std::move(friends)]() {
-      std::cout << "[Server] Status update for " << username << ": " << statusMsg
-            << std::endl;
-
-      std::set<std::string> contacts;
-      for (const auto &f : followers)
-        contacts.insert(f);
-      for (const auto &f : friends)
-        contacts.insert(f);
-
-      int currentStatus = 0;
-      auto stIt = m_userStatuses.find(username);
-      if (stIt != m_userStatuses.end()) currentStatus = stIt->second;
-
-      Packet notify(PacketType::ContactStatusChange);
-      notify.writeInt(static_cast<uint32_t>(currentStatus));
-      notify.writeString(username);
-      notify.writeString(statusMsg);
-
-      for (const auto &contactName : contacts) {
-        auto it = m_onlineUsers.find(contactName);
-        if (it != m_onlineUsers.end()) {
-          it->second->sendPacket(notify);
-        }
-      }
-    });
-  });
-}
-
-void wizz::TcpServer::handleUpdateAvatar(ClientSession *sender,
-                                         const std::vector<uint8_t> &data) {
-  std::string username = sender->getUsername();
-  long long timestamp = std::time(nullptr);
-  fs::path storageDir = fs::path("server") / "storage" / "avatars";
-
-  if (!fs::exists(storageDir)) {
-    fs::create_directories(storageDir);
-  }
-
-  std::string filename =
-      "avatar_" + username + "_" + std::to_string(timestamp) + ".png";
-  std::string filepath = (storageDir / filename).string();
-
-  std::ofstream outfile(filepath, std::ios::binary);
-  if (outfile.is_open()) {
-    outfile.write(reinterpret_cast<const char *>(data.data()), data.size());
-    outfile.close();
-    std::cout << "[Server] Saved Avatar: " << filepath << std::endl;
-    m_db.postTask([this, username, filepath, data]() {
-      if (m_db.updateUserAvatar(username, filepath)) {
-        std::cout << "[Server] DB Updated for " << username << std::endl;
-        auto friends = m_db.getFriends(username);
-
-        postResponse([this, username, friends = std::move(friends), data]() {
-          for (const auto &friendName : friends) {
-            auto it = m_onlineUsers.find(friendName);
-            if (it != m_onlineUsers.end()) {
-              Packet resp(PacketType::AvatarData);
-              resp.writeString(username);
-              resp.writeInt(static_cast<uint32_t>(data.size()));
-              resp.writeData(data.data(), data.size());
-              it->second->sendPacket(resp);
-              std::cout << "[Server] Broadcasted avatar to " << friendName
-                        << std::endl;
-            }
-          }
-        });
-      } else {
-        std::cerr << "[Server] DB Update Failed for " << username << std::endl;
-      }
-    });
-  } else {
-    std::cerr << "[Server] Failed to write file: " << filepath << std::endl;
-  }
-}
-
-void wizz::TcpServer::handleGetAvatar(ClientSession *sender,
-                                      const std::string &target) {
-  int sessionId = sender->getId();
-
-  m_db.postTask([this, sessionId, target]() {
-    std::string filepath = m_db.getUserAvatar(target);
-    std::vector<uint8_t> buffer;
-    if (!filepath.empty() && fs::exists(filepath)) {
-      std::ifstream infile(filepath, std::ios::binary | std::ios::ate);
-      if (infile.is_open()) {
-        std::streamsize size = infile.tellg();
-        infile.seekg(0, std::ios::beg);
-        buffer.resize(size);
-        infile.read(reinterpret_cast<char *>(buffer.data()), size);
-      }
-    }
-
-    postResponse(
-        [this, sessionId, target, filepath, buffer = std::move(buffer)]() {
-          ClientSession *session = getSession(sessionId);
-          if (!session)
-            return;
-
-          std::cout << "[Server] GetAvatar req for " << target
-                    << ". Path: " << filepath << std::endl;
-          if (filepath.empty()) {
-            std::cout << "[Server] No avatar path in DB for " << target
-                      << std::endl;
-            return;
-          }
-          if (buffer.empty()) {
-            std::cerr << "[Server] Failed to open file for read or "
-                         "file empty: "
-                      << filepath << std::endl;
-            return;
-          }
-
-          Packet resp(PacketType::AvatarData);
-          resp.writeString(target);
-          resp.writeInt(static_cast<uint32_t>(buffer.size()));
-          resp.writeData(buffer.data(), buffer.size());
-          session->sendPacket(resp);
-          std::cout << "[Server] Sent avatar (" << buffer.size()
-                    << " bytes) to " << session->getUsername() << std::endl;
-        });
-  });
-}
-
-void wizz::TcpServer::handleGameStatus(ClientSession *sender,
-                                       const std::string &gameName,
-                                       uint32_t score) {
-  if (!sender)
-    return;
-  std::string username = sender->getUsername();
-
-  if (gameName.empty()) {
-    m_gameStatuses.erase(username);
-  } else {
-    m_gameStatuses[username] = {gameName, score};
-  }
-
-  m_db.postTask([this, username, gameName, score]() {
-    auto followers = m_db.getFollowers(username);
-    auto friends = m_db.getFriends(username);
-
-    postResponse([this, username, gameName, score,
-                  followers = std::move(followers),
-                  friends = std::move(friends)]() {
-      Packet pkt(PacketType::GameStatus);
-      pkt.writeString(username);
-      pkt.writeString(gameName);
-      pkt.writeInt(score);
-
-      std::set<std::string> contacts;
-      for (const auto &f : followers)
-        contacts.insert(f);
-      for (const auto &f : friends)
-        contacts.insert(f);
-
-      for (const auto &contactName : contacts) {
-        auto it = m_onlineUsers.find(contactName);
-        if (it != m_onlineUsers.end()) {
-          it->second->sendPacket(pkt);
-        }
-      }
-    });
-  });
-}
-
-void wizz::TcpServer::handleGameInvite(ClientSession *sender,
-                                       const std::string &target,
-                                       const std::string &gameName) {
-  if (!sender)
-    return;
-  std::string senderName = sender->getUsername();
-
-  auto it = m_onlineUsers.find(target);
-  if (it != m_onlineUsers.end()) {
-    Packet pkt(PacketType::GameInvite);
-    pkt.writeString(senderName); // Tell the target who sent it
-    pkt.writeString(gameName);
-    it->second->sendPacket(pkt);
-    std::cout << "[Server] Routed GameInvite from " << senderName << " to "
-              << target << std::endl;
-  }
-}
-
-void wizz::TcpServer::handleGameInviteResponse(
-    ClientSession *sender, const std::string &originalSender,
-    const std::string &gameName, bool accepted) {
-  if (!sender)
-    return;
-  std::string acceptorName = sender->getUsername();
-
-  // Always tell the original sender about the response
-  auto it = m_onlineUsers.find(originalSender);
-  if (it != m_onlineUsers.end()) {
-    Packet respPkt(PacketType::GameInviteResponse);
-    respPkt.writeString(acceptorName);
-    respPkt.writeString(gameName);
-    respPkt.writeInt(accepted ? 1 : 0);
-    it->second->sendPacket(respPkt);
-  }
-
-  // If accepted, generate a room ID and send GameStart to BOTH
-  if (accepted && it != m_onlineUsers.end()) {
-    // Generate a simple unique room ID using time and usernames
-    std::string roomId = std::to_string(std::time(nullptr)) + "_" +
-                         originalSender + "_" + acceptorName;
-
-    // Track the room explicitly in the server
-    m_gameRooms[roomId] = std::make_pair(it->second, sender);
-
-    std::cout << "[Server] Game Accepted! Creating Room: " << roomId
-              << std::endl;
-
-    // Send to Initiator (Player X)
-    Packet startUser1(PacketType::GameStart);
-    startUser1.writeString(gameName);
-    startUser1.writeString(roomId);
-    startUser1.writeInt('X'); // Symbol inside an int for simple transit
-    startUser1.writeString(acceptorName); // Opponent name
-    it->second->sendPacket(startUser1);
-
-    // Send to Acceptor (Player O)
-    Packet startUser2(PacketType::GameStart);
-    startUser2.writeString(gameName);
-    startUser2.writeString(roomId);
-    startUser2.writeInt('O');
-    startUser2.writeString(originalSender);
-    sender->sendPacket(startUser2);
-  }
-}
-
-void wizz::TcpServer::handleGameMove(ClientSession *sender,
-                                     const std::string &roomId,
-                                     uint8_t cellIndex) {
-  if (!sender)
-    return;
-
-  auto it = m_gameRooms.find(roomId);
-  if (it != m_gameRooms.end()) {
-    ClientSession *p1 = it->second.first;
-    ClientSession *p2 = it->second.second;
-
-    // Determine who is the target (the other player)
-    ClientSession *target = (sender->getId() == p1->getId()) ? p2 : p1;
-
-    Packet pkt(PacketType::GameMove);
-    pkt.writeString(roomId);
-    pkt.writeInt(cellIndex);
-    target->sendPacket(pkt);
-  }
-}
-
-void wizz::TcpServer::handleDisconnect(int sessionId) {
-  auto it = m_sessions.find(sessionId);
-  if (it == m_sessions.end())
-    return;
-
-  std::string username = it->second->getUsername();
-  if (!username.empty()) {
-    m_db.postTask([this, username, sessionId]() {
-      auto followers = m_db.getFollowers(username);
-      auto friends = m_db.getFriends(username);
-
-      postResponse(
-          [this, username, sessionId, followers = std::move(followers),
-           friends = std::move(friends)]() {
-            // Erase from sessions
-            auto sessionIt = m_sessions.find(sessionId);
-            if (sessionIt != m_sessions.end()) {
-              m_sessions.erase(sessionIt);
-            }
-
-            // Erase from online users and broadcast if they were online
-            auto onlineIt = m_onlineUsers.find(username);
-            if (onlineIt != m_onlineUsers.end()) {
-              m_onlineUsers.erase(onlineIt);
-              m_userStatuses[username] = 3; // Offline
-              std::cout << "[Server] User Offline (Disconnected): " << username
-                        << std::endl;
-
-              // Broadcast Offline Status to Union of Followers and Friends
-              std::set<std::string> contacts;
-              for (const auto &f : followers)
-                contacts.insert(f);
-              for (const auto &f : friends)
-                contacts.insert(f);
-
-              Packet notify(PacketType::ContactStatusChange);
-              notify.writeInt(3); // Offline
-              notify.writeString(username);
-              notify.writeString(""); // No custom message when offline
-
-              for (const auto &contactName : contacts) {
-                auto it = m_onlineUsers.find(contactName);
-                if (it != m_onlineUsers.end()) {
-                  it->second->sendPacket(notify);
-                }
-              }
-            }
-          });
-    });
-  } else {
-    // If username is empty, just erase session
-    m_sessions.erase(it);
-  }
-}

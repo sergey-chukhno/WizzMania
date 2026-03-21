@@ -39,3 +39,5 @@ server/certs/server.key
 # database (local only)
 wizzmania.db
 docs/
+*.log
+test_client.py

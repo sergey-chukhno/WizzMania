@@ -25,7 +25,7 @@ ChatWindow::ChatWindow(const QString &partnerName, const QPoint &initialPos,
                        QWidget *parent)
     : QWidget(parent), m_partnerName(partnerName) {
   m_audioManager = new AudioManager(this);
-  setWindowFlags(Qt::FramelessWindowHint | Qt::Window);
+  setWindowFlags(Qt::FramelessWindowHint | Qt::Window | Qt::WindowStaysOnTopHint);
   setAttribute(Qt::WA_TranslucentBackground);
   setAttribute(Qt::WA_DeleteOnClose); // Lifecycle: Destroy on close
 
