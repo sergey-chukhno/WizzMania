@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WizzMania Technical UML (Mermaid)</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <style>
+        body {
+            background-color: #0d1117;
+            color: #c9d1d9;
+            font-family: 'Inter', -apple-system, sans-serif;
+            margin: 0;
+            padding: 40px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .container {
+            max-width: 1200px;
+            width: 100%;
+            background: rgba(255, 255, 255, 0.05);
+            padding: 40px;
+            border-radius: 12px;
+            border: 1px solid rgba(0, 240, 255, 0.2);
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.5);
+        }
+        h1 {
+            color: #00f0ff;
+            text-align: center;
+            margin-bottom: 30px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+        .mermaid {
+            background: transparent !important;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>WizzMania Technical Class Diagram</h1>
+        <div class="mermaid">
+classDiagram
+class TcpServer
+class PacketRouter
+class IPacketHandler
+class SessionManager
+class DatabaseManager
+class ClientSession
+class NetworkManager
+class MainWindow
+class GameBridge
+class NativeSharedMemory
+class LoginHandler
+class RegisterHandler
+class MessageHandler
+class GameMoveHandler
+
+%% Server
+TcpServer : run()
+TcpServer : stop()
+TcpServer : getSession(int id)
+TcpServer : handleDisconnect(int id)
+TcpServer : m_ioContext io_context
+TcpServer : m_acceptor tcp_acceptor
+TcpServer : m_db DatabaseManager
+TcpServer : m_sessionManager SessionManager
+TcpServer : m_packetRouter PacketRouter
+
+PacketRouter : registerHandler(type, handler)
+PacketRouter : handle(session, packet)
+PacketRouter : m_handlers Map
+
+IPacketHandler : handle(session, packet)
+
+SessionManager : addSession(id, session)
+SessionManager : removeSession(id)
+SessionManager : setUserOnline(user, session, status)
+SessionManager : updateStatus(user, status)
+SessionManager : m_sessions Map
+SessionManager : m_onlineUsers Map
+
+DatabaseManager : init()
+DatabaseManager : postTask(task)
+DatabaseManager : createUser(user, pass)
+DatabaseManager : checkCredentials(user, pass)
+DatabaseManager : storeMessage(sender, recp, body)
+DatabaseManager : addFriend(user, friend)
+DatabaseManager : m_db sqlite3
+DatabaseManager : m_tasks Queue
+
+ClientSession : getId()
+ClientSession : getUsername()
+ClientSession : sendPacket(packet)
+ClientSession : doRead()
+ClientSession : m_socket ssl_stream
+ClientSession : m_username string
+ClientSession : m_isLoggedIn bool
+
+%% Client
+NetworkManager : instance()
+NetworkManager : connectToHost(host, port)
+NetworkManager : sendPacket(packet)
+NetworkManager : m_socket QSslSocket
+NetworkManager : m_packetHandlers Map
+
+MainWindow : setContacts(list)
+MainWindow : updateContactStatus(user, status)
+MainWindow : onSendMessage()
+MainWindow : onAddFriendClicked()
+MainWindow : m_username string
+MainWindow : m_contacts List
+MainWindow : m_gameBridge GameBridge
+
+GameBridge : startGameIPC()
+GameBridge : startTicTacToe(user, room, ...)
+GameBridge : m_gameIPC GameSharedMemory
+GameBridge : m_tttMemory NativeSharedMemory
+GameBridge : m_tttProcess QProcess
+
+NativeSharedMemory : createAndMap()
+NativeSharedMemory : openAndMap()
+NativeSharedMemory : lock()
+NativeSharedMemory : unlock()
+NativeSharedMemory : m_fd int
+NativeSharedMemory : m_data T*
+
+%% Handlers
+LoginHandler : handle(session, packet)
+RegisterHandler : handle(session, packet)
+MessageHandler : handle(session, packet)
+GameMoveHandler : handle(session, packet)
+
+%% Relationships
+TcpServer *-- PacketRouter
+TcpServer *-- SessionManager
+TcpServer *-- DatabaseManager
+PacketRouter o-- IPacketHandler
+IPacketHandler <|-- LoginHandler
+IPacketHandler <|-- RegisterHandler
+IPacketHandler <|-- MessageHandler
+IPacketHandler <|-- GameMoveHandler
+SessionManager *-- ClientSession
+MainWindow o-- NetworkManager
+MainWindow o-- GameBridge
+GameBridge o-- NativeSharedMemory
+        </div>
+    </div>
+    <script>
+        mermaid.initialize({
+            theme: 'dark',
+            startOnLoad: true,
+            securityLevel: 'loose'
+        });
+    </script>
+</body>
+</html>
