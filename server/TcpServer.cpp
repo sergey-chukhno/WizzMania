@@ -15,12 +15,14 @@ namespace wizz {
 
 namespace fs = std::filesystem;
 
-TcpServer::TcpServer(int port)
+TcpServer::TcpServer(int port) : TcpServer(port, "wizzmania.db") {}
+
+TcpServer::TcpServer(int port, const std::string& dbPath)
     : m_ioContext(),
       m_sslContext(asio::ssl::context::tlsv12),
       m_acceptor(m_ioContext, asio::ip::tcp::endpoint(asio::ip::tcp::v4(), port)),
       m_port(port),
-      m_isRunning(false), m_db("wizzmania.db") {
+      m_isRunning(false), m_db(dbPath) {
   m_sslContext.set_options(asio::ssl::context::default_workarounds |
                            asio::ssl::context::no_sslv2 |
                            asio::ssl::context::single_dh_use);
@@ -84,16 +86,19 @@ void TcpServer::doAccept() {
                                  asio::ip::tcp::socket socket) {
     if (!ec) {
       int sessionId = m_nextSessionId++;
-      std::cout << "[Server] New Connection (Session ID: " << sessionId << ")"
-                << std::endl;
 
-      auto session = std::make_shared<ClientSession>(
-          sessionId, std::move(socket), m_sslContext, this);
+      try {
+        // Use explicit new to ensure shared_ptr establishes the control block clearly
+        auto session = std::shared_ptr<ClientSession>(new ClientSession(
+            sessionId, std::move(socket), m_sslContext, this));
 
-      m_sessionManager.addSession(sessionId, session);
-      session->start();
-
-      doAccept();
+        m_sessionManager.addSession(sessionId, session);
+        session->start();
+        
+        doAccept();
+      } catch (const std::exception& e) {
+        std::cerr << "[Server] Error creating session: " << e.what() << std::endl;
+      }
     } else {
       std::cerr << "[Server] Accept Error: " << ec.message() << std::endl;
     }

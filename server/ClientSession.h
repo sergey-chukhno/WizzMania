@@ -78,6 +78,7 @@ private:
 
   // Buffer for incoming partial data
   std::vector<uint8_t> m_buffer;
+  std::vector<uint8_t> m_accumulator;
 
   // Outbound message queue to prevent overlapping async_writes on TLS stream
   std::deque<std::vector<uint8_t>> m_outbox;
