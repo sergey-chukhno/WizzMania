@@ -320,11 +320,14 @@
   m_acceptor.<span class="fn">async_accept</span>(
     [<span class="kw">this</span>](<span class="type">asio::error_code</span> ec,
            <span class="type">asio::ip::tcp::socket</span> socket) {
-      <span class="kw">auto</span> session = std::<span class="fn">make_shared</span>&lt;<span class="type">ClientSession</span>&gt;(
-          sessionId, std::<span class="fn">move</span>(socket),
-          m_sslContext, <span class="kw">this</span>, <span class="cm">/*callbacks*/</span>);
-      m_sessions[sessionId] = session;
-      session-&gt;<span class="fn">start</span>();
+      <span class="kw">if</span> (!ec) {
+        <span class="kw">int</span> id = m_nextSessionId++;
+        <span class="kw">auto</span> session = std::<span class="type">shared_ptr</span>&lt;<span class="type">ClientSession</span>&gt;(
+            <span class="kw">new</span> <span class="type">ClientSession</span>(id,
+                std::<span class="fn">move</span>(socket), m_sslContext, <span class="kw">this</span>));
+        m_sessionManager.<span class="fn">addSession</span>(id, session);
+        session-&gt;<span class="fn">start</span>();
+      }
       <span class="fn">doAccept</span>(); <span class="cm">// Recursive async</span>
   });
 }</code></pre>
@@ -334,8 +337,8 @@
                         <span class="member"><span class="type-badge">field</span> ssl::context</span>
                         <span class="member"><span class="type-badge">field</span> tcp::acceptor</span>
                         <span class="member"><span class="type-badge method">method</span> doAccept()</span>
-                        <span class="member"><span class="type-badge method">method</span> handleLogin()</span>
-                        <span class="member"><span class="type-badge method">method</span> handleMessage()</span>
+                        <span class="member"><span class="type-badge method">method</span> start()</span>
+                        <span class="member"><span class="type-badge method">method</span> handleDisconnect()</span>
                     </div>
                 </div>
 
@@ -354,14 +357,17 @@
                         <div class="code-label">doRead() — Lecture async TLS</div>
                         <pre><code><span class="kw">void</span> ClientSession::<span class="fn">doRead</span>() {
   <span class="kw">auto</span> self(<span class="fn">shared_from_this</span>());
+  m_buffer.<span class="fn">resize</span>(<span class="cm">1024</span>);
   m_socket.<span class="fn">async_read_some</span>(
-    asio::<span class="fn">buffer</span>(m_buffer),
+    asio::<span class="fn">buffer</span>(m_buffer.data(), m_buffer.<span class="fn">capacity</span>()),
     [<span class="kw">this</span>, self](<span class="type">asio::error_code</span> ec,
                   <span class="type">std::size_t</span> len) {
       <span class="kw">if</span> (!ec) {
-        <span class="fn">onDataReceived</span>(m_buffer.data(), len);
+        <span class="fn">onDataReceived</span>(
+          <span class="kw">reinterpret_cast</span>&lt;<span class="kw">const char</span>*&gt;(
+            m_buffer.<span class="fn">data</span>()), len);
       } <span class="kw">else</span> {
-        m_onDisconnect(m_sessionId);
+        m_server-&gt;<span class="fn">handleDisconnect</span>(m_sessionId);
       }
   });
 }</code></pre>
@@ -428,39 +434,39 @@
                     <div class="card-header">
                         <span class="card-icon">🖥️</span>
                         <div>
-                            <h3>MainWindow</h3>
-                            <span class="card-file">MainWindow.h / .cpp</span>
+                            <h3>GameBridge</h3>
+                            <span class="card-file">client/GameBridge.h / .cpp</span>
                         </div>
                     </div>
-                    <p class="card-desc">Fenêtre principale (liste de contacts). Surveille l'état des jeux via
-                        <strong>QSharedMemory</strong> + <strong>QTimer</strong> pour broadcaster le score en temps
-                        réel.
-                    </p>
+                    <p class="card-desc">Adaptateur dédié entre l'IPC POSIX et la GUI Qt. Poll la mémoire partagée et émet un signal <strong>localGameStatusChanged</strong> relayé par <strong>NetworkManager</strong>.</p>
                     <div class="card-code">
-                        <div class="code-label">onPollGameIPC() — Polling mémoire partagée</div>
-                        <pre><code><span class="kw">void</span> MainWindow::<span class="fn">onPollGameIPC</span>() {
-  <span class="kw">bool</span> opened = m_gameIPC.<span class="fn">openAndMap</span>();
+                        <div class="code-label">onPollGameIPC() — Dans GameBridge</div>
+                        <pre><code><span class="kw">void</span> GameBridge::<span class="fn">onPollGameIPC</span>() {
+  <span class="kw">bool</span> opened = m_gameIPC.<span class="fn">data</span>() != <span class="kw">nullptr</span>;
   <span class="kw">if</span> (!opened) {
-    <span class="kw">if</span> (m_lastIPCIsPlaying) {
-      NetworkManager::<span class="fn">instance</span>()
-        .<span class="fn">sendGameStatus</span>(<span class="cm">""</span>, <span class="cm">0</span>);
+    opened = m_gameIPC.<span class="fn">openAndMap</span>();
+    <span class="kw">if</span> (!opened) {
+      <span class="kw">if</span> (m_lastIPCIsPlaying)
+        <span class="kw">emit</span> <span class="fn">localGameStatusChanged</span>(<span class="kw">false</span>, <span class="cm">""</span>, <span class="cm">0</span>);
+      <span class="kw">return</span>;
     }
-    <span class="kw">return</span>;
   }
   m_gameIPC.<span class="fn">lock</span>();
   <span class="kw">const</span> <span class="type">GameIPCData</span>* data = m_gameIPC.<span class="fn">data</span>();
-  <span class="kw">if</span> (data-&gt;isPlaying != m_lastIPCIsPlaying)
-    <span class="fn">sendGameStatus</span>(gameName, score);
+  <span class="kw">if</span> (data &amp;&amp; data-&gt;isPlaying != m_lastIPCIsPlaying)
+    <span class="kw">emit</span> <span class="fn">localGameStatusChanged</span>(
+      data-&gt;isPlaying, data-&gt;gameName,
+      data-&gt;currentScore);
   m_gameIPC.<span class="fn">unlock</span>();
 }</code></pre>
                     </div>
                     <div class="card-members">
-                        <span class="member"><span class="type-badge">field</span> QListWidget contacts</span>
-                        <span class="member"><span class="type-badge">field</span> NativeSharedMemory</span>
-                        <span class="member"><span class="type-badge">field</span> QTimer* ipcTimer</span>
-                        <span class="member"><span class="type-badge method">method</span> setupGameIPC()</span>
-                        <span class="member"><span class="type-badge method">method</span> updateContactStatus()</span>
-                        <span class="member"><span class="type-badge cb">signal</span> contactDoubleClicked</span>
+                        <span class="member"><span class="type-badge">field</span> GameSharedMemory m_gameIPC</span>
+                        <span class="member"><span class="type-badge">field</span> QTimer* m_gameIPCTimer</span>
+                        <span class="member"><span class="type-badge method">method</span> startGameIPC()</span>
+                        <span class="member"><span class="type-badge method">method</span> startTicTacToe()</span>
+                        <span class="member"><span class="type-badge cb">signal</span> localGameStatusChanged</span>
+                        <span class="member"><span class="type-badge cb">signal</span> localMoveMade</span>
                     </div>
                 </div>
 
@@ -483,11 +489,14 @@
   <span class="type">QByteArray</span> raw = m_socket-&gt;<span class="fn">readAll</span>();
   m_buffer.<span class="fn">insert</span>(m_buffer.<span class="fn">end</span>(),
     raw.<span class="fn">begin</span>(), raw.<span class="fn">end</span>());
-  <span class="kw">while</span> (m_buffer.<span class="fn">size</span>() &gt;= <span class="cm">12</span>) {
+  <span class="kw">while</span> (<span class="kw">true</span>) {
+    <span class="kw">if</span> (m_buffer.<span class="fn">size</span>() &lt; <span class="cm">12</span>) <span class="kw">break</span>;
     <span class="type">wizz::Packet</span> pkt(packetData);
+    <span class="kw">emit</span> <span class="fn">packetReceived</span>(pkt);
     <span class="kw">if</span> (m_packetHandlers.<span class="fn">contains</span>(pkt.<span class="fn">type</span>()))
       m_packetHandlers[pkt.<span class="fn">type</span>()](pkt);
-    <span class="kw">emit</span> <span class="fn">packetReceived</span>(pkt);
+    m_buffer.<span class="fn">erase</span>(m_buffer.<span class="fn">begin</span>(),
+      m_buffer.<span class="fn">begin</span>() + totalSize);
   }
 }</code></pre>
                     </div>
@@ -598,11 +607,13 @@ m_router.<span class="fn">registerHandler</span>(
                         <div class="code-label">SessionManager Facade</div>
                         <pre><code><span class="kw">class</span> <span class="type">SessionManager</span> {
 <span class="kw">public</span>:
-  <span class="kw">void</span> <span class="fn">setUserOnline</span>(<span class="kw">const</span> <span class="type">string</span>&amp; u, 
-                     <span class="type">ClientSession</span>* s);
-  <span class="type">ClientSession</span>* <span class="fn">getSession</span>(<span class="kw">const</span> <span class="type">string</span>&amp; u);
+  <span class="kw">void</span> <span class="fn">setUserOnline</span>(<span class="kw">const</span> <span class="type">string</span>&amp; u,
+                     <span class="type">ClientSession</span>* s,
+                     <span class="kw">const</span> <span class="type">string</span>&amp; customStatus);
+  <span class="type">ClientSession</span>* <span class="fn">getSessionByUsername</span>(
+                     <span class="kw">const</span> <span class="type">string</span>&amp; u);
 <span class="kw">private</span>:
-  <span class="type">unordered_map</span>&lt;<span class="type">string</span>, <span class="type">ClientSession</span>*&gt; m_users;
+  <span class="type">unordered_map</span>&lt;<span class="type">string</span>, <span class="type">ClientSession</span>*&gt; m_onlineUsers;
 };</code></pre>
                     </div>
                     <div class="card-members">
@@ -703,8 +714,14 @@ m_router.<span class="fn">registerHandler</span>(
                     <div class="card-code">
                         <div class="code-label">Network Singleton</div>
                         <pre><code><span class="kw">static</span> <span class="type">NetworkManager</span>&amp; <span class="fn">instance</span>() {
-  <span class="kw">static</span> <span class="type">NetworkManager</span> inst; 
-  <span class="kw">return</span> inst;
+  <span class="kw">static</span> <span class="type">NetworkManager</span>* inst = <span class="kw">nullptr</span>;
+  <span class="kw">if</span> (!inst) {
+    <span class="type">QThread</span>* t = <span class="kw">new</span> <span class="type">QThread</span>();
+    inst = <span class="kw">new</span> <span class="type">NetworkManager</span>();
+    inst-&gt;<span class="fn">moveToThread</span>(t);
+    t-&gt;<span class="fn">start</span>();
+  }
+  <span class="kw">return</span> *inst;
 }</code></pre>
                     </div>
                     <div class="card-members">
@@ -934,7 +951,7 @@ m_router.<span class="fn">registerHandler</span>(
                         <span class="card-icon">📡</span>
                         <div>
                             <h3>Broadcast Live Score</h3>
-                            <span class="card-file">TcpServer.cpp</span>
+                            <span class="card-file">server/handlers/GameHandlers.cpp</span>
                         </div>
                     </div>
                     <p class="card-desc">Le client poll la mémoire partagée et envoie un paquet
@@ -942,22 +959,20 @@ m_router.<span class="fn">registerHandler</span>(
                         <strong>followers</strong> en ligne du joueur.
                     </p>
                     <div class="card-code">
-                        <div class="code-label">handleGameStatus() — Broadcast</div>
-                        <pre><code><span class="kw">void</span> TcpServer::<span class="fn">handleGameStatus</span>(
+                        <div class="code-label">GameStatusHandler::handle() — Broadcast</div>
+                        <pre><code><span class="kw">void</span> GameStatusHandler::<span class="fn">handle</span>(
     <span class="type">ClientSession</span>* sender,
-    <span class="kw">const</span> <span class="type">string</span>&amp; gameName, <span class="type">uint32_t</span> score) {
+    <span class="type">Packet</span>&amp; pkt, <span class="type">TcpServer</span>* server) {
 
-  <span class="type">Packet</span> pkt(<span class="type">PacketType</span>::GameStatus);
-  pkt.<span class="fn">writeString</span>(sender-&gt;<span class="fn">getUsername</span>());
-  pkt.<span class="fn">writeString</span>(gameName);
-  pkt.<span class="fn">writeInt</span>(score);
+  <span class="type">string</span> gameName = pkt.<span class="fn">readString</span>();
+  <span class="type">uint32_t</span> score = pkt.<span class="fn">readInt</span>();
 
-  <span class="cm">// Broadcast to all followers</span>
-  <span class="kw">auto</span> followers = m_db.<span class="fn">getFollowers</span>(username);
-  <span class="kw">for</span> (<span class="kw">const auto</span>&amp; f : followers) {
-    <span class="kw">auto</span> it = m_onlineUsers.<span class="fn">find</span>(f);
-    <span class="kw">if</span> (it != m_onlineUsers.<span class="fn">end</span>())
-      it-&gt;second-&gt;<span class="fn">sendPacket</span>(pkt);
+  <span class="cm">// Broadcast to all online friends</span>
+  <span class="kw">auto</span> friends = db.<span class="fn">getFriends</span>(
+      sender-&gt;<span class="fn">getUsername</span>());
+  <span class="kw">for</span> (<span class="kw">const auto</span>&amp; f : friends) {
+    <span class="kw">auto</span>* s = sessionMgr.<span class="fn">getSessionByUsername</span>(f);
+    <span class="kw">if</span> (s) s-&gt;<span class="fn">sendPacket</span>(statusPkt);
   }
 }</code></pre>
                     </div>
@@ -975,7 +990,7 @@ m_router.<span class="fn">registerHandler</span>(
         <!-- Diapositive 9 : TicTacToe Multiplayer Matchmaking -->
         <section class="slide hidden" id="slide-9">
             <h1 class="section-title">Matchmaking & TicTacToe Multijoueur</h1>
-            <p class="slide4-subtitle">Inviter un ami — <strong>Synchronisation Avatar & Board</strong> via WebSocket +
+            <p class="slide4-subtitle">Inviter un ami — <strong>Synchronisation Avatar &amp; Board</strong> via TLS +
                 IPC</p>
 
             <div class="server-panels">
@@ -985,23 +1000,19 @@ m_router.<span class="fn">registerHandler</span>(
                         <span class="card-icon">⚡</span>
                         <div>
                             <h3>Invitations In-App</h3>
-                            <span class="card-file">client/ChatWindow.cpp</span>
+                            <span class="card-file">client/MainWindow.cpp</span>
                         </div>
                     </div>
-                    <p class="card-desc">L'UI WizzMania permet de défier ses amis directement depuis la fenêtre de chat
-                        visuelle. Un clique déclenche un paquet JSON WebSocket <strong>GameInvite</strong> vers le
-                        serveur.</p>
+                    <p class="card-desc">Un bouton inline est créé dans <strong>populateContactList()</strong> pour chaque contact en ligne. Il déclenche <code>sendGameInvite()</code> via le <strong>NetworkManager</strong>.</p>
                     <div class="card-code">
-                        <div class="code-label">UI Challenge Flow</div>
-                        <pre><code><span class="kw">void</span> ChatWindow::<span class="fn">setupInviteButton</span>() {
-  <span class="type">QPushButton</span>* btn = <span class="kw">new</span> <span class="type">QPushButton</span>(<span class="cm">"⚡ Jouer"</span>);
-  <span class="fn">connect</span>(btn, &amp;<span class="type">QPushButton</span>::clicked, [<span class="kw">this</span>]() {
-    <span class="type">wizz::Packet</span> pkt(<span class="type">PacketType</span>::GameInvite);
-    pkt.<span class="fn">writeString</span>(<span class="cm">"TicTacToe"</span>);
-    pkt.<span class="fn">writeString</span>(m_contactUsername);
-    NetworkManager::<span class="fn">instance</span>().<span class="fn">sendPacket</span>(pkt);
-  });
-}</code></pre>
+                        <div class="code-label">Invite Flow — MainWindow</div>
+                        <pre><code><span class="cm">// In MainWindow::populateContactList()</span>
+<span class="type">QPushButton</span>* btn = <span class="kw">new</span> <span class="type">QPushButton</span>(<span class="cm">"🎮 Invite to Play"</span>);
+<span class="fn">connect</span>(btn, &amp;<span class="type">QPushButton</span>::clicked,
+  [<span class="kw">this</span>, name = contact.username]() {
+    NetworkManager::<span class="fn">instance</span>()
+      .<span class="fn">sendGameInvite</span>(name, <span class="cm">"TicTacToe"</span>);
+  });</code></pre>
                     </div>
                     <div class="card-members">
                         <span class="member"><span class="type-badge">ui</span> Game Invite Banner</span>
@@ -1016,11 +1027,10 @@ m_router.<span class="fn">registerHandler</span>(
                         <span class="card-icon">🎭</span>
                         <div>
                             <h3>Export d'Avatar & Start</h3>
-                            <span class="card-file">client/GameLauncher.cpp</span>
+                            <span class="card-file">client/GameBridge.cpp</span>
                         </div>
                     </div>
-                    <p class="card-desc">Le client Qt exporte en temps réel l'avatar réseau de l'adversaire dans le
-                        <strong>QDir::tempPath()</strong>, initialisant l'IPC avant de lancer SFML via `QProcess`.</p>
+                    <p class="card-desc"><strong>GameBridge::startTicTacToe()</strong> exporte l'avatar de l'adversaire dans <strong>QDir::tempPath()</strong> via <code>GameLauncher::launchTicTacToe()</code>, puis attache l'IPC POSIX.</p>
                     <div class="card-code">
                         <div class="code-label">launchTicTacToe()</div>
                         <pre><code><span class="cm">// Export avatar for SFML engine</span>
@@ -1076,8 +1086,97 @@ window.<span class="fn">draw</span>(*avatarSpriteOpt_);</code></pre>
             </div>
         </section>
 
-        <!-- Diapositive 10 : Démo -->
+        <!-- Diapositive 10 : Tests et Fiabilité -->
         <section class="slide hidden" id="slide-10">
+            <h1 class="section-title">Tests Automatisés & Fiabilité</h1>
+            <p class="slide4-subtitle">Framework <strong>GoogleTest</strong> & <strong>GoogleMock</strong> — 100% Natif C++</p>
+
+            <div class="server-panels">
+                <!-- Panel 1: Unit Testing -->
+                <div class="server-card" data-panel="test-unit">
+                    <div class="card-header">
+                        <span class="card-icon">🧪</span>
+                        <div>
+                            <h3>Tests Unitaires</h3>
+                            <span class="card-file">tests/server/test_*.cpp</span>
+                        </div>
+                    </div>
+                    <p class="card-desc">Isolation totale des composants. Utilisation de <strong>GMock</strong> pour simuler les dépendances et vérifier les appels de méthodes.</p>
+                    <div class="card-code">
+                        <div class="code-label">PacketRouter Mock Test</div>
+                        <pre><code><span class="fn">TEST</span>(Router, Dispatches) {
+  <span class="type">MockHandler</span> handler;
+  <span class="fn">EXPECT_CALL</span>(handler, handle(_))
+    .<span class="fn">Times</span>(<span class="cm">1</span>);
+  
+  router.<span class="fn">registerHandler</span>(<span class="cm">101</span>, &amp;handler);
+  router.<span class="fn">handle</span>(session, pkt);
+}</code></pre>
+                    </div>
+                    <div class="card-members">
+                        <span class="member"><span class="type-badge">test</span> SessionManager</span>
+                        <span class="member"><span class="type-badge">test</span> Packet Protocol</span>
+                        <span class="member"><span class="type-badge">test</span> Mocking Logic</span>
+                    </div>
+                </div>
+
+                <!-- Panel 2: Integration Testing -->
+                <div class="server-card" data-panel="test-integration">
+                    <div class="card-header">
+                        <span class="card-icon">🌐</span>
+                        <div>
+                            <h3>Tests d'Intégration</h3>
+                            <span class="card-file">integration_test_server</span>
+                        </div>
+                    </div>
+                    <p class="card-desc">Vérification de la pile complète : <strong>Handshake SSL</strong>, parsing de paquets et persistance <strong>SQLite</strong> en conditions réelles.</p>
+                    <div class="card-code">
+                        <div class="code-label">SSL Registration Flow</div>
+                        <pre><code><span class="cm">// Real TLS connection to localhost</span>
+client.<span class="fn">async_handshake</span>(ssl::client);
+client.<span class="fn">send</span>(registerPacket);
+
+<span class="cm">// Verify server response & DB</span>
+<span class="fn">EXPECT_EQ</span>(resp.type, <span class="cm">105</span>); <span class="cm">// Success</span>
+<span class="fn">EXPECT_TRUE</span>(db.<span class="fn">userExists</span>(<span class="cm">"test"</span>));</code></pre>
+                    </div>
+                    <div class="card-members">
+                        <span class="member"><span class="type-badge shield">secure</span> SSL Handshake</span>
+                        <span class="member"><span class="type-badge">db</span> DB State Verification</span>
+                        <span class="member"><span class="type-badge">ipc</span> Network Byte Order</span>
+                    </div>
+                </div>
+
+                <!-- Panel 3: Future Roadmap -->
+                <div class="server-card" data-panel="test-roadmap">
+                    <div class="card-header">
+                        <span class="card-icon">🚀</span>
+                        <div>
+                            <h3>Next Steps</h3>
+                            <span class="card-file">Phase 14+</span>
+                        </div>
+                    </div>
+                    <p class="card-desc">Objectif : <strong>Full Coverage</strong>. Extension de la suite aux fonctionnalités sociales et gaming complexes.</p>
+                    <div class="card-code">
+                        <div class="code-label">Upcoming Test Targets</div>
+                        <ul class="roadmap-list-mini">
+                            <li>🛡️ <b>Auth</b>: Rate Limiting Stress Tests</li>
+                            <li>💬 <b>Social</b>: E2E Messaging Delivery</li>
+                            <li>🎮 <b>Games</b>: Matchmaking Edge Cases</li>
+                            <li>🔥 <b>Load</b>: 1000+ Concurrent Sessions</li>
+                        </ul>
+                    </div>
+                    <div class="card-members">
+                        <span class="member"><span class="type-badge">plan</span> CI/CD Pipeline</span>
+                        <span class="member"><span class="type-badge">plan</span> Performance Bench</span>
+                        <span class="member"><span class="type-badge">plan</span> Fuzzing Protocol</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Diapositive 11 : Démo -->
+        <section class="slide hidden" id="slide-11">
             <div class="demo-slide">
                 <div class="demo-left">
                     <h1 class="demo-title">Démo en Direct</h1>
@@ -1121,8 +1220,8 @@ window.<span class="fn">draw</span>(*avatarSpriteOpt_);</code></pre>
             <p class="demo-footer">WizzMania — Sergey · Louis · Élodie — 2026</p>
         </section>
 
-        <!-- Diapositive 11 : La Route à Suivre -->
-        <section class="slide hidden" id="slide-11">
+        <!-- Diapositive 12 : La Route à Suivre -->
+        <section class="slide hidden" id="slide-12">
             <h1 class="section-title">La Route à Suivre — Innovations WizzMania</h1>
             <div class="roadmap-container">
                 <div class="roadmap-grid">
@@ -1199,6 +1298,7 @@ window.<span class="fn">draw</span>(*avatarSpriteOpt_);</code></pre>
         <button id="prevBtn" class="nav-btn" disabled>&larr; Précédent</button>
         <div class="slide-indicators">
             <span class="dot active"></span>
+            <span class="dot"></span>
             <span class="dot"></span>
             <span class="dot"></span>
             <span class="dot"></span>

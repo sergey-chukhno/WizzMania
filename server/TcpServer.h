@@ -21,6 +21,7 @@ namespace wizz {
 class TcpServer {
 public:
   explicit TcpServer(int port);
+  explicit TcpServer(int port, const std::string& dbPath);
   ~TcpServer();
 
   // Prevent copying
