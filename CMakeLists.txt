@@ -5,6 +5,13 @@ if(POLICY CMP0135)
   cmake_policy(SET CMP0135 NEW)  # prefer extraction timestamps of download time
 endif()
 
+# Project Metadata
+project(WizzMania VERSION 0.1.0 LANGUAGES CXX)
+
+# Standard C++17 (Required for modern features like std::optional, std::variant)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
 # SFML 3.0 Global Dependency
 # We centralize this at the root because multiple games (BrickBreaker, TicTacToe)
 # require it, and having them each call find_package/FetchContent causes conflicts 
@@ -22,13 +29,6 @@ if(NOT SFML_FOUND)
     )
     FetchContent_MakeAvailable(SFML)
 endif()
-
-# Project Metadata
-project(WizzMania VERSION 0.1.0 LANGUAGES CXX)
-
-# Standard C++17 (Required for modern features like std::optional, std::variant)
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Global Compiler Warnings (High Quality Code)
 if(MSVC)
