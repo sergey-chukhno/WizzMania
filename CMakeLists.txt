@@ -5,6 +5,24 @@ if(POLICY CMP0135)
   cmake_policy(SET CMP0135 NEW)  # prefer extraction timestamps of download time
 endif()
 
+# SFML 3.0 Global Dependency
+# We centralize this at the root because multiple games (BrickBreaker, TicTacToe)
+# require it, and having them each call find_package/FetchContent causes conflicts 
+# on systems with SFML 2.x installed (like WSL).
+include(FetchContent)
+find_package(SFML 3.0 COMPONENTS Graphics Window System Audio QUIET)
+if(NOT SFML_FOUND)
+    message(STATUS "SFML 3.0 not found natively. Fetching from GitHub via FetchContent...")
+    set(SFML_BUILD_EXAMPLES OFF CACHE BOOL "Disable SFML examples")
+    set(SFML_BUILD_DOC OFF CACHE BOOL "Disable SFML documentation")
+    FetchContent_Declare(
+        SFML
+        GIT_REPOSITORY https://github.com/SFML/SFML.git
+        GIT_TAG        3.0.0
+    )
+    FetchContent_MakeAvailable(SFML)
+endif()
+
 # Project Metadata
 project(WizzMania VERSION 0.1.0 LANGUAGES CXX)
 
