@@ -16,8 +16,10 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 
-# SFML is provided by the root CMakeLists.txt
-find_package(SFML 3.0 COMPONENTS Graphics Audio REQUIRED)
+# SFML (Check if parent project already provided it, otherwise find it)
+if(NOT TARGET SFML::Graphics)
+    find_package(SFML COMPONENTS Graphics Audio REQUIRED)
+endif()
 
 # Source files
 set(SOURCES

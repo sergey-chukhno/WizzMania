@@ -4,8 +4,10 @@ project(TicTacToe VERSION 1.0)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
-# SFML is provided by the root CMakeLists.txt
-find_package(SFML 3.0 COMPONENTS Graphics Window System REQUIRED)
+# SFML (Check if parent project already provided it, otherwise find it)
+if(NOT TARGET SFML::Graphics)
+    find_package(SFML COMPONENTS Graphics Window System REQUIRED)
+endif()
 
 # Common Headers
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
