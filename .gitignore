@@ -23,10 +23,9 @@ Makefile
 *.swp
 .DS_Store
 
-# Documentation & Rules (Local only)
+# Documentation & Rules (Shared)
 WizzMania.md
 rules.md
-docs/
 maquette/
 cert/
 certs/
@@ -38,6 +37,5 @@ server/certs/server.key
 
 # database (local only)
 wizzmania.db
-docs/
 *.log
 test_client.py
