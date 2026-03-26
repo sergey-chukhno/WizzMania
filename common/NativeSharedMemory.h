@@ -2,6 +2,8 @@
 #define NATIVE_SHARED_MEMORY_H
 
 #include "GameIPC.h"
+#include <cerrno>
+#include <cstring>
 #include <iostream>
 #include <string>
 
