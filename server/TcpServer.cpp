@@ -26,9 +26,22 @@ TcpServer::TcpServer(int port, const std::string& dbPath)
   m_sslContext.set_options(asio::ssl::context::default_workarounds |
                            asio::ssl::context::no_sslv2 |
                            asio::ssl::context::single_dh_use);
-  m_sslContext.use_certificate_chain_file("server/certs/server.crt");
-  m_sslContext.use_private_key_file("server/certs/server.key",
-                                    asio::ssl::context::pem);
+  // Flexible Path Detection for Certificates
+  std::string certPath = "server/certs/server.crt";
+  std::string keyPath = "server/certs/server.key";
+
+  if (!fs::exists(certPath)) {
+      // Try relative to build folder
+      certPath = "../server/certs/server.crt";
+      keyPath = "../server/certs/server.key";
+  }
+
+  if (!fs::exists(certPath)) {
+      throw std::runtime_error("SSL Certificates not found! Expected at 'server/certs/' or '../server/certs/'.");
+  }
+
+  m_sslContext.use_certificate_chain_file(certPath);
+  m_sslContext.use_private_key_file(keyPath, asio::ssl::context::pem);
 
   m_packetRouter.registerHandler(PacketType::Login, std::make_unique<LoginHandler>());
   m_packetRouter.registerHandler(PacketType::Register, std::make_unique<RegisterHandler>());
