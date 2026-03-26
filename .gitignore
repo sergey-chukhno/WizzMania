@@ -28,14 +28,8 @@ WizzMania.md
 rules.md
 maquette/
 cert/
-certs/
 *.log
-
-# TLS Certificates (local only)
-server/certs/server.crt
-server/certs/server.key
 
 # database (local only)
 wizzmania.db
-*.log
 test_client.py
