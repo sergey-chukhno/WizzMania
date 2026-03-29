@@ -37,7 +37,20 @@ TcpServer::TcpServer(int port, const std::string& dbPath)
   }
 
   if (!fs::exists(certPath)) {
-      throw std::runtime_error("SSL Certificates not found! Expected at 'server/certs/' or '../server/certs/'.");
+      // Try relative to deep test folder (build/tests/server/)
+      certPath = "../../server/certs/server.crt";
+      keyPath = "../../server/certs/server.key";
+  }
+
+  if (!fs::exists(certPath)) {
+      // Try relative to even deeper test folder (build/tests/server/ if run from build root)
+      // Actually, from build/ - tests/server/ it's 3 levels up
+      certPath = "../../../server/certs/server.crt";
+      keyPath = "../../../server/certs/server.key";
+  }
+
+  if (!fs::exists(certPath)) {
+      throw std::runtime_error("SSL Certificates not found! Expected at 'server/certs/', '../server/certs/', '../../server/certs/', or '../../../server/certs/'.");
   }
 
   m_sslContext.use_certificate_chain_file(certPath);

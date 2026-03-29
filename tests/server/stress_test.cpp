@@ -1,103 +1,82 @@
-#include <chrono>
-#include <cstring>
+#include <asio.hpp>
+#include <asio/ssl.hpp>
 #include <iostream>
 #include <thread>
 #include <vector>
-
-// Use our actual Protocol Library
+#include <atomic>
 #include "../../common/Packet.h"
-#include "../../common/Types.h"
 
-// Platform Compatibility
-#ifdef _WIN32
-#include <winsock2.h>
-#include <ws2tcpip.h>
-#ifdef _MSC_VER
-#pragma comment(lib, "ws2_32.lib")
-#endif
-#else
-#include <arpa/inet.h>
-#include <sys/socket.h>
-#include <unistd.h>
-// SocketType is defined in Types.h now, but we need standard headers for
-// socket() calls here if not fully abstracting
-#endif
+using asio::ip::tcp;
+using namespace wizz;
 
-// Constants
-const std::string SERVER_IP = "127.0.0.1";
-const int SERVER_PORT = 8080;
+std::atomic<int> g_successCount{0};
+std::atomic<int> g_failureCount{0};
 
-void run_client() {
-#ifdef _WIN32
-  WSADATA wsaData;
-  WSAStartup(MAKEWORD(2, 2), &wsaData);
-#endif
+void run_stress_client(int id) {
+    asio::io_context io_context;
+    asio::ssl::context ssl_context(asio::ssl::context::tlsv12);
+    ssl_context.set_verify_mode(asio::ssl::verify_none);
 
-  // 1. Create Socket
-  SocketType sock = socket(AF_INET, SOCK_STREAM, 0);
-  if (sock == INVALID_SOCKET_VAL) {
-    std::cerr << "[Client] Error creating socket" << std::endl;
-    return;
-  }
+    asio::ssl::stream<tcp::socket> socket(io_context, ssl_context);
+    tcp::resolver resolver(io_context);
 
-  // 2. Define Server Address
-  sockaddr_in serverAddr{};
-  serverAddr.sin_family = AF_INET;
-  serverAddr.sin_port = htons(SERVER_PORT);
-  inet_pton(AF_INET, SERVER_IP.c_str(), &serverAddr.sin_addr);
+    try {
+        asio::connect(socket.lowest_layer(), resolver.resolve("127.0.0.1", "8080"));
+        socket.handshake(asio::ssl::stream_base::client);
 
-  // 3. Connect
-  std::cout << "[Client] Connecting to " << SERVER_IP << ":" << SERVER_PORT
-            << "..." << std::endl;
-  if (connect(sock, (struct sockaddr *)&serverAddr, sizeof(serverAddr)) < 0) {
-    std::cerr << "[Client] Connection Failed!" << std::endl;
-  } else {
-    std::cout << "[Client] Connected!" << std::endl;
+        // 1. Register a unique user
+        std::string username = "StressUser_" + std::to_string(id) + "_" + std::to_string(std::rand() % 1000);
+        Packet reg(PacketType::Register);
+        reg.writeString(username);
+        reg.writeString("password123");
 
-    // 4. Send Data (Day 3 Update)
-    // Construct a Register Packet (Day 4 Test)
-    wizz::Packet regPacket(wizz::PacketType::Register);
-    regPacket.writeString("TestRegUser"); // Unique User
-    regPacket.writeString("Pass123");
+        asio::write(socket, asio::buffer(reg.serialize()));
 
-    std::vector<uint8_t> buffer = regPacket.serialize();
+        // 2. Wait for response
+        uint8_t headerBuf[12];
+        asio::read(socket, asio::buffer(headerBuf, 12));
+        
+        // Protocol: 4 bytes Magic, 4 bytes Type (Network Order), 4 bytes Length (Network Order)
+        uint32_t typeNetwork;
+        std::memcpy(&typeNetwork, &headerBuf[4], 4);
+        uint32_t type = ntohl(typeNetwork);
 
-    std::cout << "[Client] Sending " << buffer.size()
-              << " bytes (Registration)..." << std::endl;
-    send(sock, reinterpret_cast<const char *>(buffer.data()), buffer.size(), 0);
+        if (type == (uint32_t)PacketType::RegisterSuccess) {
+            g_successCount++;
+        } else {
+            g_failureCount++;
+            std::cerr << "[Client " << id << "] Wrong Response Type: " << type << std::endl;
+        }
 
-    // 5. Receive Response
-    char recvBuf[1024];
-    int bytes = recv(sock, recvBuf, sizeof(recvBuf), 0);
-    if (bytes > 0) {
-      // In a real client, we would buffer this too.
-      // Here we assume the test is on localhost and we get the full packet.
-      // Skip Header (12 bytes) to see the string payload roughly
-      // Or better: Use Packet class to deserialize
-      std::vector<uint8_t> respData(recvBuf, recvBuf + bytes);
-      wizz::Packet resp(respData); // Deserializes
-
-      std::cout << "[Client] Response Type: " << static_cast<int>(resp.type())
-                << std::endl;
-      if (resp.type() == wizz::PacketType::LoginSuccess) {
-        std::string msg = resp.readString();
-        std::cout << "[Client] SUCCESS Message: " << msg << std::endl;
-      } else if (resp.type() == wizz::PacketType::LoginFailed) {
-        std::string msg = resp.readString();
-        std::cout << "[Client] FAILURE Message: " << msg << std::endl;
-      }
+    } catch (const std::exception& e) {
+        g_failureCount++;
     }
-  }
-
-  // Cleanup
-  close_socket_raw(sock);
-
-#ifdef _WIN32
-  WSACleanup();
-#endif
 }
 
-int main() {
-  run_client();
-  return 0;
+int main(int argc, char* argv[]) {
+    int numClients = 20;
+    if (argc > 1) numClients = std::stoi(argv[1]);
+
+    std::cout << "=== WizzMania Stress Test: " << numClients << " Concurrent TLS Clients ===" << std::endl;
+    
+    std::vector<std::thread> clients;
+    for (int i = 0; i < numClients; ++i) {
+        clients.emplace_back(run_stress_client, i);
+    }
+
+    for (auto& t : clients) {
+        t.join();
+    }
+
+    std::cout << "\n--- Load Results ---" << std::endl;
+    std::cout << "Success: " << g_successCount.load() << std::endl;
+    std::cout << "Failure: " << g_failureCount.load() << std::endl;
+
+    if (g_failureCount == 0 && g_successCount > 0) {
+        std::cout << "PASSED: Server handled concurrency perfectly." << std::endl;
+        return 0;
+    } else {
+        std::cout << "FAILED: Some clients failed to connect or register." << std::endl;
+        return 1;
+    }
 }
