@@ -43,9 +43,11 @@ include(GoogleTest)
 gtest_discover_tests(unit_tests_server)
 gtest_discover_tests(integration_test_server)
 
-# --- Legacy Tests (Keep for now) ---
+# --- Legacy & Stress Tests ---
 add_executable(stress_test stress_test.cpp)
-target_link_libraries(stress_test PRIVATE wizz_common)
+target_link_libraries(stress_test PRIVATE 
+    wizz_server_lib
+)
 
 add_executable(messaging_test messaging_test.cpp)
 target_link_libraries(messaging_test PRIVATE wizz_common)
