@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../common/Packet.h"
+#include "RateLimiter.h"
 #include <asio.hpp>
 #include <asio/ssl.hpp>
 #include <cstdint>
@@ -57,10 +58,12 @@ public:
   // Core Logic: Process incoming raw bytes
   void doRead();
 
+  // High-level logical processing
+  void processPacket(Packet &packet);
+
 private:
   // Helper to dispatch packets
   void onDataReceived(const char *data, size_t length);
-  void processPacket(Packet &packet);
 
   // Forward packets to router
 
@@ -83,6 +86,9 @@ private:
   // Outbound message queue to prevent overlapping async_writes on TLS stream
   std::deque<std::vector<uint8_t>> m_outbox;
   void doWrite();
+
+  // SHIELD PHASE: Command Throttling
+  RateLimiter m_commandLimiter;
 };
 
 } // namespace wizz

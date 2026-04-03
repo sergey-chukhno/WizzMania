@@ -15,6 +15,7 @@
 #include "DatabaseManager.h"
 #include "SessionManager.h"
 #include "GameRoomManager.h"
+#include "RateLimiter.h"
 
 namespace wizz {
 
@@ -67,6 +68,12 @@ private:
   SessionManager m_sessionManager;
   GameRoomManager m_gameRoomManager;
   PacketRouter m_packetRouter;
+
+  // Rate Limiting (Shield Phase)
+  std::mutex m_limiterMutex;
+  std::unordered_map<std::string, std::shared_ptr<RateLimiter>> m_ipLimiters;
+  const double CONN_BURST = 5.0;  // 5 initial connections allowed
+  const double CONN_RATE = 1.0;   // +1 connection per second
 
   // Asio Accept Loop
   void doAccept();

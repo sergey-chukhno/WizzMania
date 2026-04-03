@@ -111,6 +111,23 @@ void TcpServer::doAccept() {
   m_acceptor.async_accept([this](asio::error_code ec,
                                  asio::ip::tcp::socket socket) {
     if (!ec) {
+      std::string remoteIp = socket.remote_endpoint().address().to_string();
+      
+      // SHIELD PHASE: Connection Rate Limiting
+      {
+          std::lock_guard<std::mutex> lock(m_limiterMutex);
+          if (m_ipLimiters.find(remoteIp) == m_ipLimiters.end()) {
+              m_ipLimiters[remoteIp] = std::make_shared<RateLimiter>(CONN_BURST, CONN_RATE);
+          }
+          
+          if (!m_ipLimiters[remoteIp]->consume(1.0)) {
+              std::cerr << "[Shield] Dropping connection from " << remoteIp << " (Rate limit exceeded)" << std::endl;
+              socket.close();
+              doAccept();
+              return;
+          }
+      }
+
       int sessionId = m_nextSessionId++;
 
       try {

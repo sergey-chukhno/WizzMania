@@ -22,7 +22,8 @@ ClientSession::ClientSession(
     : m_sessionId(sessionId), 
       m_socket(std::move(socket), sslContext),
       m_isLoggedIn(false), 
-      m_server(server) {}
+      m_server(server),
+      m_commandLimiter(10.0, 3.0) {} // Burst 10, 3 per sec
 
 ClientSession::~ClientSession() {
   if (m_socket.lowest_layer().is_open()) {
@@ -147,6 +148,14 @@ void ClientSession::onDataReceived(const char *data, size_t length) {
 // logic in the chunk above
 
 void ClientSession::processPacket(Packet &packet) {
+  // SHIELD PHASE: Command Throttling
+  if (!m_commandLimiter.consume(1.0)) {
+    std::cerr << "[Shield] Dropping packet from session " << m_sessionId 
+              << " (User " << (m_username.empty() ? "anonymous" : m_username) 
+              << ") - Rate limit exceeded" << std::endl;
+    return;
+  }
+
   if (m_server) {
     m_server->getPacketRouter().handle(this, packet);
   }

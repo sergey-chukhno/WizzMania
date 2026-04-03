@@ -9,6 +9,8 @@ add_executable(unit_tests_server
     test_packet_router.cpp
     test_db_rules.cpp
     test_game_routing.cpp
+    test_rate_limiter_unit.cpp
+    test_shield_integration.cpp
 )
 
 add_executable(integration_test_server
