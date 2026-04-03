@@ -1,19 +1,21 @@
 document.addEventListener('DOMContentLoaded', () => {
     // Mermaid Initialization for transparent/dark glass logic
-    mermaid.initialize({
-        startOnLoad: true,
-        theme: 'dark',
-        themeVariables: {
-            darkMode: true,
-            background: 'transparent',
-            primaryColor: '#00f0ff',
-            primaryTextColor: '#fff',
-            primaryBorderColor: '#8a2be2',
-            lineColor: '#ffffff',
-            fontSize: '18px',
-            nodePadding: 25
-        }
-    });
+    if (typeof mermaid !== 'undefined') {
+        mermaid.initialize({
+            startOnLoad: true,
+            theme: 'dark',
+            themeVariables: {
+                darkMode: true,
+                background: 'transparent',
+                primaryColor: '#00f0ff',
+                primaryTextColor: '#fff',
+                primaryBorderColor: '#8a2be2',
+                lineColor: '#ffffff',
+                fontSize: '18px',
+                nodePadding: 25
+            }
+        });
+    }
 
     const slides = document.querySelectorAll('.slide');
     const dots = document.querySelectorAll('.dot');

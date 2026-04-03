@@ -51,6 +51,7 @@ private:
   // General Game Status IPC
   wizz::GameSharedMemory m_gameIPC;
   QTimer* m_gameIPCTimer = nullptr;
+  uint32_t m_gameIPCLastVersion = 0;
   bool m_lastIPCIsPlaying = false;
   uint32_t m_lastIPCScore = 0;
   QString m_lastIPCGameName;
@@ -58,6 +59,7 @@ private:
   // TicTacToe specific IPC
   wizz::NativeSharedMemory<wizz::TicTacToeIPCData>* m_tttMemory = nullptr;
   QTimer* m_tttIPCTimer = nullptr;
+  uint32_t m_tttLastVersion = 0;
   QString m_tttRoomId;
   QString m_tttOpponent;
   char m_tttSymbol;

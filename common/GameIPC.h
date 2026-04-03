@@ -36,6 +36,7 @@ inline std::string makeIPCKey(const std::string &username) {
 // Struct ensuring consistent byte layout across Qt, SDL2, and SFML processes
 #pragma pack(push, 1)
 struct GameIPCData {
+  uint32_t dataVersion; // Increment on every update
   bool isPlaying;
   uint32_t currentScore;
   char gameName[32]; // e.g., "BrickBreaker"

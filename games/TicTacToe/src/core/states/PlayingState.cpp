@@ -160,6 +160,7 @@ void PlayingState::onEnter() {
   if (sharedMemory_->createAndMap()) {
     ipcData_ = sharedMemory_->data();
     sharedMemory_->lock();
+    ipcData_->dataVersion = 0;
     ipcData_->isMyTurn = isMyTurn_;
     ipcData_->hasOutboundMove = false;
     ipcData_->hasInboundMove = false;
@@ -224,6 +225,7 @@ void PlayingState::processEvent(const sf::Event &event) {
             ipcData_->board[idx] = mySymVal_;
             ipcData_->outboundCellIndex = idx;
             ipcData_->hasOutboundMove = true;
+            ipcData_->dataVersion++;
             sharedMemory_->unlock();
           }
           checkWinCondition();

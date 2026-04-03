@@ -115,12 +115,16 @@ public:
 #else
     std::string shmName = "/" + m_name;
     m_fd = shm_open(shmName.c_str(), O_RDWR, 0666);
-    if (m_fd == -1)
+    if (m_fd == -1) {
+      // Not an error, just means segment isn't ready yet
       return false;
+    }
 
     m_data = reinterpret_cast<T *>(
         mmap(nullptr, sizeof(T), PROT_READ | PROT_WRITE, MAP_SHARED, m_fd, 0));
     if (m_data == MAP_FAILED) {
+      std::cerr << "NativeSharedMemory::openAndMap: mmap failed: "
+                << strerror(errno) << std::endl;
       m_data = nullptr;
       ::close(m_fd);
       m_fd = -1;
@@ -128,9 +132,12 @@ public:
     }
 
     std::string semName = "/" + m_name + "_sem";
+    // On some Linux systems/WSL, sem_open(name, 0) can be finicky if the 
+    // segment was recently unlinked. We try to open existing, but without O_EXCL.
     m_sem = sem_open(semName.c_str(), 0);
     if (m_sem == SEM_FAILED) {
-      m_sem = nullptr;
+      // If the segment exists but semaphore doesn't, it might be a race.
+      // We don't log an error here to avoid spamming the console during retries.
       munmap(m_data, sizeof(T));
       m_data = nullptr;
       ::close(m_fd);
@@ -140,6 +147,20 @@ public:
 
     return true;
 #endif
+  }
+
+  // Returns true if the data has been updated since we last checked.
+  // Requires the struct T to have a 'dataVersion' field.
+  bool hasUpdate(uint32_t &lastVersion) {
+    if (!m_data) return false;
+    lock();
+    uint32_t current = m_data->dataVersion;
+    unlock();
+    if (current != lastVersion) {
+      lastVersion = current;
+      return true;
+    }
+    return false;
   }
 
   void lock() {
