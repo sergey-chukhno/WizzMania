@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 #include <gmock/gmock.h>
+#include "mocks.h"
 #include "../../server/handlers/PacketRouter.h"
 #include "../../server/handlers/IPacketHandler.h"
 #include "../../common/Packet.h"
@@ -13,13 +14,17 @@ public:
     MOCK_METHOD(void, handle, (ClientSession* session, Packet& packet), (override));
 };
 
-// Dummy for ClientSession
-namespace wizz { class ClientSession {}; }
-
 class PacketRouterTest : public ::testing::Test {
 protected:
+    asio::io_context io;
+    asio::ssl::context ssl{asio::ssl::context::sslv23};
+    TcpServer server{0, "test_router.db"};
     PacketRouter router;
-    ClientSession* dummySession = nullptr;
+    std::shared_ptr<MockClientSession> session1;
+
+    void SetUp() override {
+        session1 = std::make_shared<MockClientSession>(1, io, ssl, &server);
+    }
 };
 
 TEST_F(PacketRouterTest, DispatchesToRegisteredHandler) {
@@ -31,17 +36,14 @@ TEST_F(PacketRouterTest, DispatchesToRegisteredHandler) {
     Packet loginPacket(PacketType::Login);
     
     // Expect the handler to be called once
-    EXPECT_CALL(*handlerPtr, handle(dummySession, _)).Times(1);
+    EXPECT_CALL(*handlerPtr, handle(session1.get(), _)).Times(1);
     
-    router.handle(dummySession, loginPacket);
+    router.handle(session1.get(), loginPacket);
 }
 
 TEST_F(PacketRouterTest, IgnoresUnregisteredType) {
-    // No handlers registered
     Packet unknownPacket(PacketType::Nudge);
-    
-    // Should not crash or throw
-    EXPECT_NO_THROW(router.handle(dummySession, unknownPacket));
+    EXPECT_NO_THROW(router.handle(session1.get(), unknownPacket));
 }
 
 TEST_F(PacketRouterTest, MultipleHandlers) {
@@ -60,6 +62,6 @@ TEST_F(PacketRouterTest, MultipleHandlers) {
     EXPECT_CALL(*loginPtr, handle(_, _)).Times(1);
     EXPECT_CALL(*msgPtr, handle(_, _)).Times(1);
     
-    router.handle(dummySession, lp);
-    router.handle(dummySession, mp);
+    router.handle(session1.get(), lp);
+    router.handle(session1.get(), mp);
 }

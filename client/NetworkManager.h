@@ -10,6 +10,9 @@
 #include <functional>
 #include <memory>
 #include <tuple>
+namespace wizz {
+class NetworkManagerTest;
+}
 
 class NetworkManager : public QObject {
   Q_OBJECT
@@ -24,6 +27,7 @@ public:
   }
 
   void initSocket();
+  void processPacket(wizz::Packet &pkt);
 
 public slots:
   // Connection
@@ -53,6 +57,7 @@ signals:
   void disconnected();
   void errorOccurred(QString errorMsg);
   void shutdownRequested(); // Internal signal for cleanup
+  void initialized();       // Notifies when background thread and handlers are ready
 
   // Data Signals (To be expanded)
   void packetReceived(const wizz::Packet &packet); // Raw packet
@@ -112,4 +117,6 @@ private:
   void handleGameMovePacket(wizz::Packet &pkt);
 
   QHash<wizz::PacketType, std::function<void(wizz::Packet &)>> m_packetHandlers;
+  
+  friend class wizz::NetworkManagerTest; // Allow tests to access internal state if needed
 };

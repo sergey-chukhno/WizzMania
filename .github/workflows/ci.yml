@@ -1,0 +1,61 @@
+name: WizzMania CI
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Install System Dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          cmake \
+          ninja-build \
+          libssl-dev \
+          libsqlite3-dev \
+          libx11-dev \
+          libxcursor-dev \
+          libxrandr-dev \
+          libudev-dev \
+          libgl1-mesa-dev \
+          libflac-dev \
+          libogg-dev \
+          libvorbis-dev \
+          libopenal-dev \
+          libegl1-mesa-dev \
+          libgbm-dev \
+          libfontconfig1-dev \
+          libdbus-1-dev \
+          libxkbcommon-x11-dev \
+          libpulse-dev
+
+    - name: Install Qt 6
+      uses: jurplel/install-qt-action@v3
+      with:
+        version: '6.5.3'
+        host: 'linux'
+        target: 'desktop'
+        arch: 'gcc_64'
+        modules: 'qtmultimedia'
+
+    - name: Configure CMake
+      run: |
+        cmake -B build -GNinja \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DQT_DEBUG_FIND_PACKAGE=ON
+
+    - name: Build Project
+      run: cmake --build build --parallel $(nproc)
+
+    - name: Run Unit Tests
+      run: |
+        ctest --test-dir build --output-on-failure

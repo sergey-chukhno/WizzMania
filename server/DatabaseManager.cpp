@@ -239,10 +239,10 @@ bool DatabaseManager::addFriend(const std::string &username,
   if (!friendExists)
     return false;
 
-  // If friend exists, try insert without ignore to see error, or just assume it
-  // was duplicate. If we are here, friend exists. Retry the insert? No,
-  // changes()=0 means it was ignored. So return True (Idempotent success).
-  return true;
+  // If friend exists and we are here, it means changes() == 0,
+  // which implies it was a duplicate and ignored.
+  // We return false to signal that no new friendship was created.
+  return false;
 }
 
 bool DatabaseManager::removeFriend(const std::string &username,
