@@ -88,6 +88,7 @@ void NetworkManager::initSocket() {
 
   // Register Handlers is safe here on the background thread
   registerHandlers();
+  emit initialized();
 }
 
 NetworkManager::~NetworkManager() {
@@ -318,15 +319,7 @@ void NetworkManager::onReadyRead() {
 
     try {
       wizz::Packet pkt(packetData);
-      emit packetReceived(pkt);
-
-      // Dispatch packet through registered handlers
-      if (m_packetHandlers.contains(pkt.type())) {
-        m_packetHandlers[pkt.type()](pkt);
-      } else {
-        // Unhandled packet logic can go here (or be ignored)
-      }
-
+      processPacket(pkt);
     } catch (...) {
       // Log error?
       emit errorOccurred("Packet parsing error");
@@ -334,6 +327,15 @@ void NetworkManager::onReadyRead() {
 
     // 4. Remove from buffer
     m_buffer.erase(m_buffer.begin(), m_buffer.begin() + totalSize);
+  }
+}
+
+void NetworkManager::processPacket(wizz::Packet &pkt) {
+  emit packetReceived(pkt);
+
+  // Dispatch packet through registered handlers
+  if (m_packetHandlers.contains(pkt.type())) {
+    m_packetHandlers[pkt.type()](pkt);
   }
 }
 

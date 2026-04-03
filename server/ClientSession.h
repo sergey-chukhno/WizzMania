@@ -24,7 +24,7 @@ public:
   explicit ClientSession(
       int sessionId, asio::ip::tcp::socket socket,
       asio::ssl::context &sslContext, TcpServer *server);
-  ~ClientSession(); // Closes socket if owned
+  virtual ~ClientSession(); // Closes socket if owned
 
   // Delete copy to prevent double-close of socket
   ClientSession(const ClientSession &) = delete;
@@ -38,10 +38,10 @@ public:
   asio::ip::tcp::socket::lowest_layer_type &getSocket() {
     return m_socket.lowest_layer();
   }
-  std::string getUsername() const { return m_username; }
-  void setUsername(const std::string& name) { m_username = name; }
-  bool isLoggedIn() const { return m_isLoggedIn; }
-  void setLoggedIn(bool b) { m_isLoggedIn = b; }
+  virtual std::string getUsername() const { return m_username; }
+  virtual void setUsername(const std::string& name) { m_username = name; }
+  virtual bool isLoggedIn() const { return m_isLoggedIn; }
+  virtual void setLoggedIn(bool b) { m_isLoggedIn = b; }
   TcpServer* getServer() const { return m_server; }
 
   // Contact list cache – populated at login, used for fast broadcasts
@@ -49,7 +49,7 @@ public:
   const std::set<std::string>& getContacts() const { return m_contacts; }
 
   // High-level Send Helper (must become async)
-  void sendPacket(const Packet &packet);
+  virtual void sendPacket(const Packet &packet);
 
   // Start the asynchronous read loop
   void start();
