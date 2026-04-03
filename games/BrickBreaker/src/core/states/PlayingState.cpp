@@ -294,6 +294,7 @@ void PlayingState::onEnter() {
     if (sharedMemory_->createAndMap() || sharedMemory_->openAndMap()) {
       sharedMemory_->lock();
       if (sharedMemory_->data()) {
+        sharedMemory_->data()->dataVersion = 0;
         sharedMemory_->data()->isPlaying = true;
         sharedMemory_->data()->currentScore = score_;
         std::strncpy(sharedMemory_->data()->gameName, "BrickBreaker",
@@ -671,6 +672,7 @@ void PlayingState::addScore(int points) {
     sharedMemory_->lock();
     if (sharedMemory_->data()) {
       sharedMemory_->data()->currentScore = score_;
+      sharedMemory_->data()->dataVersion++;
     }
     sharedMemory_->unlock();
   }

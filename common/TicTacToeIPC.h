@@ -31,6 +31,7 @@ inline std::string makeTicTacToeIPCKey(const std::string &session_id) {
 // and TicTacToe (SFML) processes.
 #pragma pack(push, 1)
 struct TicTacToeIPCData {
+  uint32_t dataVersion; // Increment on every update
   bool isMyTurn; // True if the local player can click
   int board[9];  // 0=Empty, 1=X, 2=O
 

@@ -57,7 +57,7 @@ void GameBridge::startTicTacToe(const QString& username, const QString& roomId, 
   m_tttMemory = new wizz::NativeSharedMemory<wizz::TicTacToeIPCData>(ipcKey);
 
   bool attached = false;
-  for (int retry = 0; retry < 20 && !attached; ++retry) { // up to 4 seconds
+  for (int retry = 0; retry < 40 && !attached; ++retry) { // up to 8 seconds on slow WSL/Linux
     attached = m_tttMemory->openAndMap();
     if (!attached)
       QThread::msleep(200);
@@ -110,7 +110,12 @@ void GameBridge::receiveNetworkMove(uint8_t cellIndex) {
 }
 
 void GameBridge::onPollTicTacToeIPC() {
-  if (!m_tttMemory || !m_tttBridgeActive) return;
+  uint32_t currentVersion = m_tttLastVersion;
+  if (!m_tttMemory->hasUpdate(m_tttLastVersion)) {
+     // Even if version hasn't changed, we might have an inbound move waiting to be written
+     // but usually we rely on version for robustness.
+     return;
+  }
 
   m_tttMemory->lock();
   auto *data = m_tttMemory->data();
@@ -129,6 +134,8 @@ void GameBridge::onPollTicTacToeIPC() {
     if (data->hasOutboundMove) {
       int cellIndex = data->outboundCellIndex;
       data->hasOutboundMove = false;
+      data->dataVersion++; // Increment because we modified it
+      m_tttLastVersion = data->dataVersion;
       m_tttMemory->unlock();
       emit localMoveMade(m_tttRoomId, static_cast<uint8_t>(cellIndex));
       return;
@@ -172,6 +179,10 @@ void GameBridge::onPollGameIPC() {
       }
       return;
     }
+  }
+
+  if (!m_gameIPC.hasUpdate(m_gameIPCLastVersion)) {
+    return;
   }
 
   m_gameIPC.lock();
