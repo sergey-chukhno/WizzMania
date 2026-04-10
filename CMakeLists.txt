@@ -30,6 +30,14 @@ if(NOT SFML_FOUND)
     FetchContent_MakeAvailable(SFML)
 endif()
 
+# FTXUI (TUI framework)
+FetchContent_Declare(
+    ftxui
+    GIT_REPOSITORY https://github.com/ArthurSonzogni/FTXUI.git
+    GIT_TAG        v5.0.0
+)
+FetchContent_MakeAvailable(ftxui)
+
 # Global Compiler Warnings (High Quality Code)
 if(MSVC)
     add_compile_options(/W4) # High warning level on Windows

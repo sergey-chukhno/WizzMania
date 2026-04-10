@@ -14,6 +14,7 @@ add_library(wizz_server_lib STATIC
     handlers/AuthHandlers.cpp
     handlers/SocialHandlers.cpp
     handlers/GameHandlers.cpp
+    AdminSentinel.cpp
 )
 
 # Link against the common library
@@ -21,7 +22,13 @@ target_link_libraries(wizz_server_lib PUBLIC wizz_common)
 
 # OpenSSL
 find_package(OpenSSL REQUIRED)
-target_link_libraries(wizz_server_lib PUBLIC OpenSSL::SSL OpenSSL::Crypto)
+target_link_libraries(wizz_server_lib PUBLIC 
+    OpenSSL::SSL 
+    OpenSSL::Crypto
+    ftxui::screen
+    ftxui::dom
+    ftxui::component
+)
 
 # Asio (Standalone Header-Only via FetchContent)
 include(FetchContent)

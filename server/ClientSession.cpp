@@ -13,6 +13,7 @@
 // Include full definition for implementation
 #include "TcpServer.h"
 #include "handlers/PacketRouter.h"
+#include "MetricsManager.h"
 
 namespace wizz {
 
@@ -48,8 +49,10 @@ void ClientSession::doWrite() {
   auto self(shared_from_this());
 
   asio::async_write(m_socket, asio::buffer(m_outbox.front()),
-                    [this, self](asio::error_code ec, std::size_t /*length*/) {
+                    [this, self](asio::error_code ec, std::size_t length) {
                       if (!ec) {
+                        MetricsManager::getInstance().increment(MetricType::PacketsOut);
+                        MetricsManager::getInstance().increment(MetricType::BytesOut, length);
                         m_outbox.pop_front();
                         if (!m_outbox.empty()) {
                           doWrite();
@@ -96,6 +99,7 @@ void ClientSession::doRead() {
           // analyzer
           // 1. Process received data
           // (We will invoke the logic synchronously so we can reuse the
+          MetricsManager::getInstance().increment(MetricType::BytesIn, length);
           this->onDataReceived(reinterpret_cast<const char *>(m_buffer.data()),
                                length);
         } else if (ec != asio::error::operation_aborted) {
@@ -128,6 +132,7 @@ void ClientSession::onDataReceived(const char *data, size_t length) {
       std::vector<uint8_t> packetData(m_accumulator.begin(),
                                       m_accumulator.begin() + totalSize);
       Packet pkt(packetData);
+      MetricsManager::getInstance().increment(MetricType::PacketsIn);
       processPacket(pkt);
       m_accumulator.erase(m_accumulator.begin(), m_accumulator.begin() + totalSize);
     } catch (const std::exception &e) {
@@ -150,6 +155,7 @@ void ClientSession::onDataReceived(const char *data, size_t length) {
 void ClientSession::processPacket(Packet &packet) {
   // SHIELD PHASE: Command Throttling
   if (!m_commandLimiter.consume(1.0)) {
+    MetricsManager::getInstance().increment(MetricType::ShieldDrops);
     std::cerr << "[Shield] Dropping packet from session " << m_sessionId 
               << " (User " << (m_username.empty() ? "anonymous" : m_username) 
               << ") - Rate limit exceeded" << std::endl;

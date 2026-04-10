@@ -2,6 +2,7 @@
 #include "handlers/AuthHandlers.h"
 #include "handlers/SocialHandlers.h"
 #include "handlers/GameHandlers.h"
+#include "MetricsManager.h"
 #include <cstring>
 #include <iostream>
 #include <stdexcept>
@@ -89,7 +90,10 @@ void TcpServer::start() {
 
     doAccept();
 
-    run();
+    // SENTINEL PHASE: Move networking to a background thread
+    m_networkThread = std::thread([this]() {
+        run();
+    });
   } catch (const std::exception &e) {
     std::cerr << "[Server] Fatal Error: " << e.what() << std::endl;
     stop();
@@ -100,6 +104,9 @@ void TcpServer::start() {
 void TcpServer::stop() {
   m_isRunning = false;
   m_ioContext.stop();
+  if (m_networkThread.joinable()) {
+    m_networkThread.join();
+  }
   std::cout << "[Server] Stopped." << std::endl;
 }
 
@@ -113,6 +120,9 @@ void TcpServer::doAccept() {
     if (!ec) {
       std::string remoteIp = socket.remote_endpoint().address().to_string();
       
+      // SENTINEL PHASE: Track connection attempt
+      MetricsManager::getInstance().increment(MetricType::ConnectionsTotal);
+
       // SHIELD PHASE: Connection Rate Limiting
       {
           std::lock_guard<std::mutex> lock(m_limiterMutex);
@@ -121,6 +131,7 @@ void TcpServer::doAccept() {
           }
           
           if (!m_ipLimiters[remoteIp]->consume(1.0)) {
+              MetricsManager::getInstance().increment(MetricType::ShieldDrops);
               std::cerr << "[Shield] Dropping connection from " << remoteIp << " (Rate limit exceeded)" << std::endl;
               socket.close();
               doAccept();
@@ -136,6 +147,7 @@ void TcpServer::doAccept() {
             sessionId, std::move(socket), m_sslContext, this));
 
         m_sessionManager.addSession(sessionId, session);
+        MetricsManager::getInstance().increment(MetricType::ActiveSessions);
         session->start();
         
         doAccept();
@@ -168,6 +180,7 @@ void TcpServer::handleDisconnect(int sessionId) {
 
   std::string username = session->getUsername();
   m_sessionManager.removeSession(sessionId);
+  MetricsManager::getInstance().decrement(MetricType::ActiveSessions);
   if (!username.empty()) {
     m_sessionManager.setUserOffline(username);
     m_sessionManager.updateStatus(username, 3);
@@ -201,5 +214,20 @@ void TcpServer::handleDisconnect(int sessionId) {
   }
 }
 
+void TcpServer::broadcastMessage(const std::string& sender, const std::string& message) {
+  // Post this to the IO thread to ensure thread-safety when touching sockets
+  postResponse([this, sender, message]() {
+    Packet pkt(PacketType::DirectMessage); // Reuse DirectMessage packet for simplicity
+    pkt.writeString(sender);
+    pkt.writeString(message);
+    
+    auto sessions = m_sessionManager.getAllOnlineSessions();
+    for (auto* session : sessions) {
+      if (session) {
+        session->sendPacket(pkt);
+      }
+    }
+  });
+}
+
 } // namespace wizz
-// 🛡️ CI/CD Verification: Testing automated release email notifications.
