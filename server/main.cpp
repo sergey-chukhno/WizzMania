@@ -1,4 +1,5 @@
 #include "TcpServer.h"
+#include "AdminSentinel.h"
 #include <iostream>
 
 int main() {
@@ -6,8 +7,13 @@ int main() {
   wizz::TcpServer server(8080);
 
   try {
-    // This will block until the server stops
+    // Start networking in background
     server.start();
+
+    // Start interactive Admin Dashboard (Blocks until shutdown)
+    wizz::AdminSentinel sentinel(&server);
+    sentinel.run();
+
   } catch (const std::exception &e) {
     std::cerr << "Server Crashed: " << e.what() << std::endl;
     return 1;

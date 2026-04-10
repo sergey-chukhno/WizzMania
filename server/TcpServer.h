@@ -43,6 +43,9 @@ public:
   ClientSession *getSession(int sessionId);
   void handleDisconnect(int sessionId);
 
+  // Sentinel TUI API
+  void broadcastMessage(const std::string& sender, const std::string& message);
+
   DatabaseManager &getDb() { return m_db; }
   SessionManager &getSessionManager() { return m_sessionManager; }
   GameRoomManager &getGameRoomManager() { return m_gameRoomManager; }
@@ -60,6 +63,9 @@ private:
 
   std::mutex m_responseMutex;
   std::vector<std::function<void()>> m_responses;
+
+  // Threading for Sentinel Phase
+  std::thread m_networkThread;
 
   // Database
   DatabaseManager m_db;
