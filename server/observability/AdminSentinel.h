@@ -15,6 +15,7 @@ public:
     ~AdminSentinel();
 
     void start();
+    void run();
     void stop();
 
     // API for other components to push log/event data to the dashboard

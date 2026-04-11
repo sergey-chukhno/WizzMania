@@ -22,6 +22,11 @@ void AdminSentinel::start() {
     std::thread(&AdminSentinel::runTuiLoop, this).detach();
 }
 
+void AdminSentinel::run() {
+    m_running = true;
+    runTuiLoop();
+}
+
 void AdminSentinel::stop() {
     m_running = false;
 }
@@ -36,6 +41,11 @@ void AdminSentinel::logEvent(const std::string& component, const std::string& me
     
     m_events.push_back({component, message, ss.str()});
     if (m_events.size() > 50) m_events.erase(m_events.begin());
+}
+
+void AdminSentinel::updateMetric(const std::string& name, double value) {
+    // Placeholder for metric visualization
+    logEvent("METRIC", name + ": " + std::to_string(value));
 }
 
 void AdminSentinel::runTuiLoop() {
