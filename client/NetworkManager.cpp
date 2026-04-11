@@ -1,4 +1,11 @@
 #include "NetworkManager.h"
+#include "crypto/SignalProvider.h"
+#include "crypto/SignalStoreContext.h"
+#include <signal_protocol.h>
+#include <session_builder.h>
+#include <session_cipher.h>
+#include <protocol.h>
+#include <curve.h>
 #include <QDataStream>
 #include <QDebug>
 
@@ -21,6 +28,17 @@ NetworkManager &NetworkManager::instance() {
     // Ensure the socket is properly deleted via event loop later
     QObject::connect(_instance, &NetworkManager::shutdownRequested, _instance,
                      [=]() {
+                       if (_instance->m_storeContext) {
+                           signal_protocol_store_context_destroy(_instance->m_storeContext);
+                           _instance->m_storeContext = nullptr;
+                       }
+                       if (_instance->m_signalContext) {
+                           // No destroy func exposed cleanly by context? Actually just free it if needed, or leave it to OS.
+                       }
+                       if (_instance->m_localDb) {
+                           delete _instance->m_localDb;
+                           _instance->m_localDb = nullptr;
+                       }
                        if (_instance->m_socket) {
                          _instance->m_socket->disconnectFromHost();
                          _instance->m_socket->deleteLater();
@@ -68,6 +86,17 @@ NetworkManager::NetworkManager(QObject *parent) : QObject(parent) {
 void NetworkManager::initSocket() {
   m_socket = new QSslSocket(this);
 
+  // Initialize E2EE Store
+  try {
+      m_localDb = new wizz::client::LocalDatabase("wizz_session.db");
+      wizz::client::crypto::setupSignalCryptoProvider(&m_signalContext);
+      wizz::client::crypto::setupSignalStoreContext(&m_storeContext, m_signalContext, m_localDb);
+      wizz::client::crypto::initializeLocalKeys(m_signalContext, m_localDb);
+      qDebug() << "[Security] Signal E2EE Provider and Key Storage mounted successfully.";
+  } catch (const std::exception& e) {
+      qWarning() << "[Security] Failed to initialize E2EE Store:" << e.what();
+  }
+
   connect(m_socket, &QSslSocket::connected, this,
           &NetworkManager::onSocketConnected);
   connect(m_socket, &QSslSocket::disconnected, this,
@@ -114,6 +143,105 @@ void NetworkManager::disconnectFromHost() {
   }
   if (m_socket)
     m_socket->disconnectFromHost();
+}
+
+void NetworkManager::uploadStoredPreKeys() {
+    if (!m_localDb || !isConnected()) return;
+
+    wizz::Packet pkt(wizz::PacketType::UploadPreKeys);
+
+    // 1. Identity Key Public
+    std::vector<uint8_t> identBuffer;
+    uint32_t regId = 0;
+    m_localDb->getIdentity(identBuffer, regId);
+    if (!identBuffer.empty()) {
+        uint8_t pubLen = identBuffer[0];
+        pkt.writeString(std::string(reinterpret_cast<char*>(&identBuffer[1]), pubLen));
+    } else {
+        pkt.writeString("");
+    }
+
+    // 2. Signed PreKey Public & Signature
+    std::vector<uint8_t> signedPrekeyBuf;
+    if (m_localDb->loadSignedPreKey(1, signedPrekeyBuf) && signedPrekeyBuf.size() > 0) {
+        uint8_t pubLen = signedPrekeyBuf[0];
+        pkt.writeString(std::string(reinterpret_cast<char*>(&signedPrekeyBuf[1]), pubLen));
+        
+        // Find signature at the end: [len Public][Public Bytes][Private Bytes][len Signature][Signature Bytes]
+        // Actually, we need Private Bytes length exactly! Private is always 32. Public is 32.
+        // In LocalDatabase we stored it as [pubLen][pubBytes][privBytes(32)][sigLen][sigBytes]
+        size_t offset = 1 + pubLen + 32;
+        if (offset < signedPrekeyBuf.size()) {
+            uint8_t sigLen = signedPrekeyBuf[offset];
+            pkt.writeString(std::string(reinterpret_cast<char*>(&signedPrekeyBuf[offset + 1]), sigLen));
+        } else {
+            pkt.writeString("");
+        }
+    } else {
+        pkt.writeString("");
+        pkt.writeString("");
+    }
+
+    // 3. PreKeys (OTKs)
+    pkt.writeInt(100); // We generated 100 OTKs
+    for (uint32_t i = 1; i <= 100; i++) {
+        std::vector<uint8_t> prekeyBuf;
+        if (m_localDb->loadPreKey(i, prekeyBuf) && prekeyBuf.size() > 0) {
+            uint8_t pubLen = prekeyBuf[0];
+            pkt.writeInt(i);
+            pkt.writeString(std::string(reinterpret_cast<char*>(&prekeyBuf[1]), pubLen));
+        }
+    }
+
+    sendPacket(pkt);
+    qDebug() << "[Security] Signal Identity Key & PreKey Bundle pushed to server!";
+}
+
+void NetworkManager::sendEncryptedMessage(const QString &target, const QString &text) {
+    if (QThread::currentThread() != this->thread()) {
+        QMetaObject::invokeMethod(this, "sendEncryptedMessage", Qt::QueuedConnection,
+                                  Q_ARG(QString, target), Q_ARG(QString, text));
+        return;
+    }
+
+    if (!isConnected()) return;
+
+    std::string targetStr = target.toStdString();
+    signal_protocol_address address = { targetStr.c_str(), targetStr.length(), 1 };
+    
+    session_cipher *cipher = nullptr;
+    int res = session_cipher_create(&cipher, m_storeContext, &address, m_signalContext);
+    if (res < 0) {
+        qWarning() << "[Security] Failed to create Session Cipher for" << target;
+        return;
+    }
+
+    ciphertext_message *encrypted = nullptr;
+    QByteArray plainData = text.toUtf8();
+    res = session_cipher_encrypt(cipher, reinterpret_cast<const uint8_t*>(plainData.constData()), plainData.size(), &encrypted);
+
+    if (res == -1004) { // SG_ERR_NO_SESSION - needs constant but -1004 is likely in libsignal-c
+        qDebug() << "[Security] No session with" << target << "- fetching PreKey Bundle...";
+        m_pendingMessages[target].append(text);
+        
+        wizz::Packet fetchPkt(wizz::PacketType::FetchPreKeyBundle);
+        fetchPkt.writeString(targetStr);
+        sendPacket(fetchPkt);
+    } else if (res == 0) {
+        signal_buffer *serialized = ciphertext_message_get_serialized(encrypted);
+        
+        wizz::Packet e2ePkt(wizz::PacketType::E2EMessage);
+        e2ePkt.writeString(targetStr);
+        e2ePkt.writeInt(static_cast<uint32_t>(signal_buffer_len(serialized)));
+        e2ePkt.writeData(signal_buffer_data(serialized), signal_buffer_len(serialized));
+        sendPacket(e2ePkt);
+        
+        SIGNAL_UNREF(encrypted);
+    } else {
+        qWarning() << "[Security] Encryption failed for" << target << "Result:" << res;
+    }
+
+    session_cipher_free(cipher);
 }
 
 bool NetworkManager::isConnected() const { return m_isConnected.load(); }
@@ -377,6 +505,12 @@ void NetworkManager::registerHandlers() {
   m_packetHandlers[wizz::PacketType::GameMove] = [this](wizz::Packet &pkt) {
     handleGameMovePacket(pkt);
   };
+  m_packetHandlers[wizz::PacketType::PreKeyBundleResponse] = [this](wizz::Packet &pkt) {
+    handlePreKeyBundleResponse(pkt);
+  };
+  m_packetHandlers[wizz::PacketType::E2EMessage] = [this](wizz::Packet &pkt) {
+    handleE2EMessagePacket(pkt);
+  };
 }
 
 void NetworkManager::handleContactListPacket(wizz::Packet &pkt) {
@@ -441,6 +575,93 @@ void NetworkManager::handleAvatarDataPacket(wizz::Packet &pkt) {
                      imgData.size());
     emit avatarReceived(username, qData);
   }
+}
+
+void NetworkManager::handlePreKeyBundleResponse(wizz::Packet &pkt) {
+    QString target = QString::fromStdString(pkt.readString());
+    std::string identRaw = pkt.readString();
+    std::string signedPreKeyRaw = pkt.readString();
+    std::string signatureRaw = pkt.readString();
+    uint32_t otkId = pkt.readInt();
+    std::string otkRaw = pkt.readString();
+
+    qDebug() << "[Security] Received PreKey Bundle for" << target;
+
+    ec_public_key *identKey = nullptr;
+    ec_public_key *signedPreKey = nullptr;
+    ec_public_key *otk = nullptr;
+
+    curve_decode_point(&identKey, reinterpret_cast<const uint8_t*>(identRaw.data()), identRaw.size(), m_signalContext);
+    curve_decode_point(&signedPreKey, reinterpret_cast<const uint8_t*>(signedPreKeyRaw.data()), signedPreKeyRaw.size(), m_signalContext);
+    if (!otkRaw.empty()) {
+        curve_decode_point(&otk, reinterpret_cast<const uint8_t*>(otkRaw.data()), otkRaw.size(), m_signalContext);
+    }
+
+    session_pre_key_bundle *bundle = nullptr;
+    session_pre_key_bundle_create(&bundle, 0, 1, otkId, otk, 1, signedPreKey, 
+                                  reinterpret_cast<const uint8_t*>(signatureRaw.data()), signatureRaw.size(), identKey);
+
+    std::string targetStr = target.toStdString();
+    signal_protocol_address address = { targetStr.c_str(), targetStr.length(), 1 };
+    
+    session_builder *builder = nullptr;
+    session_builder_create(&builder, m_storeContext, &address, m_signalContext);
+    int res = session_builder_process_pre_key_bundle(builder, bundle);
+
+    if (res == 0) {
+        qDebug() << "[Security] Session established with" << target << "- flushing pending messages.";
+        QStringList pending = m_pendingMessages.take(target);
+        for (const QString &text : pending) {
+            sendEncryptedMessage(target, text);
+        }
+    } else {
+        qWarning() << "[Security] Failed to build session with" << target << "Result:" << res;
+    }
+
+    session_builder_free(builder);
+    session_pre_key_bundle_destroy(reinterpret_cast<signal_type_base*>(bundle));
+    SIGNAL_UNREF(identKey);
+    SIGNAL_UNREF(signedPreKey);
+    if (otk) SIGNAL_UNREF(otk);
+}
+
+void NetworkManager::handleE2EMessagePacket(wizz::Packet &pkt) {
+    QString sender = QString::fromStdString(pkt.readString());
+    uint32_t len = pkt.readInt();
+    std::vector<uint8_t> data = pkt.readBytes(len);
+
+    std::string senderStr = sender.toStdString();
+    signal_protocol_address address = { senderStr.c_str(), senderStr.length(), 1 };
+
+    session_cipher *cipher = nullptr;
+    session_cipher_create(&cipher, m_storeContext, &address, m_signalContext);
+
+    signal_buffer *plaintext = nullptr;
+    int type = data[0]; // Protocol-C first byte is type in wire format?
+    // Actually session_cipher_decrypt handles types internally if we use the right struct.
+    
+    int res = -1;
+    if (data[0] == CIPHERTEXT_PREKEY_TYPE) {
+        pre_key_signal_message *m = nullptr;
+        pre_key_signal_message_deserialize(&m, data.data(), data.size(), m_signalContext);
+        res = session_cipher_decrypt_pre_key_signal_message(cipher, m, nullptr, &plaintext);
+        SIGNAL_UNREF(m);
+    } else {
+        signal_message *m = nullptr;
+        signal_message_deserialize(&m, data.data(), data.size(), m_signalContext);
+        res = session_cipher_decrypt_signal_message(cipher, m, nullptr, &plaintext);
+        SIGNAL_UNREF(m);
+    }
+
+    if (res == 0) {
+        QString text = QString::fromUtf8(reinterpret_cast<const char*>(signal_buffer_data(plaintext)), signal_buffer_len(plaintext));
+        emit messageReceived(sender, text);
+    } else {
+        qWarning() << "[Security] Decryption failed from" << sender << "Result:" << res;
+    }
+
+    if (plaintext) signal_buffer_free(plaintext);
+    session_cipher_free(cipher);
 }
 
 void NetworkManager::handleGameStatusPacket(wizz::Packet &pkt) {

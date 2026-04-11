@@ -14,6 +14,7 @@ add_library(wizz_server_lib STATIC
     handlers/AuthHandlers.cpp
     handlers/SocialHandlers.cpp
     handlers/GameHandlers.cpp
+    handlers/CryptoHandlers.cpp
     AdminSentinel.cpp
 )
 

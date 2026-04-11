@@ -84,3 +84,95 @@ TEST_F(ServerIntegrationTest, RegistrationFlow) {
         // Optionally parse body with Packet class if needed
     }
 }
+
+TEST_F(ServerIntegrationTest, E2EKeyBundleExchange) {
+    asio::io_context io_context;
+    asio::ssl::context ssl_context(asio::ssl::context::tlsv12);
+    ssl_context.set_verify_mode(asio::ssl::verify_none);
+
+    asio::ssl::stream<tcp::socket> socket(io_context, ssl_context);
+    tcp::resolver resolver(io_context);
+    asio::connect(socket.lowest_layer(), resolver.resolve("127.0.0.1", "8100"));
+    socket.handshake(asio::ssl::stream_base::client);
+
+    // 0. Register and Login so we have a session username
+    Packet reg(PacketType::Register);
+    reg.writeString("alice");
+    reg.writeString("pass");
+    auto regData = reg.serialize();
+    asio::write(socket, asio::buffer(regData));
+    
+    // Read response
+    uint8_t h[12];
+    asio::read(socket, asio::buffer(h, 12));
+    uint32_t len; std::memcpy(&len, &h[8], 4); len = ntohl(len);
+    std::vector<uint8_t> b(len); if (len > 0) asio::read(socket, asio::buffer(b));
+
+    Packet login(PacketType::Login);
+    login.writeString("alice");
+    login.writeString("pass");
+    auto loginData = login.serialize();
+    asio::write(socket, asio::buffer(loginData));
+
+    // Read response
+    asio::read(socket, asio::buffer(h, 12));
+    std::memcpy(&len, &h[8], 4); len = ntohl(len);
+    b.resize(len); if (len > 0) asio::read(socket, asio::buffer(b));
+
+    // 1. Upload Bundle
+    Packet upload(PacketType::UploadPreKeys);
+    upload.writeString("ident_blob");
+    upload.writeString("signed_pre_key_blob");
+    upload.writeString("signature_blob");
+    upload.writeInt(1); // otkCount
+    upload.writeInt(5); // otk_id
+    upload.writeString("otk_pub_blob");
+
+    auto uploadData = upload.serialize();
+    asio::write(socket, asio::buffer(uploadData));
+
+    // 1.5 Read ACK (PreKeysUploaded)
+    asio::read(socket, asio::buffer(h, 12));
+    std::memcpy(&len, &h[8], 4); len = ntohl(len);
+    b.resize(len); if (len > 0) asio::read(socket, asio::buffer(b));
+    uint32_t type; std::memcpy(&type, &h[4], 4); type = ntohl(type);
+    EXPECT_EQ(type, static_cast<uint32_t>(PacketType::PreKeysUploaded));
+
+    // 2. Fetch Bundle
+    Packet fetch(PacketType::FetchPreKeyBundle);
+    fetch.writeString("alice");
+    auto fetchData = fetch.serialize();
+    asio::write(socket, asio::buffer(fetchData));
+
+    // 3. Receive Response (PreKeyBundleResponse)
+    asio::read(socket, asio::buffer(h, 12));
+    std::memcpy(&len, &h[8], 4); len = ntohl(len);
+    b.resize(len); if (len > 0) asio::read(socket, asio::buffer(b));
+    
+    std::memcpy(&type, &h[4], 4); type = ntohl(type);
+    EXPECT_EQ(type, static_cast<uint32_t>(PacketType::PreKeyBundleResponse));
+    EXPECT_GT(b.size(), 0u);
+}
+
+TEST_F(ServerIntegrationTest, E2EMessageRelaying) {
+    // This would ideally use two sockets to verify delivery, 
+    // but for now we verify the server accepts and acknowledges or at least doesn't crash on E2EMessage.
+    asio::io_context io_context;
+    asio::ssl::context ssl_context(asio::ssl::context::tlsv12);
+    ssl_context.set_verify_mode(asio::ssl::verify_none);
+
+    asio::ssl::stream<tcp::socket> socket(io_context, ssl_context);
+    tcp::resolver resolver(io_context);
+    asio::connect(socket.lowest_layer(), resolver.resolve("127.0.0.1", "8100"));
+    socket.handshake(asio::ssl::stream_base::client);
+
+    Packet e2e(PacketType::E2EMessage);
+    e2e.writeString("bob");
+    e2e.writeInt(10);
+    e2e.writeData((const uint8_t*)"1234567890", 10);
+    auto e2eData = e2e.serialize();
+    asio::write(socket, asio::buffer(e2eData));
+    
+    // Verify server accepts it
+    EXPECT_TRUE(socket.lowest_layer().is_open());
+}

@@ -582,6 +582,9 @@ void AuthWindow::onLoginPacketReceived(const wizz::Packet &constPkt) {
     m_loginStatus->setStyleSheet(
         "color: #27ae60; font-weight: bold; background: transparent;");
 
+    // Upload E2EE PreKeys for Blind Relay support
+    NetworkManager::instance().uploadStoredPreKeys();
+
     // Auto-Upload Avatar if pending
     if (!m_pendingAvatarData.isEmpty() &&
         m_loginUsername->text() == m_pendingAvatarUser) {

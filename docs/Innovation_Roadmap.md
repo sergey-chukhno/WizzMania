@@ -39,6 +39,8 @@ This roadmap outlines the path to transforming WizzMania into a premium, secure,
    - Off-grid communication when the global internet is restricted.
 3. **[S4] Traffic Padding**: Masking communication patterns with dummy packets.
 4. **[S5] Sovereign Identity (DID)**: Using cryptographic keys (GPG/ED25519) instead of phone numbers for identity.
+5. **[FUTURE] Multi-Device E2EE Sync**:
+   - Building a "Federated Key Chain" logic to allow seamless session synchronization across multiple devices (Desktop, Mobile, Tablet) while maintaining the Zero-Knowledge promise.🛡️🧪
 
 ---
 

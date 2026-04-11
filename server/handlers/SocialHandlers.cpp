@@ -9,12 +9,14 @@
 
 namespace wizz {
 
-void MessageHandler::handle(ClientSession* session, Packet& packet) {
+void E2EMessageHandler::handle(ClientSession* session, Packet& packet) {
     if (!session->isLoggedIn()) return;
-    std::string targetUser, messageBody;
+    std::string targetUser;
+    std::vector<uint8_t> cipherBlob;
     try {
         targetUser = packet.readString();
-        messageBody = packet.readString();
+        uint32_t blobSize = packet.readInt();
+        cipherBlob = packet.readBytes(blobSize);
     } catch (...) { return; }
 
     TcpServer* server = session->getServer();
@@ -23,15 +25,19 @@ void MessageHandler::handle(ClientSession* session, Packet& packet) {
     bool delivered = false;
     ClientSession *targetSession = server->getSessionManager().getSessionByUsername(targetUser);
     if (targetSession) {
-        Packet outPacket(PacketType::DirectMessage);
+        Packet outPacket(PacketType::E2EMessage);
         outPacket.writeString(session->getUsername());
-        outPacket.writeString(messageBody);
+        outPacket.writeInt(cipherBlob.size());
+        outPacket.writeData(cipherBlob.data(), cipherBlob.size());
         targetSession->sendPacket(outPacket);
         delivered = true;
     }
     
-    server->getDb().postTask([server, senderName = session->getUsername(), targetUser, messageBody, delivered]() {
-        server->getDb().storeMessage(senderName, targetUser, messageBody, delivered);
+    // We treat the string body in the database as raw transparent bytes. 
+    std::string stringifiedBlob(reinterpret_cast<const char*>(cipherBlob.data()), cipherBlob.size());
+    
+    server->getDb().postTask([server, senderName = session->getUsername(), targetUser, stringifiedBlob, delivered]() {
+        server->getDb().storeMessage(senderName, targetUser, stringifiedBlob, delivered);
     });
 }
 

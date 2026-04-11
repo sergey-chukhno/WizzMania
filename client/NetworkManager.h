@@ -10,6 +10,10 @@
 #include <functional>
 #include <memory>
 #include <tuple>
+
+#include "data/LocalDatabase.h"
+#include <signal_protocol.h>
+
 namespace wizz {
 class NetworkManagerTest;
 }
@@ -28,6 +32,7 @@ public:
 
   void initSocket();
   void processPacket(wizz::Packet &pkt);
+  void uploadStoredPreKeys();
 
 public slots:
   // Connection
@@ -50,6 +55,7 @@ public slots:
   void sendGameInviteResponse(const QString &originalSender,
                               const QString &gameName, bool accepted);
   void sendGameMove(const QString &roomId, uint8_t cellIndex);
+  void sendEncryptedMessage(const QString &target, const QString &text);
 
 signals:
   // Status Signals
@@ -100,6 +106,15 @@ private:
   QList<std::tuple<QString, int, QString>> m_cachedContacts;
   QThread *m_thread = nullptr;
 
+  // E2EE System
+  wizz::client::LocalDatabase *m_localDb = nullptr;
+  signal_context *m_signalContext = nullptr;
+  signal_protocol_store_context *m_storeContext = nullptr;
+
+  QHash<QString, QStringList> m_pendingMessages; // username -> list of ciphertexts-pending-handshake? No, plaintext-pending-handshake.
+  // Actually, let's keep it simple: username -> list of plaintexts.
+  // Once bundle arrives, we encrypt and send.
+
   // Packet Handlers
   void registerHandlers();
   void handleContactListPacket(wizz::Packet &pkt);
@@ -115,6 +130,8 @@ private:
   void handleGameInviteResponsePacket(wizz::Packet &pkt);
   void handleGameStartPacket(wizz::Packet &pkt);
   void handleGameMovePacket(wizz::Packet &pkt);
+  void handlePreKeyBundleResponse(wizz::Packet &pkt);
+  void handleE2EMessagePacket(wizz::Packet &pkt);
 
   QHash<wizz::PacketType, std::function<void(wizz::Packet &)>> m_packetHandlers;
   

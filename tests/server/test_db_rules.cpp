@@ -134,4 +134,40 @@ TEST_F(DatabaseManagerTest, PersistenceAcrossReinit) {
     }
 }
 
+/**
+ * @brief Verifies End-to-End Encryption Key storage (Zero-Knowledge Relay Phase 1).
+ */
+TEST_F(DatabaseManagerTest, E2EEKeyRegistry) {
+    DatabaseManager db(testDbPath);
+    ASSERT_TRUE(db.init());
+
+    db.createUser("alice", "pass");
+
+    // 1. Store Identity and Signed Pre-Keys
+    EXPECT_TRUE(db.storeUserKeys("alice", "identity_base64", "signed_prekey_base64", "signature_base64"));
+    
+    // 2. Upload One-Time Pre-Keys
+    std::vector<std::pair<int, std::string>> otks = {
+        {1, "otk_1_base64"},
+        {2, "otk_2_base64"},
+        {3, "otk_3_base64"}
+    };
+    EXPECT_TRUE(db.storeOneTimeKeys("alice", otks));
+
+    // 3. Fetch PreKey Bundle
+    auto bundle = db.fetchPreKeyBundle("alice");
+    EXPECT_EQ(bundle.identityKey, "identity_base64");
+    EXPECT_EQ(bundle.signedPreKey, "signed_prekey_base64");
+    EXPECT_EQ(bundle.signedPreKeySignature, "signature_base64");
+    
+    // It should pop one OTK
+    EXPECT_EQ(bundle.oneTimeKeyId, 1);
+    EXPECT_EQ(bundle.oneTimeKey, "otk_1_base64");
+
+    // 4. Fetch another bundle, should pop the next OTK
+    auto bundle2 = db.fetchPreKeyBundle("alice");
+    EXPECT_EQ(bundle2.oneTimeKeyId, 2);
+    EXPECT_EQ(bundle2.oneTimeKey, "otk_2_base64");
+}
+
 } // namespace wizz

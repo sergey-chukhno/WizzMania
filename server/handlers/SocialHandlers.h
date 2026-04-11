@@ -3,7 +3,7 @@
 
 namespace wizz {
 
-class MessageHandler : public IPacketHandler { public: void handle(ClientSession* session, Packet& packet) override; };
+class E2EMessageHandler : public IPacketHandler { public: void handle(ClientSession* session, Packet& packet) override; };
 class NudgeHandler : public IPacketHandler { public: void handle(ClientSession* session, Packet& packet) override; };
 class VoiceMessageHandler : public IPacketHandler { public: void handle(ClientSession* session, Packet& packet) override; };
 class TypingIndicatorHandler : public IPacketHandler { public: void handle(ClientSession* session, Packet& packet) override; };
