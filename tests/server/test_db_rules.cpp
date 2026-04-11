@@ -1,5 +1,5 @@
 #include <gtest/gtest.h>
-#include "../../server/DatabaseManager.h"
+#include "../../server/data/DatabaseManager.h"
 #include <cstdio>
 #include <vector>
 #include <string>

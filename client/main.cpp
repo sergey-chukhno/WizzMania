@@ -1,6 +1,6 @@
-#include "AuthWindow.h"
-#include "MainWindow.h"
-#include "NetworkManager.h"
+#include "ui/AuthWindow.h"
+#include "ui/MainWindow.h"
+#include "network/NetworkManager.h"
 #include <QApplication>
 
 int main(int argc, char *argv[]) {

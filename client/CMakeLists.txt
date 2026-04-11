@@ -10,17 +10,17 @@ set(CMAKE_AUTORCC ON)
 # Client Sources
 set(CLIENT_SOURCES
     main.cpp
-    NetworkManager.cpp
-    AudioManager.cpp
-    LoginDialog.cpp
-    RegisterDialog.cpp
-    AuthWindow.cpp
-    AddFriendDialog.cpp
-    ChatWindow.cpp
-    MainWindow.cpp
-    GameLauncher.cpp
-    GameBridge.cpp
-    AvatarManager.cpp
+    network/NetworkManager.cpp
+    audio/AudioManager.cpp
+    ui/LoginDialog.cpp
+    ui/RegisterDialog.cpp
+    ui/AuthWindow.cpp
+    ui/AddFriendDialog.cpp
+    ui/ChatWindow.cpp
+    ui/MainWindow.cpp
+    logic/GameLauncher.cpp
+    logic/GameBridge.cpp
+    logic/AvatarManager.cpp
     data/LocalDatabase.cpp
     crypto/SignalProvider.cpp
     crypto/SignalStoreContext.cpp

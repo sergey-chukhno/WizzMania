@@ -1,5 +1,5 @@
 #include <gtest/gtest.h>
-#include "../../server/RateLimiter.h"
+#include "../../server/security/RateLimiter.h"
 #include <thread>
 #include <vector>
 

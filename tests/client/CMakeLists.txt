@@ -9,7 +9,7 @@ set(TEST_C_SOURCES
     test_network_manager.cpp
     test_local_database.cpp
     test_signal_crypto.cpp
-    ../../client/NetworkManager.cpp
+    ../../client/network/NetworkManager.cpp
     ../../client/data/LocalDatabase.cpp
     ../../client/crypto/SignalProvider.cpp
     ../../client/crypto/SignalStoreContext.cpp

@@ -3,7 +3,7 @@
 #include <QSignalSpy>
 #include <QTimer>
 #include <QVariant>
-#include "../../client/NetworkManager.h"
+#include "../../client/network/NetworkManager.h"
 #include "../../common/Packet.h"
 
 namespace wizz {
