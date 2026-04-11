@@ -1,0 +1,238 @@
+#include "LocalDatabase.h"
+#include <iostream>
+
+namespace wizz {
+namespace client {
+
+LocalDatabase::LocalDatabase(const std::string& dbPath) : m_path(dbPath) {}
+
+LocalDatabase::~LocalDatabase() {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    if (m_db) sqlite3_close(m_db);
+}
+
+bool LocalDatabase::init() {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    if (sqlite3_open(m_path.c_str(), &m_db) != SQLITE_OK) {
+        std::cerr << "[ClientDB] Failed to open SQLite DB: " << m_path << std::endl;
+        return false;
+    }
+
+    const char* sql = 
+        "CREATE TABLE IF NOT EXISTS identity ("
+        "  ID INTEGER PRIMARY KEY CHECK(ID = 1),"
+        "  REG_ID INTEGER NOT NULL,"
+        "  KEY_BLOB BLOB NOT NULL"
+        ");"
+        "CREATE TABLE IF NOT EXISTS sessions ("
+        "  ADDRESS TEXT PRIMARY KEY,"
+        "  RECORD BLOB NOT NULL"
+        ");"
+        "CREATE TABLE IF NOT EXISTS pre_keys ("
+        "  KEY_ID INTEGER PRIMARY KEY,"
+        "  RECORD BLOB NOT NULL"
+        ");"
+        "CREATE TABLE IF NOT EXISTS signed_pre_keys ("
+        "  KEY_ID INTEGER PRIMARY KEY,"
+        "  RECORD BLOB NOT NULL"
+        ");";
+
+    char* errMsg = nullptr;
+    if (sqlite3_exec(m_db, sql, nullptr, 0, &errMsg) != SQLITE_OK) {
+        std::cerr << "[ClientDB] Init Error: " << errMsg << std::endl;
+        sqlite3_free(errMsg);
+        return false;
+    }
+    return true;
+}
+
+bool LocalDatabase::setIdentity(const std::vector<uint8_t>& identityKey, uint32_t registrationId) {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    const char* sql = "INSERT OR REPLACE INTO identity (ID, REG_ID, KEY_BLOB) VALUES (1, ?, ?);";
+    sqlite3_stmt* stmt;
+    if (sqlite3_prepare_v2(m_db, sql, -1, &stmt, nullptr) != SQLITE_OK) return false;
+    
+    sqlite3_bind_int(stmt, 1, registrationId);
+    sqlite3_bind_blob(stmt, 2, identityKey.data(), identityKey.size(), SQLITE_STATIC);
+    
+    bool ok = (sqlite3_step(stmt) == SQLITE_DONE);
+    sqlite3_finalize(stmt);
+    return ok;
+}
+
+bool LocalDatabase::getIdentity(std::vector<uint8_t>& identityKey, uint32_t& registrationId) {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    const char* sql = "SELECT REG_ID, KEY_BLOB FROM identity WHERE ID = 1;";
+    sqlite3_stmt* stmt;
+    if (sqlite3_prepare_v2(m_db, sql, -1, &stmt, nullptr) != SQLITE_OK) return false;
+    
+    bool found = false;
+    if (sqlite3_step(stmt) == SQLITE_ROW) {
+        registrationId = sqlite3_column_int(stmt, 0);
+        int bytes = sqlite3_column_bytes(stmt, 1);
+        const uint8_t* blob = static_cast<const uint8_t*>(sqlite3_column_blob(stmt, 1));
+        identityKey.assign(blob, blob + bytes);
+        found = true;
+    }
+    sqlite3_finalize(stmt);
+    return found;
+}
+
+bool LocalDatabase::storeSession(const std::string& remoteAddress, const std::vector<uint8_t>& record) {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    const char* sql = "INSERT OR REPLACE INTO sessions (ADDRESS, RECORD) VALUES (?, ?);";
+    sqlite3_stmt* stmt;
+    if (sqlite3_prepare_v2(m_db, sql, -1, &stmt, nullptr) != SQLITE_OK) return false;
+    
+    sqlite3_bind_text(stmt, 1, remoteAddress.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_blob(stmt, 2, record.data(), record.size(), SQLITE_STATIC);
+    
+    bool ok = (sqlite3_step(stmt) == SQLITE_DONE);
+    sqlite3_finalize(stmt);
+    return ok;
+}
+
+bool LocalDatabase::loadSession(const std::string& remoteAddress, std::vector<uint8_t>& record) {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    const char* sql = "SELECT RECORD FROM sessions WHERE ADDRESS = ?;";
+    sqlite3_stmt* stmt;
+    if (sqlite3_prepare_v2(m_db, sql, -1, &stmt, nullptr) != SQLITE_OK) return false;
+    
+    sqlite3_bind_text(stmt, 1, remoteAddress.c_str(), -1, SQLITE_STATIC);
+    bool found = false;
+    if (sqlite3_step(stmt) == SQLITE_ROW) {
+        int bytes = sqlite3_column_bytes(stmt, 0);
+        const uint8_t* blob = static_cast<const uint8_t*>(sqlite3_column_blob(stmt, 0));
+        record.assign(blob, blob + bytes);
+        found = true;
+    }
+    sqlite3_finalize(stmt);
+    return found;
+}
+
+bool LocalDatabase::containsSession(const std::string& remoteAddress) {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    const char* sql = "SELECT 1 FROM sessions WHERE ADDRESS = ?;";
+    sqlite3_stmt* stmt;
+    if (sqlite3_prepare_v2(m_db, sql, -1, &stmt, nullptr) != SQLITE_OK) return false;
+    sqlite3_bind_text(stmt, 1, remoteAddress.c_str(), -1, SQLITE_STATIC);
+    bool found = (sqlite3_step(stmt) == SQLITE_ROW);
+    sqlite3_finalize(stmt);
+    return found;
+}
+
+bool LocalDatabase::deleteSession(const std::string& remoteAddress) {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    const char* sql = "DELETE FROM sessions WHERE ADDRESS = ?;";
+    sqlite3_stmt* stmt;
+    if (sqlite3_prepare_v2(m_db, sql, -1, &stmt, nullptr) != SQLITE_OK) return false;
+    sqlite3_bind_text(stmt, 1, remoteAddress.c_str(), -1, SQLITE_STATIC);
+    bool ok = (sqlite3_step(stmt) == SQLITE_DONE);
+    sqlite3_finalize(stmt);
+    return ok;
+}
+
+bool LocalDatabase::storePreKey(uint32_t preKeyId, const std::vector<uint8_t>& record) {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    const char* sql = "INSERT OR REPLACE INTO pre_keys (KEY_ID, RECORD) VALUES (?, ?);";
+    sqlite3_stmt* stmt;
+    if (sqlite3_prepare_v2(m_db, sql, -1, &stmt, nullptr) != SQLITE_OK) return false;
+    sqlite3_bind_int(stmt, 1, preKeyId);
+    sqlite3_bind_blob(stmt, 2, record.data(), record.size(), SQLITE_STATIC);
+    bool ok = (sqlite3_step(stmt) == SQLITE_DONE);
+    sqlite3_finalize(stmt);
+    return ok;
+}
+
+bool LocalDatabase::loadPreKey(uint32_t preKeyId, std::vector<uint8_t>& record) {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    const char* sql = "SELECT RECORD FROM pre_keys WHERE KEY_ID = ?;";
+    sqlite3_stmt* stmt;
+    if (sqlite3_prepare_v2(m_db, sql, -1, &stmt, nullptr) != SQLITE_OK) return false;
+    sqlite3_bind_int(stmt, 1, preKeyId);
+    bool found = false;
+    if (sqlite3_step(stmt) == SQLITE_ROW) {
+        int bytes = sqlite3_column_bytes(stmt, 0);
+        const uint8_t* blob = static_cast<const uint8_t*>(sqlite3_column_blob(stmt, 0));
+        record.assign(blob, blob + bytes);
+        found = true;
+    }
+    sqlite3_finalize(stmt);
+    return found;
+}
+
+bool LocalDatabase::containsPreKey(uint32_t preKeyId) {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    const char* sql = "SELECT 1 FROM pre_keys WHERE KEY_ID = ?;";
+    sqlite3_stmt* stmt;
+    if (sqlite3_prepare_v2(m_db, sql, -1, &stmt, nullptr) != SQLITE_OK) return false;
+    sqlite3_bind_int(stmt, 1, preKeyId);
+    bool found = (sqlite3_step(stmt) == SQLITE_ROW);
+    sqlite3_finalize(stmt);
+    return found;
+}
+
+bool LocalDatabase::removePreKey(uint32_t preKeyId) {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    const char* sql = "DELETE FROM pre_keys WHERE KEY_ID = ?;";
+    sqlite3_stmt* stmt;
+    if (sqlite3_prepare_v2(m_db, sql, -1, &stmt, nullptr) != SQLITE_OK) return false;
+    sqlite3_bind_int(stmt, 1, preKeyId);
+    bool ok = (sqlite3_step(stmt) == SQLITE_DONE);
+    sqlite3_finalize(stmt);
+    return ok;
+}
+
+bool LocalDatabase::storeSignedPreKey(uint32_t signedPreKeyId, const std::vector<uint8_t>& record) {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    const char* sql = "INSERT OR REPLACE INTO signed_pre_keys (KEY_ID, RECORD) VALUES (?, ?);";
+    sqlite3_stmt* stmt;
+    if (sqlite3_prepare_v2(m_db, sql, -1, &stmt, nullptr) != SQLITE_OK) return false;
+    sqlite3_bind_int(stmt, 1, signedPreKeyId);
+    sqlite3_bind_blob(stmt, 2, record.data(), record.size(), SQLITE_STATIC);
+    bool ok = (sqlite3_step(stmt) == SQLITE_DONE);
+    sqlite3_finalize(stmt);
+    return ok;
+}
+
+bool LocalDatabase::loadSignedPreKey(uint32_t signedPreKeyId, std::vector<uint8_t>& record) {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    const char* sql = "SELECT RECORD FROM signed_pre_keys WHERE KEY_ID = ?;";
+    sqlite3_stmt* stmt;
+    if (sqlite3_prepare_v2(m_db, sql, -1, &stmt, nullptr) != SQLITE_OK) return false;
+    sqlite3_bind_int(stmt, 1, signedPreKeyId);
+    bool found = false;
+    if (sqlite3_step(stmt) == SQLITE_ROW) {
+        int bytes = sqlite3_column_bytes(stmt, 0);
+        const uint8_t* blob = static_cast<const uint8_t*>(sqlite3_column_blob(stmt, 0));
+        record.assign(blob, blob + bytes);
+        found = true;
+    }
+    sqlite3_finalize(stmt);
+    return found;
+}
+
+bool LocalDatabase::containsSignedPreKey(uint32_t signedPreKeyId) {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    const char* sql = "SELECT 1 FROM signed_pre_keys WHERE KEY_ID = ?;";
+    sqlite3_stmt* stmt;
+    if (sqlite3_prepare_v2(m_db, sql, -1, &stmt, nullptr) != SQLITE_OK) return false;
+    sqlite3_bind_int(stmt, 1, signedPreKeyId);
+    bool found = (sqlite3_step(stmt) == SQLITE_ROW);
+    sqlite3_finalize(stmt);
+    return found;
+}
+
+bool LocalDatabase::removeSignedPreKey(uint32_t signedPreKeyId) {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    const char* sql = "DELETE FROM signed_pre_keys WHERE KEY_ID = ?;";
+    sqlite3_stmt* stmt;
+    if (sqlite3_prepare_v2(m_db, sql, -1, &stmt, nullptr) != SQLITE_OK) return false;
+    sqlite3_bind_int(stmt, 1, signedPreKeyId);
+    bool ok = (sqlite3_step(stmt) == SQLITE_DONE);
+    sqlite3_finalize(stmt);
+    return ok;
+}
+
+} // namespace client
+} // namespace wizz

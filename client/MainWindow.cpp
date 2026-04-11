@@ -813,10 +813,7 @@ void MainWindow::onContactDoubleClicked(const QString &username) {
   ChatWindow *w = new ChatWindow(username, startPos);
   connect(w, &ChatWindow::windowClosed, this, &MainWindow::onChatWindowClosed);
   connect(w, &ChatWindow::sendMessage, this, [username](const QString &text) {
-    wizz::Packet pkt(wizz::PacketType::DirectMessage);
-    pkt.writeString(username.toStdString()); // Target
-    pkt.writeString(text.toStdString());     // Message
-    NetworkManager::instance().sendPacket(pkt);
+    NetworkManager::instance().sendEncryptedMessage(username, text);
   });
   connect(w, &ChatWindow::sendNudge, this, [username]() {
     wizz::Packet pkt(wizz::PacketType::Nudge);
