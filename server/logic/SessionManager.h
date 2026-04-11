@@ -18,6 +18,7 @@ public:
   void addSession(int sessionId, std::shared_ptr<ClientSession> session);
   void removeSession(int sessionId);
   ClientSession* getSessionById(int sessionId) const;
+  size_t getActiveSessionCount() const;
 
   // Online User Tracking (The "Phonebook")
   void setUserOnline(const std::string& username, ClientSession* session, const std::string& customStatus);

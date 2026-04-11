@@ -24,6 +24,10 @@ ClientSession* SessionManager::getSessionById(int sessionId) const {
   return (it != m_sessions.end()) ? it->second.get() : nullptr;
 }
 
+size_t SessionManager::getActiveSessionCount() const {
+  return m_sessions.size();
+}
+
 void SessionManager::setUserOnline(const std::string& username, ClientSession* session, const std::string& customStatus) {
   m_onlineUsers[username] = session;
   m_userStatuses[username] = 0; // Default to Online
