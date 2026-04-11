@@ -167,6 +167,34 @@ bool DatabaseManager::init() {
     return false;
   }
 
+  // 5. Create E2EE Public Keys Table
+  const char *sqlPublicKeys = "CREATE TABLE IF NOT EXISTS public_keys ("
+                              "USERNAME TEXT PRIMARY KEY,"
+                              "IDENTITY_KEY TEXT NOT NULL,"
+                              "SIGNED_PRE_KEY TEXT NOT NULL,"
+                              "SIGNED_PRE_KEY_SIG TEXT NOT NULL,"
+                              "FOREIGN KEY(USERNAME) REFERENCES users(USERNAME)"
+                              ");";
+  if (sqlite3_exec(m_db, sqlPublicKeys, nullptr, 0, &errMsg) != SQLITE_OK) {
+    std::cerr << "[DB] Public Keys Table Error: " << errMsg << std::endl;
+    sqlite3_free(errMsg);
+    return false;
+  }
+
+  // 6. Create E2EE One Time Keys Table
+  const char *sqlOneTimeKeys = "CREATE TABLE IF NOT EXISTS one_time_keys ("
+                               "ID INTEGER PRIMARY KEY AUTOINCREMENT,"
+                               "USERNAME TEXT NOT NULL,"
+                               "KEY_ID INTEGER NOT NULL,"
+                               "KEY_PUB TEXT NOT NULL,"
+                               "FOREIGN KEY(USERNAME) REFERENCES users(USERNAME)"
+                               ");";
+  if (sqlite3_exec(m_db, sqlOneTimeKeys, nullptr, 0, &errMsg) != SQLITE_OK) {
+    std::cerr << "[DB] One Time Keys Table Error: " << errMsg << std::endl;
+    sqlite3_free(errMsg);
+    return false;
+  }
+
   return true;
 }
 
@@ -513,6 +541,126 @@ std::string DatabaseManager::getCustomStatus(const std::string &username) {
     sqlite3_finalize(stmt);
   }
   return status;
+}
+
+// --- E2EE Key Registry Implementation ---
+
+bool DatabaseManager::storeUserKeys(const std::string &username,
+                                    const std::string &identityKey,
+                                    const std::string &signedPreKey,
+                                    const std::string &signature) {
+  const char *sql = "INSERT INTO public_keys (USERNAME, IDENTITY_KEY, "
+                    "SIGNED_PRE_KEY, SIGNED_PRE_KEY_SIG) VALUES (?, ?, ?, ?) "
+                    "ON CONFLICT(USERNAME) DO UPDATE SET "
+                    "IDENTITY_KEY=excluded.IDENTITY_KEY, "
+                    "SIGNED_PRE_KEY=excluded.SIGNED_PRE_KEY, "
+                    "SIGNED_PRE_KEY_SIG=excluded.SIGNED_PRE_KEY_SIG;";
+  sqlite3_stmt *stmt;
+
+  if (sqlite3_prepare_v2(m_db, sql, -1, &stmt, nullptr) != SQLITE_OK) {
+    return false;
+  }
+
+  sqlite3_bind_text(stmt, 1, username.c_str(), -1, SQLITE_STATIC);
+  sqlite3_bind_text(stmt, 2, identityKey.c_str(), -1, SQLITE_STATIC);
+  sqlite3_bind_text(stmt, 3, signedPreKey.c_str(), -1, SQLITE_STATIC);
+  sqlite3_bind_text(stmt, 4, signature.c_str(), -1, SQLITE_STATIC);
+
+  bool ok = (sqlite3_step(stmt) == SQLITE_DONE);
+  sqlite3_finalize(stmt);
+  return ok;
+}
+
+bool DatabaseManager::storeOneTimeKeys(const std::string &username,
+                                       const std::vector<std::pair<int, std::string>> &otks) {
+  if (otks.empty()) return true;
+
+  // We should ideally wrap this in a transaction.
+  sqlite3_exec(m_db, "BEGIN TRANSACTION;", nullptr, 0, nullptr);
+
+  const char *sql = "INSERT INTO one_time_keys (USERNAME, KEY_ID, KEY_PUB) "
+                    "VALUES (?, ?, ?);";
+  sqlite3_stmt *stmt;
+  if (sqlite3_prepare_v2(m_db, sql, -1, &stmt, nullptr) != SQLITE_OK) {
+    sqlite3_exec(m_db, "ROLLBACK;", nullptr, 0, nullptr);
+    return false;
+  }
+
+  bool success = true;
+  for (const auto& otk : otks) {
+    sqlite3_bind_text(stmt, 1, username.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_int(stmt, 2, otk.first);
+    sqlite3_bind_text(stmt, 3, otk.second.c_str(), -1, SQLITE_STATIC);
+
+    if (sqlite3_step(stmt) != SQLITE_DONE) {
+      success = false;
+      break;
+    }
+    sqlite3_reset(stmt);
+  }
+
+  sqlite3_finalize(stmt);
+
+  if (success) {
+    sqlite3_exec(m_db, "COMMIT;", nullptr, 0, nullptr);
+  } else {
+    sqlite3_exec(m_db, "ROLLBACK;", nullptr, 0, nullptr);
+  }
+
+  return success;
+}
+
+DatabaseManager::PreKeyBundle DatabaseManager::fetchPreKeyBundle(const std::string &username) {
+  PreKeyBundle bundle;
+  bundle.oneTimeKeyId = -1; // Default indicating no OTK available
+
+  // 1. Fetch Identity and Signed PreKey
+  const char *sqlIdentity = "SELECT IDENTITY_KEY, SIGNED_PRE_KEY, SIGNED_PRE_KEY_SIG "
+                            "FROM public_keys WHERE USERNAME = ?;";
+  sqlite3_stmt *stmtIdentity;
+  if (sqlite3_prepare_v2(m_db, sqlIdentity, -1, &stmtIdentity, nullptr) == SQLITE_OK) {
+    sqlite3_bind_text(stmtIdentity, 1, username.c_str(), -1, SQLITE_STATIC);
+    if (sqlite3_step(stmtIdentity) == SQLITE_ROW) {
+      bundle.identityKey = reinterpret_cast<const char *>(sqlite3_column_text(stmtIdentity, 0));
+      bundle.signedPreKey = reinterpret_cast<const char *>(sqlite3_column_text(stmtIdentity, 1));
+      bundle.signedPreKeySignature = reinterpret_cast<const char *>(sqlite3_column_text(stmtIdentity, 2));
+    }
+    sqlite3_finalize(stmtIdentity);
+  }
+
+  if (bundle.identityKey.empty()) {
+    // User hasn't registered keys yet
+    return bundle;
+  }
+
+  // 2. Pop one One-Time Key
+  const char *sqlPopOtk = "SELECT ID, KEY_ID, KEY_PUB FROM one_time_keys "
+                          "WHERE USERNAME = ? ORDER BY ID ASC LIMIT 1;";
+  sqlite3_stmt *stmtOtk;
+  int primaryIdToDelete = -1;
+
+  if (sqlite3_prepare_v2(m_db, sqlPopOtk, -1, &stmtOtk, nullptr) == SQLITE_OK) {
+    sqlite3_bind_text(stmtOtk, 1, username.c_str(), -1, SQLITE_STATIC);
+    if (sqlite3_step(stmtOtk) == SQLITE_ROW) {
+      primaryIdToDelete = sqlite3_column_int(stmtOtk, 0);
+      bundle.oneTimeKeyId = sqlite3_column_int(stmtOtk, 1);
+      bundle.oneTimeKey = reinterpret_cast<const char *>(sqlite3_column_text(stmtOtk, 2));
+    }
+    sqlite3_finalize(stmtOtk);
+  }
+
+  // 3. Delete the consumed One-Time Key so it's not reused
+  if (primaryIdToDelete != -1) {
+    const char *sqlDelete = "DELETE FROM one_time_keys WHERE ID = ?;";
+    sqlite3_stmt *stmtDel;
+    if (sqlite3_prepare_v2(m_db, sqlDelete, -1, &stmtDel, nullptr) == SQLITE_OK) {
+      sqlite3_bind_int(stmtDel, 1, primaryIdToDelete);
+      sqlite3_step(stmtDel);
+      sqlite3_finalize(stmtDel);
+    }
+  }
+
+  return bundle;
 }
 
 } // namespace wizz

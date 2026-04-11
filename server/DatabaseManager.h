@@ -61,6 +61,20 @@ public:
   std::vector<std::string> getFriends(const std::string &username);
   std::vector<std::string> getFollowers(const std::string &username);
 
+  // E2E Encryption Key Registry (Zero-Knowledge Relay)
+  struct PreKeyBundle {
+    std::string identityKey;
+    std::string signedPreKey;
+    std::string signedPreKeySignature;
+    int oneTimeKeyId; // -1 if exhausted
+    std::string oneTimeKey; // empty if exhausted
+  };
+
+  bool storeUserKeys(const std::string &username, const std::string &identityKey,
+                     const std::string &signedPreKey, const std::string &signature);
+  bool storeOneTimeKeys(const std::string &username, const std::vector<std::pair<int, std::string>> &otks);
+  PreKeyBundle fetchPreKeyBundle(const std::string &username);
+
   // Status Management
   bool updateCustomStatus(const std::string &username, const std::string &status);
   std::string getCustomStatus(const std::string &username);
