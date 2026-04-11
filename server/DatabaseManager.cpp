@@ -356,7 +356,7 @@ bool DatabaseManager::storeMessage(const std::string &sender,
 
   sqlite3_bind_text(stmt, 1, sender.c_str(), -1, SQLITE_STATIC);
   sqlite3_bind_text(stmt, 2, recipient.c_str(), -1, SQLITE_STATIC);
-  sqlite3_bind_text(stmt, 3, body.c_str(), -1, SQLITE_STATIC);
+  sqlite3_bind_text(stmt, 3, body.c_str(), body.length(), SQLITE_STATIC);
   sqlite3_bind_int(stmt, 4, isDelivered ? 1 : 0);
 
   if (sqlite3_step(stmt) != SQLITE_DONE) {
@@ -388,7 +388,8 @@ DatabaseManager::fetchPendingMessages(const std::string &recipient) {
     StoredMessage msg;
     msg.id = sqlite3_column_int(stmt, 0);
     msg.sender = reinterpret_cast<const char *>(sqlite3_column_text(stmt, 1));
-    msg.body = reinterpret_cast<const char *>(sqlite3_column_text(stmt, 2));
+    int bytes = sqlite3_column_bytes(stmt, 2);
+    msg.body = std::string(reinterpret_cast<const char *>(sqlite3_column_text(stmt, 2)), bytes);
     messages.push_back(msg);
   }
 

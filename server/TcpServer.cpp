@@ -2,6 +2,7 @@
 #include "handlers/AuthHandlers.h"
 #include "handlers/SocialHandlers.h"
 #include "handlers/GameHandlers.h"
+#include "handlers/CryptoHandlers.h"
 #include "MetricsManager.h"
 #include <cstring>
 #include <iostream>
@@ -59,7 +60,7 @@ TcpServer::TcpServer(int port, const std::string& dbPath)
 
   m_packetRouter.registerHandler(PacketType::Login, std::make_unique<LoginHandler>());
   m_packetRouter.registerHandler(PacketType::Register, std::make_unique<RegisterHandler>());
-  m_packetRouter.registerHandler(PacketType::DirectMessage, std::make_unique<MessageHandler>());
+  m_packetRouter.registerHandler(PacketType::E2EMessage, std::make_unique<E2EMessageHandler>());
   m_packetRouter.registerHandler(PacketType::Nudge, std::make_unique<NudgeHandler>());
   m_packetRouter.registerHandler(PacketType::VoiceMessage, std::make_unique<VoiceMessageHandler>());
   m_packetRouter.registerHandler(PacketType::TypingIndicator, std::make_unique<TypingIndicatorHandler>());
@@ -73,6 +74,10 @@ TcpServer::TcpServer(int port, const std::string& dbPath)
   m_packetRouter.registerHandler(PacketType::GameInvite, std::make_unique<GameInviteHandler>());
   m_packetRouter.registerHandler(PacketType::GameInviteResponse, std::make_unique<GameInviteResponseHandler>());
   m_packetRouter.registerHandler(PacketType::GameMove, std::make_unique<GameMoveHandler>());
+
+  // E2EE
+  m_packetRouter.registerHandler(PacketType::UploadPreKeys, std::make_unique<UploadPreKeysHandler>());
+  m_packetRouter.registerHandler(PacketType::FetchPreKeyBundle, std::make_unique<FetchPreKeyBundleHandler>());
 }
 
 TcpServer::~TcpServer() { stop(); }

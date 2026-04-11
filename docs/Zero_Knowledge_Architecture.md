@@ -1,7 +1,7 @@
 # 👻 Ghost Phase: End-to-End Encryption (Zero-Knowledge Relay)
 
 ## 1. Overview
-The **Ghost Phase** transitions WizzMania from a standard plaintext TLS messenger into a cryptographically secure, "Zero-Knowledge" relay. Utilizing the **Signal Protocol** (X3DH and Double Ratchet via `libsignal`), the server is mathematically blinded. It stores, routes, and delivers ciphertext blobs that it cannot decrypt, guaranteeing Perfect Forward Secrecy and Post-Compromise Security.
+The **Shield Phase** transitions WizzMania from a standard plaintext TLS messenger into a cryptographically secure, "Zero-Knowledge" relay. Utilizing the **Signal Protocol** (X3DH and Double Ratchet via `libsignal`), the server is mathematically blinded. It stores, routes, and delivers ciphertext blobs that it cannot decrypt, guaranteeing Perfect Forward Secrecy and Post-Compromise Security.
 
 ## 2. Server Key Infrastructure (Phase 1)
 For the X3DH Key Agreement to function, Alice needs Bob's Public Keys before she can send her first encrypted message (even if Bob is offline). To facilitate asynchronous communication, the WizzMania Server acts as a central **Public Key Directory**.

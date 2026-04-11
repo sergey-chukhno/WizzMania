@@ -54,10 +54,10 @@ TEST_F(PacketRouterTest, MultipleHandlers) {
     MockPacketHandler* msgPtr = msgHandler.get();
     
     router.registerHandler(PacketType::Login, std::move(loginHandler));
-    router.registerHandler(PacketType::DirectMessage, std::move(msgHandler));
+    router.registerHandler(PacketType::E2EMessage, std::move(msgHandler));
     
     Packet lp(PacketType::Login);
-    Packet mp(PacketType::DirectMessage);
+    Packet mp(PacketType::E2EMessage);
     
     EXPECT_CALL(*loginPtr, handle(_, _)).Times(1);
     EXPECT_CALL(*msgPtr, handle(_, _)).Times(1);

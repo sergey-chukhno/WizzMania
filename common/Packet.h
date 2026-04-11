@@ -46,6 +46,13 @@ enum class PacketType : uint32_t {
   GameStart = 503,          // Server -> Client A & Client B
   GameMove = 504,           // Client -> Server -> Client
 
+  // End-to-End Encryption (Zero-Knowledge Relay)
+  UploadPreKeys = 600,
+  PreKeysUploaded = 601,        // Server -> Client Acknowledgment
+  FetchPreKeyBundle = 602,
+  PreKeyBundleResponse = 603,
+  E2EMessage = 604,             // Replaces DirectMessage
+
   // Errors
   Error = 999
 };
