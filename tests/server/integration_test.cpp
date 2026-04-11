@@ -3,7 +3,7 @@
 #include <asio/ssl.hpp>
 #include <thread>
 #include <chrono>
-#include "../../server/TcpServer.h"
+#include "../../server/core/TcpServer.h"
 #include "../../common/Packet.h"
 
 using asio::ip::tcp;

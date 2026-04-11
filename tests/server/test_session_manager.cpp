@@ -1,6 +1,6 @@
 #include <gtest/gtest.h>
 #include "mocks.h"
-#include "../../server/SessionManager.h"
+#include "../../server/logic/SessionManager.h"
 #include <memory>
 #include <asio.hpp>
 

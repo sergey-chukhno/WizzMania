@@ -1,8 +1,8 @@
 #include <gtest/gtest.h>
 #include <gmock/gmock.h>
 #include "mocks.h"
-#include "../../server/handlers/PacketRouter.h"
-#include "../../server/handlers/IPacketHandler.h"
+#include "../../server/logic/handlers/PacketRouter.h"
+#include "../../server/logic/handlers/IPacketHandler.h"
 #include "../../common/Packet.h"
 
 using namespace wizz;

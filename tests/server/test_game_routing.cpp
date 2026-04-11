@@ -1,11 +1,11 @@
 #include <gtest/gtest.h>
 #include <gmock/gmock.h>
 #include "mocks.h"
-#include "../../server/handlers/GameHandlers.h"
-#include "../../server/ClientSession.h"
-#include "../../server/TcpServer.h"
-#include "../../server/SessionManager.h"
-#include "../../server/GameRoomManager.h"
+#include "../../server/logic/handlers/GameHandlers.h"
+#include "../../server/core/ClientSession.h"
+#include "../../server/core/TcpServer.h"
+#include "../../server/logic/SessionManager.h"
+#include "../../server/logic/GameRoomManager.h"
 #include "../../common/Packet.h"
 
 using namespace ::testing;

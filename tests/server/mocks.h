@@ -1,7 +1,7 @@
 #pragma once
 #include <gmock/gmock.h>
-#include "../../server/ClientSession.h"
-#include "../../server/TcpServer.h"
+#include "../../server/core/ClientSession.h"
+#include "../../server/core/TcpServer.h"
 #include "../../common/Packet.h"
 #include <asio.hpp>
 #include <asio/ssl.hpp>
