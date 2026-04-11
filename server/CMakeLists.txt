@@ -5,17 +5,27 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Define the Server Logic Library (to be shared with tests)
 add_library(wizz_server_lib STATIC
-    TcpServer.cpp
-    ClientSession.cpp
-    DatabaseManager.cpp
-    SessionManager.cpp
-    GameRoomManager.cpp
-    handlers/PacketRouter.cpp
-    handlers/AuthHandlers.cpp
-    handlers/SocialHandlers.cpp
-    handlers/GameHandlers.cpp
-    handlers/CryptoHandlers.cpp
-    AdminSentinel.cpp
+    core/TcpServer.cpp
+    core/ClientSession.cpp
+    data/DatabaseManager.cpp
+    logic/SessionManager.cpp
+    logic/GameRoomManager.cpp
+    logic/handlers/PacketRouter.cpp
+    logic/handlers/AuthHandlers.cpp
+    logic/handlers/SocialHandlers.cpp
+    logic/handlers/GameHandlers.cpp
+    logic/handlers/CryptoHandlers.cpp
+    observability/AdminSentinel.cpp
+)
+
+# Target include directories for the server library
+target_include_directories(wizz_server_lib PUBLIC 
+    core
+    logic
+    logic/handlers
+    data
+    observability
+    security
 )
 
 # Link against the common library
@@ -83,5 +93,5 @@ if(WIN32)
 endif()
 
 # Main Executable
-add_executable(wizz_server main.cpp)
+add_executable(wizz_server core/main.cpp)
 target_link_libraries(wizz_server PRIVATE wizz_server_lib)

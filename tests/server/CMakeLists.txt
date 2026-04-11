@@ -32,12 +32,22 @@ target_link_libraries(integration_test_server
 
 target_include_directories(unit_tests_server PRIVATE 
     ../../server
-    ../../server/handlers
+    ../../server/core
+    ../../server/logic
+    ../../server/logic/handlers
+    ../../server/data
+    ../../server/observability
+    ../../server/security
 )
 
 target_include_directories(integration_test_server PRIVATE 
     ../../server
-    ../../server/handlers
+    ../../server/core
+    ../../server/logic
+    ../../server/logic/handlers
+    ../../server/data
+    ../../server/observability
+    ../../server/security
 )
 
 include(GoogleTest)
