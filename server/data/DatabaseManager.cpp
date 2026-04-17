@@ -173,6 +173,7 @@ bool DatabaseManager::init() {
                               "IDENTITY_KEY TEXT NOT NULL,"
                               "SIGNED_PRE_KEY TEXT NOT NULL,"
                               "SIGNED_PRE_KEY_SIG TEXT NOT NULL,"
+                              "REGISTRATION_ID INTEGER DEFAULT 0,"
                               "FOREIGN KEY(USERNAME) REFERENCES users(USERNAME)"
                               ");";
   if (sqlite3_exec(m_db, sqlPublicKeys, nullptr, 0, &errMsg) != SQLITE_OK) {
@@ -200,54 +201,54 @@ bool DatabaseManager::init() {
 
 // --- Contact Management ---
 
-bool DatabaseManager::addFriend(const std::string &username,
-                                const std::string &friendName) {
+int DatabaseManager::addFriend(const std::string &username,
+                               const std::string &friendName) {
+  if (username == friendName) return 3; // Cannot add self
+
   const char *sql = "INSERT OR IGNORE INTO friends (user_id, friend_id) "
                     "SELECT u1.ID, u2.ID FROM users u1, users u2 "
-                    "WHERE u1.USERNAME = ? AND u2.USERNAME = ?;";
+                    "WHERE LOWER(u1.USERNAME) = LOWER(?) AND LOWER(u2.USERNAME) = LOWER(?);";
 
   sqlite3_stmt *stmt;
   if (sqlite3_prepare_v2(m_db, sql, -1, &stmt, nullptr) != SQLITE_OK) {
     std::cerr << "[DB] Prepare failed (addFriend): " << sqlite3_errmsg(m_db)
               << std::endl;
-    return false;
+    return 3;
   }
 
   sqlite3_bind_text(stmt, 1, username.c_str(), -1, SQLITE_STATIC);
   sqlite3_bind_text(stmt, 2, friendName.c_str(), -1, SQLITE_STATIC);
 
-  bool success = false;
+  int status = 3;
   if (sqlite3_step(stmt) == SQLITE_DONE) {
     if (sqlite3_changes(m_db) > 0) {
-      success = true;
+      status = 0; // Success
     } else {
-      success = false;
+      // Either user not found OR already friends
+      std::string checkSql = "SELECT ID FROM users WHERE LOWER(USERNAME) = LOWER(?);";
+      sqlite3_stmt *checkStmt;
+      sqlite3_prepare_v2(m_db, checkSql.c_str(), -1, &checkStmt, nullptr);
+      sqlite3_bind_text(checkStmt, 1, friendName.c_str(), -1, SQLITE_STATIC);
+      bool friendExists = (sqlite3_step(checkStmt) == SQLITE_ROW);
+      sqlite3_finalize(checkStmt);
+
+      if (!friendExists) {
+        status = 1; // User not found
+      } else {
+        status = 2; // Already friends
+      }
     }
   }
 
   sqlite3_finalize(stmt);
-
-  if (success)
-    return true; 
-
-  std::string checkSql = "SELECT ID FROM users WHERE USERNAME = ?;";
-  sqlite3_stmt *checkStmt;
-  sqlite3_prepare_v2(m_db, checkSql.c_str(), -1, &checkStmt, nullptr);
-  sqlite3_bind_text(checkStmt, 1, friendName.c_str(), -1, SQLITE_STATIC);
-  bool friendExists = (sqlite3_step(checkStmt) == SQLITE_ROW);
-  sqlite3_finalize(checkStmt);
-
-  if (!friendExists)
-    return false;
-
-  return false;
+  return status;
 }
 
 bool DatabaseManager::removeFriend(const std::string &username,
                                    const std::string &friendName) {
   const char *sql = "DELETE FROM friends WHERE "
-                    "user_id = (SELECT ID FROM users WHERE USERNAME = ?) AND "
-                    "friend_id = (SELECT ID FROM users WHERE USERNAME = ?);";
+                    "user_id = (SELECT ID FROM users WHERE LOWER(USERNAME) = LOWER(?)) AND "
+                    "friend_id = (SELECT ID FROM users WHERE LOWER(USERNAME) = LOWER(?));";
 
   sqlite3_stmt *stmt;
   if (sqlite3_prepare_v2(m_db, sql, -1, &stmt, nullptr) != SQLITE_OK)
@@ -267,7 +268,7 @@ DatabaseManager::getFollowers(const std::string &username) {
   const char *sql =
       "SELECT u.USERNAME FROM users u "
       "JOIN friends f ON u.ID = f.user_id "
-      "WHERE f.friend_id = (SELECT ID FROM users WHERE USERNAME = ?);";
+      "WHERE f.friend_id = (SELECT ID FROM users WHERE LOWER(USERNAME) = LOWER(?));";
 
   sqlite3_stmt *stmt;
   if (sqlite3_prepare_v2(m_db, sql, -1, &stmt, nullptr) != SQLITE_OK)
@@ -292,7 +293,7 @@ DatabaseManager::getFriends(const std::string &username) {
   const char *sql =
       "SELECT u.USERNAME FROM users u "
       "JOIN friends f ON u.ID = f.friend_id "
-      "WHERE f.user_id = (SELECT ID FROM users WHERE USERNAME = ?);";
+      "WHERE f.user_id = (SELECT ID FROM users WHERE LOWER(USERNAME) = LOWER(?));";
 
   sqlite3_stmt *stmt;
   if (sqlite3_prepare_v2(m_db, sql, -1, &stmt, nullptr) != SQLITE_OK)
@@ -381,6 +382,18 @@ bool DatabaseManager::createUser(const std::string &username,
   if (!m_db)
     return false;
 
+  const char *checkSql = "SELECT ID FROM users WHERE LOWER(USERNAME) = LOWER(?);";
+  sqlite3_stmt *checkStmt;
+  if (sqlite3_prepare_v2(m_db, checkSql, -1, &checkStmt, nullptr) == SQLITE_OK) {
+    sqlite3_bind_text(checkStmt, 1, username.c_str(), -1, SQLITE_STATIC);
+    if (sqlite3_step(checkStmt) == SQLITE_ROW) {
+      sqlite3_finalize(checkStmt);
+      std::cerr << "[DB] Insert failed: User already exists (case-insensitive clash)." << std::endl;
+      return false;
+    }
+    sqlite3_finalize(checkStmt);
+  }
+
   std::string salt = generateSalt();
   std::string hash = hashPassword(password, salt);
 
@@ -416,7 +429,7 @@ bool DatabaseManager::checkCredentials(const std::string &username,
   if (!m_db)
     return false;
 
-  const char *sql = "SELECT PASSWORD_HASH, SALT FROM users WHERE USERNAME = ?;";
+  const char *sql = "SELECT PASSWORD_HASH, SALT FROM users WHERE LOWER(USERNAME) = LOWER(?);";
   sqlite3_stmt *stmt;
 
   if (sqlite3_prepare_v2(m_db, sql, -1, &stmt, nullptr) != SQLITE_OK) {
@@ -444,7 +457,7 @@ bool DatabaseManager::checkCredentials(const std::string &username,
 
 bool DatabaseManager::updateUserAvatar(const std::string &username,
                                        const std::string &avatarPath) {
-  const char *sql = "UPDATE users SET AVATAR_PATH = ? WHERE USERNAME = ?;";
+  const char *sql = "UPDATE users SET AVATAR_PATH = ? WHERE LOWER(USERNAME) = LOWER(?);";
   sqlite3_stmt *stmt;
   if (sqlite3_prepare_v2(m_db, sql, -1, &stmt, nullptr) != SQLITE_OK)
     return false;
@@ -458,7 +471,7 @@ bool DatabaseManager::updateUserAvatar(const std::string &username,
 }
 
 std::string DatabaseManager::getUserAvatar(const std::string &username) {
-  const char *sql = "SELECT AVATAR_PATH FROM users WHERE USERNAME = ?;";
+  const char *sql = "SELECT AVATAR_PATH FROM users WHERE LOWER(USERNAME) = LOWER(?);";
   sqlite3_stmt *stmt;
   if (sqlite3_prepare_v2(m_db, sql, -1, &stmt, nullptr) != SQLITE_OK)
     return "";
@@ -477,7 +490,7 @@ std::string DatabaseManager::getUserAvatar(const std::string &username) {
 
 bool DatabaseManager::updateCustomStatus(const std::string &username,
                                          const std::string &status) {
-  const char *sql = "UPDATE users SET CUSTOM_STATUS = ? WHERE USERNAME = ?;";
+  const char *sql = "UPDATE users SET CUSTOM_STATUS = ? WHERE LOWER(USERNAME) = LOWER(?);";
   sqlite3_stmt *stmt;
   if (sqlite3_prepare_v2(m_db, sql, -1, &stmt, nullptr) != SQLITE_OK) {
     return false;
@@ -491,7 +504,7 @@ bool DatabaseManager::updateCustomStatus(const std::string &username,
 }
 
 std::string DatabaseManager::getCustomStatus(const std::string &username) {
-  const char *sql = "SELECT CUSTOM_STATUS FROM users WHERE USERNAME = ?;";
+  const char *sql = "SELECT CUSTOM_STATUS FROM users WHERE LOWER(USERNAME) = LOWER(?);";
   sqlite3_stmt *stmt;
   std::string status = "";
   if (sqlite3_prepare_v2(m_db, sql, -1, &stmt, nullptr) == SQLITE_OK) {
@@ -510,13 +523,15 @@ std::string DatabaseManager::getCustomStatus(const std::string &username) {
 bool DatabaseManager::storeUserKeys(const std::string &username,
                                     const std::string &identityKey,
                                     const std::string &signedPreKey,
-                                    const std::string &signature) {
+                                    const std::string &signature,
+                                    int registrationId) {
   const char *sql = "INSERT INTO public_keys (USERNAME, IDENTITY_KEY, "
-                    "SIGNED_PRE_KEY, SIGNED_PRE_KEY_SIG) VALUES (?, ?, ?, ?) "
+                    "SIGNED_PRE_KEY, SIGNED_PRE_KEY_SIG, REGISTRATION_ID) VALUES (?, ?, ?, ?, ?) "
                     "ON CONFLICT(USERNAME) DO UPDATE SET "
                     "IDENTITY_KEY=excluded.IDENTITY_KEY, "
                     "SIGNED_PRE_KEY=excluded.SIGNED_PRE_KEY, "
-                    "SIGNED_PRE_KEY_SIG=excluded.SIGNED_PRE_KEY_SIG;";
+                    "SIGNED_PRE_KEY_SIG=excluded.SIGNED_PRE_KEY_SIG, "
+                    "REGISTRATION_ID=excluded.REGISTRATION_ID;";
   sqlite3_stmt *stmt;
 
   if (sqlite3_prepare_v2(m_db, sql, -1, &stmt, nullptr) != SQLITE_OK) {
@@ -524,9 +539,10 @@ bool DatabaseManager::storeUserKeys(const std::string &username,
   }
 
   sqlite3_bind_text(stmt, 1, username.c_str(), -1, SQLITE_STATIC);
-  sqlite3_bind_text(stmt, 2, identityKey.c_str(), -1, SQLITE_STATIC);
-  sqlite3_bind_text(stmt, 3, signedPreKey.c_str(), -1, SQLITE_STATIC);
-  sqlite3_bind_text(stmt, 4, signature.c_str(), -1, SQLITE_STATIC);
+  sqlite3_bind_blob(stmt, 2, identityKey.data(), (int)identityKey.size(), SQLITE_STATIC);
+  sqlite3_bind_blob(stmt, 3, signedPreKey.data(), (int)signedPreKey.size(), SQLITE_STATIC);
+  sqlite3_bind_blob(stmt, 4, signature.data(), (int)signature.size(), SQLITE_STATIC);
+  sqlite3_bind_int(stmt, 5, registrationId);
 
   bool ok = (sqlite3_step(stmt) == SQLITE_DONE);
   sqlite3_finalize(stmt);
@@ -551,7 +567,7 @@ bool DatabaseManager::storeOneTimeKeys(const std::string &username,
   for (const auto& otk : otks) {
     sqlite3_bind_text(stmt, 1, username.c_str(), -1, SQLITE_STATIC);
     sqlite3_bind_int(stmt, 2, otk.first);
-    sqlite3_bind_text(stmt, 3, otk.second.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_blob(stmt, 3, otk.second.data(), (int)otk.second.size(), SQLITE_STATIC);
 
     if (sqlite3_step(stmt) != SQLITE_DONE) {
       success = false;
@@ -571,19 +587,52 @@ bool DatabaseManager::storeOneTimeKeys(const std::string &username,
   return success;
 }
 
+bool DatabaseManager::clearUserKeys(const std::string &username) {
+  const char *sql1 = "DELETE FROM public_keys WHERE USERNAME = ?;";
+  const char *sql2 = "DELETE FROM one_time_keys WHERE USERNAME = ?;";
+  
+  sqlite3_stmt *stmt1, *stmt2;
+  bool ok = true;
+
+  if (sqlite3_prepare_v2(m_db, sql1, -1, &stmt1, nullptr) == SQLITE_OK) {
+    sqlite3_bind_text(stmt1, 1, username.c_str(), -1, SQLITE_STATIC);
+    if (sqlite3_step(stmt1) != SQLITE_DONE) ok = false;
+    sqlite3_finalize(stmt1);
+  } else ok = false;
+
+  if (sqlite3_prepare_v2(m_db, sql2, -1, &stmt2, nullptr) == SQLITE_OK) {
+    sqlite3_bind_text(stmt2, 1, username.c_str(), -1, SQLITE_STATIC);
+    if (sqlite3_step(stmt2) != SQLITE_DONE) ok = false;
+    sqlite3_finalize(stmt2);
+  } else ok = false;
+
+  if (ok) std::cout << "[DB] Cleared stale keys for " << username << std::endl;
+  return ok;
+}
+
 DatabaseManager::PreKeyBundle DatabaseManager::fetchPreKeyBundle(const std::string &username) {
   PreKeyBundle bundle;
   bundle.oneTimeKeyId = -1; 
-
-  const char *sqlIdentity = "SELECT IDENTITY_KEY, SIGNED_PRE_KEY, SIGNED_PRE_KEY_SIG "
+  bundle.registrationId = 0;
+  const char *sqlIdentity = "SELECT IDENTITY_KEY, SIGNED_PRE_KEY, SIGNED_PRE_KEY_SIG, REGISTRATION_ID "
                             "FROM public_keys WHERE USERNAME = ?;";
   sqlite3_stmt *stmtIdentity;
   if (sqlite3_prepare_v2(m_db, sqlIdentity, -1, &stmtIdentity, nullptr) == SQLITE_OK) {
     sqlite3_bind_text(stmtIdentity, 1, username.c_str(), -1, SQLITE_STATIC);
     if (sqlite3_step(stmtIdentity) == SQLITE_ROW) {
-      bundle.identityKey = reinterpret_cast<const char *>(sqlite3_column_text(stmtIdentity, 0));
-      bundle.signedPreKey = reinterpret_cast<const char *>(sqlite3_column_text(stmtIdentity, 1));
-      bundle.signedPreKeySignature = reinterpret_cast<const char *>(sqlite3_column_text(stmtIdentity, 2));
+      const void* idBlob = sqlite3_column_blob(stmtIdentity, 0);
+      int idLen = sqlite3_column_bytes(stmtIdentity, 0);
+      bundle.identityKey = std::string(reinterpret_cast<const char*>(idBlob), idLen);
+
+      const void* spkBlob = sqlite3_column_blob(stmtIdentity, 1);
+      int spkLen = sqlite3_column_bytes(stmtIdentity, 1);
+      bundle.signedPreKey = std::string(reinterpret_cast<const char*>(spkBlob), spkLen);
+
+      const void* sigBlob = sqlite3_column_blob(stmtIdentity, 2);
+      int sigLen = sqlite3_column_bytes(stmtIdentity, 2);
+      bundle.signedPreKeySignature = std::string(reinterpret_cast<const char*>(sigBlob), sigLen);
+
+      bundle.registrationId = sqlite3_column_int(stmtIdentity, 3);
     }
     sqlite3_finalize(stmtIdentity);
   }
@@ -602,7 +651,10 @@ DatabaseManager::PreKeyBundle DatabaseManager::fetchPreKeyBundle(const std::stri
     if (sqlite3_step(stmtOtk) == SQLITE_ROW) {
       primaryIdToDelete = sqlite3_column_int(stmtOtk, 0);
       bundle.oneTimeKeyId = sqlite3_column_int(stmtOtk, 1);
-      bundle.oneTimeKey = reinterpret_cast<const char *>(sqlite3_column_text(stmtOtk, 2));
+      
+      const void* otkBlob = sqlite3_column_blob(stmtOtk, 2);
+      int otkLen = sqlite3_column_bytes(stmtOtk, 2);
+      bundle.oneTimeKey = std::string(reinterpret_cast<const char*>(otkBlob), otkLen);
     }
     sqlite3_finalize(stmtOtk);
   }

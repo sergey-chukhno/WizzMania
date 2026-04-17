@@ -37,14 +37,14 @@ TEST_F(DatabaseManagerTest, UserManagement) {
     ASSERT_TRUE(db.init());
 
     // 1. Create a new user
-    EXPECT_TRUE(db.createUser("sergey", "secure_password"));
+    EXPECT_TRUE(db.createUser("testuser", "secure_password"));
 
     // 2. Duplicate detection
-    EXPECT_FALSE(db.createUser("sergey", "another_password"));
+    EXPECT_FALSE(db.createUser("testuser", "another_password"));
 
     // 3. Credential verification
-    EXPECT_TRUE(db.checkCredentials("sergey", "secure_password"));
-    EXPECT_FALSE(db.checkCredentials("sergey", "wrong_password"));
+    EXPECT_TRUE(db.checkCredentials("testuser", "secure_password"));
+    EXPECT_FALSE(db.checkCredentials("testuser", "wrong_password"));
     EXPECT_FALSE(db.checkCredentials("unknown", "password"));
 }
 
@@ -59,7 +59,7 @@ TEST_F(DatabaseManagerTest, FriendshipLogic) {
     db.createUser("bob", "pass");
 
     // 1. Add friend
-    EXPECT_TRUE(db.addFriend("alice", "bob"));
+    EXPECT_EQ(db.addFriend("alice", "bob"), 0);
     
     // 2. Verify bidirectional friendship/followers
     auto aliceFriends = db.getFriends("alice");
@@ -71,7 +71,7 @@ TEST_F(DatabaseManagerTest, FriendshipLogic) {
     EXPECT_EQ(bobFollowers[0], "alice");
 
     // 3. Duplicate friendship
-    EXPECT_FALSE(db.addFriend("alice", "bob"));
+    EXPECT_NE(db.addFriend("alice", "bob"), 0);
 
     // 4. Remove friend
     EXPECT_TRUE(db.removeFriend("alice", "bob"));
@@ -144,30 +144,39 @@ TEST_F(DatabaseManagerTest, E2EEKeyRegistry) {
     db.createUser("alice", "pass");
 
     // 1. Store Identity and Signed Pre-Keys
-    EXPECT_TRUE(db.storeUserKeys("alice", "identity_base64", "signed_prekey_base64", "signature_base64"));
+    std::string ident(33, 'A');
+    std::string signedKey(33, 'B');
+    std::string signature(64, 'C');
+    EXPECT_TRUE(db.storeUserKeys("alice", ident, signedKey, signature, 12345));
     
     // 2. Upload One-Time Pre-Keys
     std::vector<std::pair<int, std::string>> otks = {
-        {1, "otk_1_base64"},
-        {2, "otk_2_base64"},
-        {3, "otk_3_base64"}
+        {1, std::string(33, '1')},
+        {2, std::string(33, '2')},
+        {3, std::string(33, '3')}
     };
     EXPECT_TRUE(db.storeOneTimeKeys("alice", otks));
 
     // 3. Fetch PreKey Bundle
     auto bundle = db.fetchPreKeyBundle("alice");
-    EXPECT_EQ(bundle.identityKey, "identity_base64");
-    EXPECT_EQ(bundle.signedPreKey, "signed_prekey_base64");
-    EXPECT_EQ(bundle.signedPreKeySignature, "signature_base64");
+    EXPECT_EQ(bundle.identityKey, ident);
+    EXPECT_EQ(bundle.signedPreKey, signedKey);
+    EXPECT_EQ(bundle.signedPreKeySignature, signature);
+    EXPECT_EQ(bundle.registrationId, 12345);
     
     // It should pop one OTK
     EXPECT_EQ(bundle.oneTimeKeyId, 1);
-    EXPECT_EQ(bundle.oneTimeKey, "otk_1_base64");
+    EXPECT_EQ(bundle.oneTimeKey, std::string(33, '1'));
 
     // 4. Fetch another bundle, should pop the next OTK
     auto bundle2 = db.fetchPreKeyBundle("alice");
     EXPECT_EQ(bundle2.oneTimeKeyId, 2);
-    EXPECT_EQ(bundle2.oneTimeKey, "otk_2_base64");
+    EXPECT_EQ(bundle2.oneTimeKey, std::string(33, '2'));
+
+    // 5. Fetch another, should pop the last OTK
+    auto bundle3 = db.fetchPreKeyBundle("alice");
+    EXPECT_EQ(bundle3.oneTimeKeyId, 3);
+    EXPECT_EQ(bundle3.oneTimeKey, std::string(33, '3'));
 }
 
 } // namespace wizz

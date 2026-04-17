@@ -54,6 +54,7 @@ MainWindow::MainWindow(const QString &username, const QPoint &initialPos,
   connect(&NetworkManager::instance(), &NetworkManager::contactListReceived,
           this,
           [this](const QList<std::tuple<QString, int, QString>> &friends) {
+            std::cout << "[MainWindow] Received contact list update, count: " << friends.size() << std::endl;
             QList<ContactInfo> newContacts;
             for (const auto &tup : friends) {
               QString name = std::get<0>(tup);
@@ -78,6 +79,7 @@ MainWindow::MainWindow(const QString &username, const QPoint &initialPos,
   // Connect Status Change
   connect(&NetworkManager::instance(), &NetworkManager::contactStatusChanged,
           this, [this](const QString &username, int status, const QString &statusMsg) {
+            std::cout << "[MainWindow] Status update for: " << username.toStdString() << " to " << status << std::endl;
             updateContactStatus(username, static_cast<UserStatus>(status), statusMsg);
           });
 
@@ -89,33 +91,33 @@ MainWindow::MainWindow(const QString &username, const QPoint &initialPos,
             } else {
               QMessageBox::warning(this, "Error", msg);
             }
-          });
-
-  // Connect Message Received (Mediator)
+          });  // Connect Message Received (Mediator)
   connect(&NetworkManager::instance(), &NetworkManager::messageReceived, this,
           [this](const QString &sender, const QString &text) {
-            if (!m_openChats.contains(sender)) {
+            QString lowerSender = sender.toLower();
+            if (!m_openChats.contains(lowerSender)) {
               onContactDoubleClicked(sender);
             }
-            if (m_openChats.contains(sender)) {
-              m_openChats[sender]->addMessage(sender, text, false);
-              m_openChats[sender]->show();
-              m_openChats[sender]->activateWindow();
+            if (m_openChats.contains(lowerSender)) {
+              m_openChats[lowerSender]->addMessage(sender, text, false);
+              m_openChats[lowerSender]->show();
+              m_openChats[lowerSender]->activateWindow();
             }
           });
 
   // Connect Nudge Received
   connect(&NetworkManager::instance(), &NetworkManager::nudgeReceived, this,
           [this](const QString &sender) {
-            if (!m_openChats.contains(sender)) {
+            QString lowerSender = sender.toLower();
+            if (!m_openChats.contains(lowerSender)) {
               onContactDoubleClicked(sender); // Open window
             }
-            if (m_openChats.contains(sender)) {
-              m_openChats[sender]->addMessage(sender, sender + " sent a Wizz!",
-                                               false);
-              m_openChats[sender]->shake();
-              m_openChats[sender]->show();
-              m_openChats[sender]->activateWindow();
+            if (m_openChats.contains(lowerSender)) {
+              m_openChats[lowerSender]->addMessage(sender, sender + " sent a Wizz!",
+                                                false);
+              m_openChats[lowerSender]->shake();
+              m_openChats[lowerSender]->show();
+              m_openChats[lowerSender]->activateWindow();
             }
           });
 
@@ -124,15 +126,17 @@ MainWindow::MainWindow(const QString &username, const QPoint &initialPos,
        &NetworkManager::instance(), &NetworkManager::voiceMessageReceived, this,
       [this](const QString &sender, uint16_t duration,
              const std::vector<uint8_t> &data) {
-        if (!m_openChats.contains(sender)) {
+        QString lowerSender = sender.toLower();
+        if (!m_openChats.contains(lowerSender)) {
           onContactDoubleClicked(sender); // Open window
         }
-        if (m_openChats.contains(sender)) {
-          m_openChats[sender]->addVoiceMessage(sender, duration, data, false);
-          m_openChats[sender]->show();
-          m_openChats[sender]->activateWindow();
+        if (m_openChats.contains(lowerSender)) {
+          m_openChats[lowerSender]->addVoiceMessage(sender, duration, data, false);
+          m_openChats[lowerSender]->show();
+          m_openChats[lowerSender]->activateWindow();
         }
       });
+;
 
   // Connect Avatar Updated
   connect(&AvatarManager::instance(), &AvatarManager::avatarUpdated, this,
@@ -204,8 +208,9 @@ MainWindow::MainWindow(const QString &username, const QPoint &initialPos,
           }
         }
 
+        std::string normalizedUser = username.trimmed().toLower().toStdString();
         wizz::Packet pkt(wizz::PacketType::AddContact);
-        pkt.writeString(username.toStdString());
+        pkt.writeString(normalizedUser);
         NetworkManager::instance().sendPacket(pkt);
       });
 
@@ -519,7 +524,7 @@ void MainWindow::setContacts(const QList<ContactInfo> &contacts) {
   QList<ContactInfo> mergedContacts = contacts;
   for (int i = 0; i < mergedContacts.size(); ++i) {
     for (const auto &existing : m_contacts) {
-      if (mergedContacts[i].username == existing.username) {
+      if (mergedContacts[i].username.compare(existing.username, Qt::CaseInsensitive) == 0) {
         // If the new list doesn't have an avatar but the existing one does, keep it
         if (mergedContacts[i].avatar.isNull() && !existing.avatar.isNull()) {
           mergedContacts[i].avatar = existing.avatar;
@@ -670,16 +675,22 @@ void MainWindow::populateContactList() {
 
 void MainWindow::updateContactStatus(const QString &username, UserStatus status,
                                      const QString &statusMessage) {
+  std::cout << "[MainWindow] updateContactStatus signal for: " << username.toStdString() << " Status: " << static_cast<int>(status) << std::endl;
+  bool found = false;
   for (ContactInfo &contact : m_contacts) {
-    if (contact.username == username) {
+    if (contact.username.compare(username, Qt::CaseInsensitive) == 0) {
       contact.status = status;
       if (status == UserStatus::Offline) {
         contact.statusMessage = "";
       } else if (!statusMessage.isEmpty()) {
         contact.statusMessage = statusMessage;
       }
+      found = true;
       break;
     }
+  }
+  if (!found) {
+      std::cout << "[MainWindow] WARNING: Contact not found in list for update: " << username.toStdString() << std::endl;
   }
   populateContactList();
 }
@@ -688,7 +699,7 @@ void MainWindow::updateContactGameStatus(const QString &username,
                                          const QString &gameName,
                                          uint32_t score) {
   for (ContactInfo &contact : m_contacts) {
-    if (contact.username == username) {
+    if (contact.username.compare(username, Qt::CaseInsensitive) == 0) {
       if (gameName.isEmpty()) {
         contact.isPlayingGame = false;
         contact.currentGameName = "";
@@ -729,7 +740,7 @@ void MainWindow::updateContactAvatar(const QString &username,
   // Update friend's avatar
   bool found = false;
   for (ContactInfo &contact : m_contacts) {
-    if (contact.username == username) {
+    if (contact.username.compare(username, Qt::CaseInsensitive) == 0) {
       contact.avatar = avatar;
       found = true;
       break;
@@ -790,8 +801,9 @@ void MainWindow::onSendMessage() {
 }
 
 void MainWindow::onContactDoubleClicked(const QString &username) {
-  if (m_openChats.contains(username)) {
-    ChatWindow *w = m_openChats[username];
+  QString lowerName = username.toLower();
+  if (m_openChats.contains(lowerName)) {
+    ChatWindow *w = m_openChats[lowerName];
     w->show();
     w->raise();
     w->activateWindow();
@@ -822,11 +834,11 @@ void MainWindow::onContactDoubleClicked(const QString &username) {
           });
 
   w->show();
-  m_openChats.insert(username, w);
+  m_openChats.insert(lowerName, w);
 }
 
 void MainWindow::onChatWindowClosed(const QString &partnerName) {
-  m_openChats.remove(partnerName);
+  m_openChats.remove(partnerName.toLower());
 }
 
 ChatWindow *MainWindow::openChatWindow(const QString &username) {

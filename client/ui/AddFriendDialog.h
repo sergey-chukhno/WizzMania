@@ -12,15 +12,20 @@ public:
   QString getUsername() const;
   void showError(const QString &message);
   void clearInput();
+  void setLoading(bool loading);
 
 signals:
   void addRequested(const QString &username);
 
 private slots:
   void onAddClicked();
+  void onWatchdogTimeout();
 
 private:
   QLineEdit *m_usernameInput;
   QLabel *m_errorLabel;
+  class QPushButton *m_addBtn;
+  class QPushButton *m_cancelBtn;
+  class QTimer *m_watchdog;
   void setupUI();
 };

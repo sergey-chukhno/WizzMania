@@ -12,6 +12,8 @@
 #include <tuple>
 
 #include "../data/LocalDatabase.h"
+#include <string>
+#include <mutex>
 #include <signal_protocol.h>
 
 namespace wizz {
@@ -31,6 +33,7 @@ public:
   }
 
   void initSocket();
+  void initializeE2EE(const QString &username);
   void processPacket(wizz::Packet &pkt);
   void uploadStoredPreKeys();
 
@@ -110,8 +113,19 @@ private:
   wizz::client::LocalDatabase *m_localDb = nullptr;
   signal_context *m_signalContext = nullptr;
   signal_protocol_store_context *m_storeContext = nullptr;
+  bool m_e2eeInitialized = false;
+  mutable std::recursive_mutex m_cryptoMutex;
 
-  QHash<QString, QStringList> m_pendingMessages; // username -> list of ciphertexts-pending-handshake? No, plaintext-pending-handshake.
+  // Memory Stability for Signal Addresses
+  struct AddressEntry {
+      std::string name;
+      signal_protocol_address address;
+  };
+  QHash<QString, std::shared_ptr<AddressEntry>> m_addressRegistry;
+  const signal_protocol_address* getSignalAddress(const QString& username);
+
+  QSet<QString> m_handshakeInProgress;
+  QHash<QString, QStringList> m_pendingMessages; // username -> list of plaintexts.
   // Actually, let's keep it simple: username -> list of plaintexts.
   // Once bundle arrives, we encrypt and send.
 
@@ -132,6 +146,9 @@ private:
   void handleGameMovePacket(wizz::Packet &pkt);
   void handlePreKeyBundleResponse(wizz::Packet &pkt);
   void handleE2EMessagePacket(wizz::Packet &pkt);
+  void doSendEncryptedMessage(const signal_protocol_address* address, const QString& target, const QString& text);
+  void purgeParticipantState(const QString &target);
+  QString normalizeUsername(const QString &username);
 
   QHash<wizz::PacketType, std::function<void(wizz::Packet &)>> m_packetHandlers;
   

@@ -11,19 +11,33 @@ set(CMAKE_AUTORCC ON)
 set(CLIENT_SOURCES
     main.cpp
     network/NetworkManager.cpp
+    network/NetworkManager.h
     audio/AudioManager.cpp
+    audio/AudioManager.h
     ui/LoginDialog.cpp
+    ui/LoginDialog.h
     ui/RegisterDialog.cpp
+    ui/RegisterDialog.h
     ui/AuthWindow.cpp
+    ui/AuthWindow.h
     ui/AddFriendDialog.cpp
+    ui/AddFriendDialog.h
     ui/ChatWindow.cpp
+    ui/ChatWindow.h
     ui/MainWindow.cpp
+    ui/MainWindow.h
     logic/GameLauncher.cpp
+    logic/GameLauncher.h
     logic/GameBridge.cpp
+    logic/GameBridge.h
     logic/AvatarManager.cpp
+    logic/AvatarManager.h
     data/LocalDatabase.cpp
+    data/LocalDatabase.h
     crypto/SignalProvider.cpp
+    crypto/SignalProvider.h
     crypto/SignalStoreContext.cpp
+    crypto/SignalStoreContext.h
     resources.qrc
 )
 

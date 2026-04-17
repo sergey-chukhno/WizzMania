@@ -539,6 +539,8 @@ QFrame *AuthWindow::createRegisterCard() {
 }
 
 void AuthWindow::onLoginClicked() {
+  if (m_isConnecting) return;
+
   if (m_loginUsername->text().isEmpty()) {
     m_loginStatus->setText("Please enter a username");
     m_loginStatus->setStyleSheet("color: #e74c3c; background: transparent;");
@@ -549,6 +551,7 @@ void AuthWindow::onLoginClicked() {
   m_loginStatus->setStyleSheet(
       "color: #00a8ff; background: transparent; font-weight: bold;");
   m_loginButton->setEnabled(false);
+  m_isConnecting = true;
 
   // Disconnect any existing connections first
   NetworkManager::instance().disconnect();
@@ -581,9 +584,9 @@ void AuthWindow::onLoginPacketReceived(const wizz::Packet &constPkt) {
     m_loginStatus->setStyleSheet(
         "color: #27ae60; font-weight: bold; background: transparent;");
 
-    // Upload E2EE PreKeys for Blind Relay support
-    NetworkManager::instance().uploadStoredPreKeys();
-
+    // Initialize isolated E2EE storage for this user (also uploads keys to server)
+    NetworkManager::instance().initializeE2EE(m_loginUsername->text());
+ 
     // Auto-Upload Avatar if pending
     if (!m_pendingAvatarData.isEmpty() &&
         m_loginUsername->text() == m_pendingAvatarUser) {
@@ -599,6 +602,7 @@ void AuthWindow::onLoginPacketReceived(const wizz::Packet &constPkt) {
     m_loginStatus->setStyleSheet(
         "color: #e74c3c; font-weight: bold; background: transparent;");
     m_loginButton->setEnabled(true);
+    m_isConnecting = false;
     NetworkManager::instance().disconnect();
   }
 }
@@ -607,6 +611,7 @@ void AuthWindow::onLoginError(const QString &error) {
   m_loginStatus->setText("Error: " + error);
   m_loginStatus->setStyleSheet("color: #e74c3c; background: transparent;");
   m_loginButton->setEnabled(true);
+  m_isConnecting = false;
 }
 
 void AuthWindow::onRegisterClicked() {
@@ -635,10 +640,13 @@ void AuthWindow::onRegisterClicked() {
     return;
   }
 
+  if (m_isConnecting) return;
+
   m_regStatus->setText("Connecting...");
   m_regStatus->setStyleSheet(
       "color: #00a8ff; background: transparent; font-weight: bold;");
   m_registerButton->setEnabled(false);
+  m_isConnecting = true;
 
   // Disconnect previous and connect for register
   NetworkManager::instance().disconnect();
@@ -682,6 +690,7 @@ void AuthWindow::onRegisterPacketReceived(const wizz::Packet &constPkt) {
       m_regPassword->clear();
       m_regConfirmPassword->clear();
       m_registerButton->setEnabled(true);
+      m_isConnecting = false;
     });
   } else if (pkt.type() == wizz::PacketType::RegisterFailed) {
     std::string reason = pkt.readString();
@@ -689,6 +698,7 @@ void AuthWindow::onRegisterPacketReceived(const wizz::Packet &constPkt) {
     m_regStatus->setStyleSheet(
         "color: #e74c3c; font-weight: bold; background: transparent;");
     m_registerButton->setEnabled(true);
+    m_isConnecting = false;
     NetworkManager::instance().disconnect();
   }
 }
@@ -697,4 +707,5 @@ void AuthWindow::onRegisterError(const QString &error) {
   m_regStatus->setText("Error: " + error);
   m_regStatus->setStyleSheet("color: #e74c3c; background: transparent;");
   m_registerButton->setEnabled(true);
+  m_isConnecting = false;
 }

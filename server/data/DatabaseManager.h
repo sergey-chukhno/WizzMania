@@ -56,7 +56,7 @@ public:
   void markAsDelivered(int msgId);
 
   // Contact Management (Day 6)
-  bool addFriend(const std::string &username, const std::string &friendName);
+  int addFriend(const std::string &username, const std::string &friendName);
   bool removeFriend(const std::string &username, const std::string &friendName);
   std::vector<std::string> getFriends(const std::string &username);
   std::vector<std::string> getFollowers(const std::string &username);
@@ -66,13 +66,15 @@ public:
     std::string identityKey;
     std::string signedPreKey;
     std::string signedPreKeySignature;
+    int registrationId;
     int oneTimeKeyId; // -1 if exhausted
     std::string oneTimeKey; // empty if exhausted
   };
 
   bool storeUserKeys(const std::string &username, const std::string &identityKey,
-                     const std::string &signedPreKey, const std::string &signature);
+                     const std::string &signedPreKey, const std::string &signature, int registrationId);
   bool storeOneTimeKeys(const std::string &username, const std::vector<std::pair<int, std::string>> &otks);
+  bool clearUserKeys(const std::string &username);
   PreKeyBundle fetchPreKeyBundle(const std::string &username);
 
   // Status Management

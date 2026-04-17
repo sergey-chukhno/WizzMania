@@ -5,9 +5,17 @@
 #include <iostream>
 #include <sstream>
 #include <fstream>
-#include <vector>
+#include <algorithm>
+#include <cctype>
 
 namespace wizz {
+
+static std::string normalize(const std::string& str) {
+    std::string data = str;
+    std::transform(data.begin(), data.end(), data.begin(),
+                   [](unsigned char c){ return std::tolower(c); });
+    return data;
+}
 
 void LoginHandler::handle(ClientSession* session, Packet& packet) {
     std::string username, password, customStatus;
@@ -55,23 +63,20 @@ void LoginHandler::handle(ClientSession* session, Packet& packet) {
 
             s->setLoggedIn(true);
             s->setUsername(username);
-            std::cout << "[Server] User Online: " << username << std::endl;
+            
+            // Mark online FIRST so all following lookups see our presence
             server->getSessionManager().setUserOnline(username, s, customStatus);
 
             // Cache the full contact list in the session for fast broadcasts (avoids repeated DB queries)
-            std::set<std::string> contactSet;
-            for (const auto &f : followers) contactSet.insert(f);
-            for (const auto &f : friends) contactSet.insert(f);
-            s->setContacts(std::move(contactSet));
+            std::set<std::string> contacts;
+            for (const auto &f : followers) contacts.insert(normalize(f));
+            for (const auto &f : friends) contacts.insert(normalize(f));
+            s->setContacts(std::move(contacts));
 
             Packet resp(PacketType::LoginSuccess);
             s->sendPacket(resp);
 
-            std::set<std::string> contacts;
-            for (const auto &f : followers) contacts.insert(f);
-            for (const auto &f : friends) contacts.insert(f);
-
-            for (const auto &contactName : contacts) {
+            for (const auto &contactName : friends) {
                 ClientSession* targetSession = server->getSessionManager().getSessionByUsername(contactName);
                 if (targetSession) {
                     std::cout << "[Server] Broadcasting Online Status of " << username
@@ -95,9 +100,10 @@ void LoginHandler::handle(ClientSession* session, Packet& packet) {
                 s->sendPacket(contactList);
             }
 
+            const auto& contactSet = s->getContacts();
             for (const auto& onlineUser : server->getSessionManager().getAllOnlineUsernames()) {
-                if (onlineUser == username) continue;
-                bool isInterested = (contacts.find(onlineUser) != contacts.end());
+                if (normalize(onlineUser) == normalize(username)) continue;
+                bool isInterested = (contactSet.find(normalize(onlineUser)) != contactSet.end());
                 
                 if (isInterested) {
                     int status = server->getSessionManager().getStatus(onlineUser);

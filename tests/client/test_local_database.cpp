@@ -24,16 +24,18 @@ protected:
 };
 
 TEST_F(LocalDatabaseTest, StoresAndRetrievesIdentity) {
-    std::vector<uint8_t> ident = {0x01, 0x02, 0x03, 0x04};
+    std::vector<uint8_t> pub = {0x01, 0x02, 0x03, 0x04};
+    std::vector<uint8_t> priv = {0x05, 0x06, 0x07, 0x08};
     uint32_t regId = 1234;
 
-    db->setIdentity(ident, regId);
+    db->setIdentity(pub, priv, regId);
 
-    std::vector<uint8_t> fetchedIdent;
+    std::vector<uint8_t> fetchedPub, fetchedPriv;
     uint32_t fetchedRegId = 0;
-    db->getIdentity(fetchedIdent, fetchedRegId);
+    db->getIdentity(fetchedPub, fetchedPriv, fetchedRegId);
 
-    EXPECT_EQ(fetchedIdent, ident);
+    EXPECT_EQ(fetchedPub, pub);
+    EXPECT_EQ(fetchedPriv, priv);
     EXPECT_EQ(fetchedRegId, regId);
 }
 
