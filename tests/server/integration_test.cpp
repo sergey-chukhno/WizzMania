@@ -121,12 +121,21 @@ TEST_F(ServerIntegrationTest, E2EKeyBundleExchange) {
 
     // 1. Upload Bundle
     Packet upload(PacketType::UploadPreKeys);
-    upload.writeString("ident_blob");
-    upload.writeString("signed_pre_key_blob");
-    upload.writeString("signature_blob");
+    
+    // Create dummy 33-byte and 64-byte blobs for compatibility
+    std::string ident_blob(33, 'I');
+    std::string signed_pre_key_blob(33, 'S');
+    std::string signature_blob(64, 'G');
+    std::string otk_blob(33, 'O');
+
+    upload.writeData(ident_blob.data(), 33);
+    upload.writeData(signed_pre_key_blob.data(), 33);
+    upload.writeData(signature_blob.data(), 64);
+    upload.writeInt(12345); // registrationId
+
     upload.writeInt(1); // otkCount
     upload.writeInt(5); // otk_id
-    upload.writeString("otk_pub_blob");
+    upload.writeData(otk_blob.data(), 33);
 
     auto uploadData = upload.serialize();
     asio::write(socket, asio::buffer(uploadData));
@@ -151,7 +160,11 @@ TEST_F(ServerIntegrationTest, E2EKeyBundleExchange) {
     
     std::memcpy(&type, &h[4], 4); type = ntohl(type);
     EXPECT_EQ(type, static_cast<uint32_t>(PacketType::PreKeyBundleResponse));
-    EXPECT_GT(b.size(), 0u);
+    
+    // Expected Payload Size = 4(len) + "alice"(5) + 33(ident) + 33(signed) + 64(sig) + 4(regId) + 4(otkId) + 33(otk)
+    // 4 + 5 + 33 + 33 + 64 + 4 + 4 + 33 = 180
+    EXPECT_GE(b.size(), 140u); // At least the required fields without OTK 
+    std::cout << "[IntegrationTest] Received Bundle. Size: " << b.size() << std::endl;
 }
 
 TEST_F(ServerIntegrationTest, E2EMessageRelaying) {

@@ -18,10 +18,14 @@ public:
     ~LocalDatabase();
 
     bool init();
+    std::string getDbPath() const { return m_path; }
 
     // -- Identity & Registration --
-    bool setIdentity(const std::vector<uint8_t>& identityKey, uint32_t registrationId);
-    bool getIdentity(std::vector<uint8_t>& identityKey, uint32_t& registrationId);
+    bool setIdentity(const std::vector<uint8_t>& pubKey, const std::vector<uint8_t>& privKey, uint32_t registrationId);
+    bool getIdentity(std::vector<uint8_t>& pubKey, std::vector<uint8_t>& privKey, uint32_t& registrationId);
+    bool storeRemoteIdentity(const std::string& remoteAddress, const std::vector<uint8_t>& identityKey);
+    bool loadRemoteIdentity(const std::string& remoteAddress, std::vector<uint8_t>& identityKey);
+    bool deleteRemoteIdentity(const std::string& remoteAddress);
 
     // -- Sessions --
     bool storeSession(const std::string& remoteAddress, const std::vector<uint8_t>& record);
@@ -40,6 +44,7 @@ public:
     bool loadSignedPreKey(uint32_t signedPreKeyId, std::vector<uint8_t>& record);
     bool containsSignedPreKey(uint32_t signedPreKeyId);
     bool removeSignedPreKey(uint32_t signedPreKeyId);
+    bool deleteAllData();
 
 private:
     sqlite3* m_db = nullptr;

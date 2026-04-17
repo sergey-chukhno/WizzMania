@@ -34,4 +34,5 @@ private:
 
     QString m_defaultHost = "127.0.0.1";
     uint16_t m_defaultPort = 8080;
+    bool m_isConnecting = false;
 };

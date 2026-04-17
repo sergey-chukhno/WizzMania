@@ -294,6 +294,8 @@ void LoginDialog::applyStyles() {
 }
 
 void LoginDialog::onLoginClicked() {
+  if (m_isConnecting) return;
+
   if (m_usernameInput->text().isEmpty()) {
     m_statusLabel->setText("Please enter a username");
     m_statusLabel->setStyleSheet("color: #e74c3c; background: transparent;");
@@ -304,6 +306,7 @@ void LoginDialog::onLoginClicked() {
   m_statusLabel->setStyleSheet(
       "color: #00a8ff; background: transparent; font-weight: bold;");
   m_loginButton->setEnabled(false);
+  m_isConnecting = true;
 
   NetworkManager::instance().connectToHost(m_defaultHost, m_defaultPort);
 }
@@ -315,10 +318,12 @@ void LoginDialog::onLoginFailed(const QString &reason) {
   m_statusLabel->setStyleSheet(
       "color: #e74c3c; font-weight: bold; background: transparent;");
   m_loginButton->setEnabled(true);
+  m_isConnecting = false;
 }
 
 void LoginDialog::onConnectionError(const QString &error) {
   m_statusLabel->setText("Error: " + error);
   m_statusLabel->setStyleSheet("color: #e74c3c; background: transparent;");
   m_loginButton->setEnabled(true);
+  m_isConnecting = false;
 }

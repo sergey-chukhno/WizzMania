@@ -5,11 +5,17 @@
 #include <QPainter>
 #include <QPushButton>
 #include <QVBoxLayout>
+#include <QTimer>
 
 AddFriendDialog::AddFriendDialog(QWidget *parent) : QDialog(parent) {
   setWindowFlags(Qt::FramelessWindowHint | Qt::Dialog);
   setAttribute(Qt::WA_TranslucentBackground);
   setFixedSize(320, 240);
+  
+  m_watchdog = new QTimer(this);
+  m_watchdog->setSingleShot(true);
+  connect(m_watchdog, &QTimer::timeout, this, &AddFriendDialog::onWatchdogTimeout);
+
   setupUI();
 }
 
@@ -18,17 +24,39 @@ QString AddFriendDialog::getUsername() const { return m_usernameInput->text(); }
 void AddFriendDialog::clearInput() {
   m_usernameInput->clear();
   m_errorLabel->clear();
+  setLoading(false);
 }
 
 void AddFriendDialog::showError(const QString &message) {
   m_errorLabel->setText(message);
+  setLoading(false);
+}
+
+void AddFriendDialog::setLoading(bool loading) {
+  m_addBtn->setEnabled(!loading);
+  m_cancelBtn->setEnabled(!loading);
+  m_usernameInput->setEnabled(!loading);
+  if (loading) {
+    m_addBtn->setText("Adding...");
+  } else {
+    m_addBtn->setText("Add");
+    m_watchdog->stop();
+  }
 }
 
 void AddFriendDialog::onAddClicked() {
   QString text = m_usernameInput->text().trimmed();
   if (!text.isEmpty()) {
     m_errorLabel->clear();
+    setLoading(true);
+    m_watchdog->start(10000); // 10s Timeout
     emit addRequested(text);
+  }
+}
+
+void AddFriendDialog::onWatchdogTimeout() {
+  if (m_addBtn->text() == "Adding...") {
+    showError("Request timed out. Please try again.");
   }
 }
 
@@ -100,9 +128,9 @@ void AddFriendDialog::setupUI() {
   QHBoxLayout *btnLayout = new QHBoxLayout();
   btnLayout->setSpacing(15);
 
-  QPushButton *cancelBtn = new QPushButton("Cancel", glassFrame);
-  cancelBtn->setCursor(Qt::PointingHandCursor);
-  cancelBtn->setStyleSheet(R"(
+  m_cancelBtn = new QPushButton("Cancel", glassFrame);
+  m_cancelBtn->setCursor(Qt::PointingHandCursor);
+  m_cancelBtn->setStyleSheet(R"(
         QPushButton {
             background-color: rgba(255, 255, 255, 150);
             border: 1px solid rgba(200, 200, 200, 150);
@@ -115,12 +143,16 @@ void AddFriendDialog::setupUI() {
             background-color: rgba(255, 255, 255, 220);
             color: #2d3748;
         }
+        QPushButton:disabled {
+            background-color: rgba(200, 200, 200, 100);
+            color: #a0aec0;
+        }
     )");
-  connect(cancelBtn, &QPushButton::clicked, this, &QDialog::reject);
+  connect(m_cancelBtn, &QPushButton::clicked, this, &QDialog::reject);
 
-  QPushButton *addBtn = new QPushButton("Add", glassFrame);
-  addBtn->setCursor(Qt::PointingHandCursor);
-  addBtn->setStyleSheet(R"(
+  m_addBtn = new QPushButton("Add", glassFrame);
+  m_addBtn->setCursor(Qt::PointingHandCursor);
+  m_addBtn->setStyleSheet(R"(
         QPushButton {
             background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #4facfe, stop:1 #00f2fe);
             border: none;
@@ -132,11 +164,15 @@ void AddFriendDialog::setupUI() {
         QPushButton:hover {
             background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #439ce0, stop:1 #00dce8);
         }
+        QPushButton:disabled {
+            background: rgba(100, 180, 255, 80);
+            color: rgba(255, 255, 255, 150);
+        }
     )");
-  connect(addBtn, &QPushButton::clicked, this, &AddFriendDialog::onAddClicked);
+  connect(m_addBtn, &QPushButton::clicked, this, &AddFriendDialog::onAddClicked);
 
-  btnLayout->addWidget(cancelBtn);
-  btnLayout->addWidget(addBtn);
+  btnLayout->addWidget(m_cancelBtn);
+  btnLayout->addWidget(m_addBtn);
 
   frameLayout->addLayout(btnLayout);
   mainLayout->addWidget(glassFrame);

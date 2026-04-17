@@ -1,7 +1,7 @@
 #pragma once
 
 #include <memory>
-#include <string>
+#include <mutex>
 #include <unordered_map>
 #include <vector>
 
@@ -38,6 +38,7 @@ public:
   std::vector<std::string> getAllOnlineUsernames() const;
 
 private:
+  mutable std::recursive_mutex m_mutex;
   // Prevents shared_ptr lifecycle drops during async I/O
   std::unordered_map<int, std::shared_ptr<ClientSession>> m_sessions;
   

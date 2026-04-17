@@ -90,6 +90,7 @@ public:
 
   // Accessors
   uint32_t bodySize() const { return static_cast<uint32_t>(m_body.size()); }
+  uint32_t remainingSize() const { return static_cast<uint32_t>(m_body.size() - m_readOffset); }
   PacketType type() const { return static_cast<PacketType>(m_header.type); }
 
 private:

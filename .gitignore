@@ -29,6 +29,8 @@ rules.md
 maquette/
 cert/
 *.log
+test_logs.txt
+*.log
 
 # database (local only)
 wizzmania.db

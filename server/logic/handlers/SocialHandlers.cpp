@@ -4,17 +4,28 @@
 #include "../../../common/Packet.h"
 #include <iostream>
 #include <fstream>
+#include <iomanip>
 #include <sstream>
 #include <filesystem>
 
+#include <algorithm>
+#include <cctype>
+
 namespace wizz {
+
+static std::string normalize(const std::string& str) {
+    std::string data = str;
+    std::transform(data.begin(), data.end(), data.begin(),
+                   [](unsigned char c){ return std::tolower(c); });
+    return data;
+}
 
 void E2EMessageHandler::handle(ClientSession* session, Packet& packet) {
     if (!session->isLoggedIn()) return;
     std::string targetUser;
     std::vector<uint8_t> cipherBlob;
     try {
-        targetUser = packet.readString();
+        targetUser = normalize(packet.readString());
         uint32_t blobSize = packet.readInt();
         cipherBlob = packet.readBytes(blobSize);
     } catch (...) { return; }
@@ -25,12 +36,19 @@ void E2EMessageHandler::handle(ClientSession* session, Packet& packet) {
     bool delivered = false;
     ClientSession *targetSession = server->getSessionManager().getSessionByUsername(targetUser);
     if (targetSession) {
+        std::stringstream ss;
+        for(size_t i=0; i < std::min((size_t)cipherBlob.size(), (size_t)8); ++i) ss << std::hex << std::setw(2) << std::setfill('0') << (int)cipherBlob[i] << " ";
+        std::cout << "[Relay] E2E Message from " << session->getUsername() << " to " << targetUser 
+                  << " (Online) Len: " << cipherBlob.size() << " Hex prefix: " << ss.str() << std::endl;
+        
         Packet outPacket(PacketType::E2EMessage);
         outPacket.writeString(session->getUsername());
         outPacket.writeInt(cipherBlob.size());
         outPacket.writeData(cipherBlob.data(), cipherBlob.size());
         targetSession->sendPacket(outPacket);
         delivered = true;
+    } else {
+        std::cout << "[Relay] E2E Message from " << session->getUsername() << " to " << targetUser << " (Queued in DB)" << std::endl;
     }
     
     // We treat the string body in the database as raw transparent bytes. 
@@ -44,7 +62,7 @@ void E2EMessageHandler::handle(ClientSession* session, Packet& packet) {
 void NudgeHandler::handle(ClientSession* session, Packet& packet) {
     if (!session->isLoggedIn()) return;
     std::string targetUser;
-    try { targetUser = packet.readString(); } catch (...) { return; }
+    try { targetUser = normalize(packet.readString()); } catch (...) { return; }
 
     TcpServer* server = session->getServer();
     if (!server) return;
@@ -287,7 +305,7 @@ void GetAvatarHandler::handle(ClientSession* session, Packet& packet) {
 void AddContactHandler::handle(ClientSession* session, Packet& packet) {
     if (!session->isLoggedIn()) return;
     std::string targetUser;
-    try { targetUser = packet.readString(); } catch (...) { return; }
+    try { targetUser = normalize(packet.readString()); } catch (...) { return; }
 
     TcpServer* server = session->getServer();
     if (!server) return;
@@ -295,15 +313,15 @@ void AddContactHandler::handle(ClientSession* session, Packet& packet) {
     std::string username = session->getUsername();
 
     server->getDb().postTask([server, sessionId, username, targetUser]() {
-        bool ok = server->getDb().addFriend(username, targetUser);
+        int status = server->getDb().addFriend(username, targetUser);
         std::vector<std::string> friends;
-        if (ok) friends = server->getDb().getFriends(username);
+        if (status == 0) friends = server->getDb().getFriends(username);
 
-        server->postResponse([server, sessionId, ok, friends = std::move(friends)]() {
+        server->postResponse([server, sessionId, status, friends = std::move(friends)]() {
             ClientSession *s = server->getSession(sessionId);
             if (!s) return;
 
-            if (ok) {
+            if (status == 0) {
                 Packet resp(PacketType::ContactList);
                 resp.writeInt(static_cast<uint32_t>(friends.size()));
                 for (const auto &name : friends) {
@@ -314,7 +332,10 @@ void AddContactHandler::handle(ClientSession* session, Packet& packet) {
                 s->sendPacket(resp);
             } else {
                 Packet err(PacketType::Error);
-                err.writeString("Failed to add contact: User not found.");
+                if (status == 1) err.writeString("Failed to add contact: User not found.");
+                else if (status == 2) err.writeString("User is already in your friend list.");
+                else if (status == 3) err.writeString("Failed to add contact: Invalid request.");
+                else err.writeString("An unknown error occurred.");
                 s->sendPacket(err);
             }
         });
@@ -324,7 +345,7 @@ void AddContactHandler::handle(ClientSession* session, Packet& packet) {
 void RemoveContactHandler::handle(ClientSession* session, Packet& packet) {
     if (!session->isLoggedIn()) return;
     std::string targetUser;
-    try { targetUser = packet.readString(); } catch (...) { return; }
+    try { targetUser = normalize(packet.readString()); } catch (...) { return; }
 
     TcpServer* server = session->getServer();
     if (!server) return;

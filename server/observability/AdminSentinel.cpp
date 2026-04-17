@@ -1,13 +1,11 @@
 #include "AdminSentinel.h"
 #include "../core/TcpServer.h"
-#include "MetricsManager.h"
-#include "CommandProcessor.h"
-#include "../data/DatabaseManager.h"
 #include <iostream>
 #include <chrono>
 #include <thread>
 #include <ctime>
 #include <iomanip>
+#include <sstream>
 
 namespace wizz {
 
@@ -19,12 +17,15 @@ AdminSentinel::~AdminSentinel() {
 
 void AdminSentinel::start() {
     if (m_running.exchange(true)) return;
-    std::thread(&AdminSentinel::runTuiLoop, this).detach();
+    // TUI loop disabled for protocol debugging to avoid log spam
 }
 
 void AdminSentinel::run() {
-    m_running = true;
-    runTuiLoop();
+    start();
+    // Block the main thread to keep the server alive
+    while (m_running) {
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+    }
 }
 
 void AdminSentinel::stop() {
@@ -44,42 +45,15 @@ void AdminSentinel::logEvent(const std::string& component, const std::string& me
 }
 
 void AdminSentinel::updateMetric(const std::string& name, double value) {
-    // Placeholder for metric visualization
     logEvent("METRIC", name + ": " + std::to_string(value));
 }
 
 void AdminSentinel::runTuiLoop() {
-    while (m_running) {
-        renderDashboard();
-        std::this_thread::sleep_for(std::chrono::milliseconds(500));
-    }
+    // Disabled
 }
 
 void AdminSentinel::renderDashboard() {
-    // Clear screen (POSIX)
-    std::cout << "\033[2J\033[1;1H";
-    
-    std::cout << "================================================================" << std::endl;
-    std::cout << "   WIZZ MANIA - ADMIN SENTINEL - PROTOCOL SECURITY DASHBOARD    " << std::endl;
-    std::cout << "================================================================" << std::endl;
-    
-    if (m_server) {
-        std::cout << " Server Port: " << 8080 << " | Status: RUNNING" << std::endl;
-        std::cout << " Active Sessions: " << m_server->getSessionManager().getActiveSessionCount() << std::endl;
-    }
-    
-    std::cout << "----------------------------------------------------------------" << std::endl;
-    std::cout << " RECENT EVENTS:" << std::endl;
-    {
-        std::lock_guard<std::mutex> lock(m_eventMutex);
-        for (const auto& ev : m_events) {
-            std::cout << " [" << ev.timestamp << "] [" << ev.component << "] " << ev.message << std::endl;
-        }
-    }
-    
-    std::cout << "----------------------------------------------------------------" << std::endl;
-    std::cout << " Sentinel Command Interface > ";
-    std::cout.flush();
+    // Disabled
 }
 
 } // namespace wizz

@@ -70,6 +70,7 @@ private:
   QByteArray m_pendingAvatarData;
   QString m_pendingAvatarUser;
   QLabel *m_avatarPreview; // On Register Page
+  bool m_isConnecting = false;
 };
 
 // Helper for clickable avatar
