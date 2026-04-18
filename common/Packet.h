@@ -8,6 +8,16 @@
 namespace wizz {
 
 /**
+* @brief Strictly defines Network Presence mappings. 
+* Memory footprint enforced to exactly 1 byte. */
+enum class UserStatus : uint8_t {
+  Online = 0,
+  Away = 1,
+  Busy = 2,
+  Offline = 3
+};
+
+/**
  * @brief Enum representing the type of operation.
  * Used in the Packet Header to dispatch logic.
  */

@@ -843,60 +843,16 @@ void NetworkManager::handleE2EMessagePacket(wizz::Packet &pkt) {
     QString cleanedSender = normalizeUsername(sender);
     const signal_protocol_address* address = getSignalAddress(cleanedSender);
 
-    session_cipher *cipher = nullptr;
-    session_cipher_create(&cipher, m_storeContext, address, m_signalContext);
+    std::optional<std::string> decryptedText = wizz::client::crypto::decryptMessage(
+          cleanedSender.toStdString(), data, m_localDb, m_signalContext, m_storeContext);
 
-    signal_buffer *plaintext = nullptr;
-    int res = -1;
-
-    // We no longer rely on data[0] & 0x0F due to protocol differences making it ambiguous (evaluating to 3 for both types).
-    // Instead, we use a robust dynamic fallback mechanism: try standard SignalMessage first; if it fails, try PreKeySignalMessage.
-
-    signal_message *sm = nullptr;
-    int dRes = signal_message_deserialize(&sm, data.data(), data.size(), m_signalContext);
-    
-    if (dRes == 0 && sm) {
-        std::cerr << "[E2EE] Successfully recognized standard Signal Message." << std::endl;
-        res = session_cipher_decrypt_signal_message(cipher, sm, nullptr, &plaintext);
-        SIGNAL_UNREF(sm);
-    } else {
-        std::cerr << "[E2EE] Not a standard Signal Message (Error " << dRes << "). Defaulting to PreKey Message..." << std::endl;
-        
-        pre_key_signal_message *pm = nullptr;
-        dRes = pre_key_signal_message_deserialize(&pm, data.data(), data.size(), m_signalContext);
-        
-        if (dRes == 0 && pm) {
-            std::cerr << "[E2EE] Successfully recognized PreKey Signal Message." << std::endl;
-            res = session_cipher_decrypt_pre_key_signal_message(cipher, pm, nullptr, &plaintext);
-            SIGNAL_UNREF(pm);
-        } else {
-            std::stringstream hss;
-            for(size_t i=0; i < std::min((size_t)data.size(), (size_t)64); ++i) hss << std::hex << std::setw(2) << std::setfill('0') << (int)data[i] << " ";
-            std::cerr << "[E2EE] FATAL: FAILED to deserialize message as either protocol type.\n[E2EE] Hex dump: " << hss.str() << std::endl;
-            
-            // Only perform aggressive session wiping if BOTH parsing attempts fail with Protobuf/Protocol errors
-            if (dRes == -1100 || dRes == SG_ERR_INVALID_MESSAGE) {
-                std::cerr << "[E2EE] Critical validation error - Wiping stale session for '" << cleanedSender.toStdString() << "' to allow recovery." << std::endl;
-                std::string addrStr = cleanedSender.toStdString() + ":1";
-                m_localDb->deleteSession(addrStr);
-            }
-        }
-    }
-
-    if (res == 0 && plaintext) {
-        std::string decrypted(reinterpret_cast<const char*>(signal_buffer_data(plaintext)), signal_buffer_len(plaintext));
-        std::stringstream pss;
-        for(size_t i=0; i<std::min((size_t)decrypted.size(), (size_t)8); ++i) pss << std::hex << std::setw(2) << std::setfill('0') << (int)(unsigned char)decrypted[i] << " ";
-        std::cerr << "[E2EE] Message decrypted successfully. Len: " << decrypted.size() << " Hex prefix: " << pss.str() << std::endl;
-        
-        QString text = QString::fromStdString(decrypted);
+    if (decryptedText.has_value()) {
+        QString text = QString::fromStdString(decryptedText.value());
+        std::cerr << "[E2EE] Message decrypted successfully. Relaying to UI..." << std::endl;
         emit messageReceived(sender, text);
-        signal_buffer_free(plaintext);
-    } else if (res != -1) {
-        std::cerr << "[E2EE] Decryption FAILED for '" << sender.toStdString() << "'. Error: " << res << std::endl;
+    } else {
+        std::cerr << "[E2EE] FATAL: Crypto Provider rejected payload for '" << cleanedSender.toStdString() << "'." << std::endl;
     }
-
-    session_cipher_free(cipher);
 }
 
 void NetworkManager::handleGameStatusPacket(wizz::Packet &pkt) {

@@ -20,11 +20,23 @@ The heart of the server is `asio::io_context`. Instead of a "Thread-per-client" 
 Every connected user is encapsulated in a `ClientSession`, managed via `std::shared_ptr` and `std::enable_shared_from_this`.
 - **Memory Safety**: By binding a `shared_ptr` to async callbacks, we ensure the session object remains in RAM as long as an operation is pending, even if the user disconnects mid-packet.
 
-### 2.3 Database Isolation (Worker Queue)
-Disk I/O is slow. To prevent the main network loop from freezing during SQL queries, `DatabaseManager` utilizes dedicated background threads.
-1.  Asio loop receives a packets (e.g., Login).
-2.  Server posts a task to the **Database Worker**.
-3.  Database completes the query and **posts back** to the `io_context` to safely send the response via the network thread.
+### 2.3 Modular Database Architecture (Facade & DAO)
+Disk I/O is slow and business logic varies by domain. To maintain a responsive server, we utilize a **Facade Pattern** backed by domain-specific **Data Access Objects (DAOs)**.
+
+1.  **DatabaseManager (The Facade)**: Acts as the unified interface and orchestrator. It manages the `sqlite3` connection lifecycle and the background **Actor Model** worker thread.
+2.  **Domain DAOs**: SQL logic is partitioned into specialized classes to ensure the **Single Responsibility Principle**:
+    - **AuthDAO**: Handles user credentials, password hashing (SHA-256 + Salt), and registration.
+    - **SocialDAO**: Manages the social graph (Friends/Followers), message persistence, user avatars, and status messages.
+    - **CryptoDAO**: Manages the Zero-Knowledge E2EE key registry (Identity Keys and Pre-Key bundles).
+3.  **Task Orchestration**: 
+    - The Asio network loop posts a task (lambda) to the **DatabaseManager**.
+    - The Manager delegates the work to a background worker thread using the appropriate DAO.
+    - Upon completion, the result is **posted back** to the network `io_context` to safely dispatch the response.
+
+### 2.4 Data Normalization & Case-Sensitivity
+To maintain display aesthetics while preserving robust routing logic across components (Friends, E2EE keys, Logins), the system utilizes a **Dual-Layer Case Hierarchy**:
+- **Application Layer**: Usernames retain exactly the client's original casing strings (e.g., `Mr Krab`) for UI presentation.
+- **Data Layer**: All underlying relational SQL bounds map via `LOWER(USERNAME) = LOWER(?)`. This categorically locks maliciously identical names (e.g., `mr krab` vs `Mr Krab`) from colliding in the database, eliminating "User Not Found" lookup divergence.
 
 ---
 

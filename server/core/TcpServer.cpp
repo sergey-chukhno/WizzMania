@@ -187,19 +187,19 @@ void TcpServer::handleDisconnect(int sessionId) {
   MetricsManager::getInstance().decrement(MetricType::ActiveSessions);
   if (!username.empty()) {
     m_sessionManager.setUserOffline(username);
-    m_sessionManager.updateStatus(username, 3);
+    m_sessionManager.updateStatus(username, wizz::UserStatus::Offline);
     std::cout << "[Server] User Offline: " << username << std::endl;
     
     m_db.postTask([this, username]() {
-      auto followers = m_db.getFollowers(username);
-      auto friends = m_db.getFriends(username);
+      auto followers = m_db.social()->getFollowers(username);
+      auto friends = m_db.social()->getFriends(username);
 
       postResponse([
           this, username, followers = std::move(followers),
           friends = std::move(friends)]() {
 
         Packet notify(PacketType::ContactStatusChange);
-        notify.writeInt(3);
+        notify.writeInt(static_cast<uint32_t>(wizz::UserStatus::Offline));
         notify.writeString(username);
         notify.writeString("");
 

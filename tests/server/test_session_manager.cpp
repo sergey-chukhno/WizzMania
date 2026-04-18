@@ -48,9 +48,8 @@ TEST_F(SessionManagerTest, StatusUpdates) {
     ON_CALL(*session2, getUsername()).WillByDefault(::testing::Return("bob"));
     manager.setUserOnline("bob", session2.get(), "");
     
-    // Status (0=Online, 1=Away, 2=Busy, 3=Offline)
-    manager.updateStatus("bob", 1);
-    EXPECT_EQ(manager.getStatus("bob"), 1);
+    manager.updateStatus("bob", wizz::UserStatus::Away);
+    EXPECT_EQ(manager.getStatus("bob"), wizz::UserStatus::Away);
     
     manager.updateCustomStatus("bob", "At lunch");
     EXPECT_EQ(manager.getCustomStatus("bob"), "At lunch");

@@ -9,6 +9,12 @@
 #include <string>
 #include <thread>
 #include <vector>
+#include <memory>
+
+#include "DatabaseTypes.h"
+#include "AuthDAO.h"
+#include "SocialDAO.h"
+#include "CryptoDAO.h"
 
 namespace wizz {
 
@@ -20,78 +26,31 @@ public:
   // Actor Model: Enqueue task for background DB thread
   void postTask(std::function<void()> task);
 
-  // Prevent copy (Single connection ideally, or manage strictly)
+  // Prevent copy
   DatabaseManager(const DatabaseManager &) = delete;
   DatabaseManager &operator=(const DatabaseManager &) = delete;
 
   // Core Logic
-  bool init(); // Creates tables if not exist
+  bool init(); // Creates tables and initializes DAOs
 
-  // User Management
-  bool createUser(const std::string &username, const std::string &password);
-  bool checkCredentials(const std::string &username,
-                        const std::string &password);
-
-  // Avatar Management
-  bool updateUserAvatar(const std::string &username,
-                        const std::string &avatarPath);
-  std::string getUserAvatar(const std::string &username);
-
-  // Message Persistence
-  struct StoredMessage {
-    int id;
-    std::string sender;
-    std::string body;
-    std::string timestamp;
-  };
-
-  // Stores a message (Offline or History)
-  bool storeMessage(const std::string &sender, const std::string &recipient,
-                    const std::string &body, bool isDelivered);
-
-  // Retrieves undelivered messages for a user
-  std::vector<StoredMessage> fetchPendingMessages(const std::string &recipient);
-
-  // Marks a list of message IDs as delivered
-  void markAsDelivered(int msgId);
-
-  // Contact Management (Day 6)
-  int addFriend(const std::string &username, const std::string &friendName);
-  bool removeFriend(const std::string &username, const std::string &friendName);
-  std::vector<std::string> getFriends(const std::string &username);
-  std::vector<std::string> getFollowers(const std::string &username);
-
-  // E2E Encryption Key Registry (Zero-Knowledge Relay)
-  struct PreKeyBundle {
-    std::string identityKey;
-    std::string signedPreKey;
-    std::string signedPreKeySignature;
-    int registrationId;
-    int oneTimeKeyId; // -1 if exhausted
-    std::string oneTimeKey; // empty if exhausted
-  };
-
-  bool storeUserKeys(const std::string &username, const std::string &identityKey,
-                     const std::string &signedPreKey, const std::string &signature, int registrationId);
-  bool storeOneTimeKeys(const std::string &username, const std::vector<std::pair<int, std::string>> &otks);
-  bool clearUserKeys(const std::string &username);
-  PreKeyBundle fetchPreKeyBundle(const std::string &username);
-
-  // Status Management
-  bool updateCustomStatus(const std::string &username, const std::string &status);
-  std::string getCustomStatus(const std::string &username);
+  // Facade Accessors
+  AuthDAO* auth() const { return m_authDAO.get(); }
+  SocialDAO* social() const { return m_socialDAO.get(); }
+  CryptoDAO* crypto() const { return m_cryptoDAO.get(); }
 
 private:
   void workerLoop();
-
-  std::string hashPassword(const std::string &password,
-                           const std::string &salt);
-  std::string generateSalt();
 
 private:
   std::string m_dbPath;
   sqlite3 *m_db;
 
+  // DAOs
+  std::unique_ptr<AuthDAO> m_authDAO;
+  std::unique_ptr<SocialDAO> m_socialDAO;
+  std::unique_ptr<CryptoDAO> m_cryptoDAO;
+
+  // Background Processing
   std::thread m_workerThread;
   std::queue<std::function<void()>> m_tasks;
   std::mutex m_mutex;

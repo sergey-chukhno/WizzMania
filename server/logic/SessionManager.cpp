@@ -5,6 +5,7 @@
 #include <cctype>
 #include <iostream>
 
+
 namespace wizz {
 
 static std::string normalize(const std::string& str) {
@@ -15,45 +16,49 @@ static std::string normalize(const std::string& str) {
 }
 
 void SessionManager::addSession(int sessionId, std::shared_ptr<ClientSession> session) {
-  std::lock_guard<std::recursive_mutex> lock(m_mutex);
+  std::lock_guard<std::mutex> lock(m_mutex);
   m_sessions[sessionId] = std::move(session);
 }
 
 void SessionManager::removeSession(int sessionId) {
-  std::lock_guard<std::recursive_mutex> lock(m_mutex);
+  std::lock_guard<std::mutex> lock(m_mutex);
   auto it = m_sessions.find(sessionId);
   if (it != m_sessions.end()) {
     // If this session was tied to a user, remove them from the phonebook too
     auto username = it->second->getUsername();
     if (!username.empty()) {
-        setUserOffline(normalize(username));
+        std::string normalized = normalize(username);
+        m_onlineUsers.erase(normalized);
+        m_userStatuses.erase(normalized);
+        m_customStatuses.erase(normalized);
+        std::cout << "[SessionManager] User Offline (inline): " << username << " (normalized: " << normalized << ")" << std::endl;
     }
     m_sessions.erase(it);
   }
 }
 
 ClientSession* SessionManager::getSessionById(int sessionId) const {
-  std::lock_guard<std::recursive_mutex> lock(m_mutex);
+  std::lock_guard<std::mutex> lock(m_mutex);
   auto it = m_sessions.find(sessionId);
   return (it != m_sessions.end()) ? it->second.get() : nullptr;
 }
 
 size_t SessionManager::getActiveSessionCount() const {
-  std::lock_guard<std::recursive_mutex> lock(m_mutex);
+  std::lock_guard<std::mutex> lock(m_mutex);
   return m_sessions.size();
 }
 
 void SessionManager::setUserOnline(const std::string& username, ClientSession* session, const std::string& customStatus) {
-  std::lock_guard<std::recursive_mutex> lock(m_mutex);
+  std::lock_guard<std::mutex> lock(m_mutex);
   std::string normalized = normalize(username);
   m_onlineUsers[normalized] = session;
-  m_userStatuses[normalized] = 0; // Default to Online
+  m_userStatuses[normalized] = UserStatus::Online; // Default to Online
   m_customStatuses[normalized] = customStatus;
   std::cout << "[SessionManager] User Online: " << username << " (normalized: " << normalized << ") Status: 0" << std::endl;
 }
 
 void SessionManager::setUserOffline(const std::string& username) {
-  std::lock_guard<std::recursive_mutex> lock(m_mutex);
+  std::lock_guard<std::mutex> lock(m_mutex);
   std::string normalized = normalize(username);
   m_onlineUsers.erase(normalized);
   m_userStatuses.erase(normalized);
@@ -62,48 +67,48 @@ void SessionManager::setUserOffline(const std::string& username) {
 }
 
 ClientSession* SessionManager::getSessionByUsername(const std::string& username) const {
-  std::lock_guard<std::recursive_mutex> lock(m_mutex);
+  std::lock_guard<std::mutex> lock(m_mutex);
   auto it = m_onlineUsers.find(normalize(username));
   return (it != m_onlineUsers.end()) ? it->second : nullptr;
 }
 
 bool SessionManager::isUserOnline(const std::string& username) const {
-  std::lock_guard<std::recursive_mutex> lock(m_mutex);
+  std::lock_guard<std::mutex> lock(m_mutex);
   return m_onlineUsers.find(normalize(username)) != m_onlineUsers.end();
 }
 
-void SessionManager::updateStatus(const std::string& username, int status) {
-  std::lock_guard<std::recursive_mutex> lock(m_mutex);
+void SessionManager::updateStatus(const std::string& username, UserStatus status) {
+  std::lock_guard<std::mutex> lock(m_mutex);
   std::string normalized = normalize(username);
-  if (isUserOnline(normalized)) {
+  if (m_onlineUsers.find(normalized) != m_onlineUsers.end()) {
     m_userStatuses[normalized] = status;
   }
 }
 
-int SessionManager::getStatus(const std::string& username) const {
-  std::lock_guard<std::recursive_mutex> lock(m_mutex);
+UserStatus SessionManager::getStatus(const std::string& username) const {
+  std::lock_guard<std::mutex> lock(m_mutex);
   std::string normalized = normalize(username);
   auto it = m_userStatuses.find(normalized);
-  return (it != m_userStatuses.end()) ? it->second : 3; // 3 = Offline
+  return (it != m_userStatuses.end()) ? it->second : UserStatus::Offline;
 }
 
 void SessionManager::updateCustomStatus(const std::string& username, const std::string& customStatus) {
-  std::lock_guard<std::recursive_mutex> lock(m_mutex);
+  std::lock_guard<std::mutex> lock(m_mutex);
   std::string normalized = normalize(username);
-  if (isUserOnline(normalized)) {
+  if (m_onlineUsers.find(normalized) != m_onlineUsers.end()) {
     m_customStatuses[normalized] = customStatus;
   }
 }
 
 std::string SessionManager::getCustomStatus(const std::string& username) const {
-  std::lock_guard<std::recursive_mutex> lock(m_mutex);
+  std::lock_guard<std::mutex> lock(m_mutex);
   std::string normalized = normalize(username);
   auto it = m_customStatuses.find(normalized);
   return (it != m_customStatuses.end()) ? it->second : "";
 }
 
 std::vector<ClientSession*> SessionManager::getAllOnlineSessions() const {
-  std::lock_guard<std::recursive_mutex> lock(m_mutex);
+  std::lock_guard<std::mutex> lock(m_mutex);
   std::vector<ClientSession*> sessions;
   sessions.reserve(m_onlineUsers.size());
   for (const auto& [name, session] : m_onlineUsers) {
@@ -113,7 +118,7 @@ std::vector<ClientSession*> SessionManager::getAllOnlineSessions() const {
 }
 
 std::vector<std::string> SessionManager::getAllOnlineUsernames() const {
-  std::lock_guard<std::recursive_mutex> lock(m_mutex);
+  std::lock_guard<std::mutex> lock(m_mutex);
   std::vector<std::string> names;
   names.reserve(m_onlineUsers.size());
   for (const auto& [name, session] : m_onlineUsers) {
