@@ -32,7 +32,7 @@ void LoginHandler::handle(ClientSession* session, Packet& packet) {
     int sessionId = session->getId();
 
     server->getDb().postTask([server, username, password, sessionId]() {
-        bool ok = server->getDb().checkCredentials(username, password);
+        bool ok = server->getDb().auth()->checkCredentials(username, password);
         if (!ok) {
             server->postResponse([server, sessionId]() {
                 ClientSession *s = server->getSession(sessionId);
@@ -45,13 +45,13 @@ void LoginHandler::handle(ClientSession* session, Packet& packet) {
             return;
         }
 
-        auto pending = server->getDb().fetchPendingMessages(username);
+        auto pending = server->getDb().social()->fetchPendingMessages(username);
         for (const auto &msg : pending) {
-            server->getDb().markAsDelivered(msg.id);
+            server->getDb().social()->markAsDelivered(msg.id);
         }
-        auto followers = server->getDb().getFollowers(username);
-        auto friends = server->getDb().getFriends(username);
-        auto dbCustomStatus = server->getDb().getCustomStatus(username);
+        auto followers = server->getDb().social()->getFollowers(username);
+        auto friends = server->getDb().social()->getFriends(username);
+        auto dbCustomStatus = server->getDb().social()->getCustomStatus(username);
 
         server->postResponse([server, username, sessionId, 
                                customStatus = std::move(dbCustomStatus),
@@ -106,9 +106,9 @@ void LoginHandler::handle(ClientSession* session, Packet& packet) {
                 bool isInterested = (contactSet.find(normalize(onlineUser)) != contactSet.end());
                 
                 if (isInterested) {
-                    int status = server->getSessionManager().getStatus(onlineUser);
+                    wizz::UserStatus status = server->getSessionManager().getStatus(onlineUser);
                     Packet notify(PacketType::ContactStatusChange);
-                    notify.writeInt(status);
+                    notify.writeInt(static_cast<uint32_t>(status));
                     notify.writeString(onlineUser);
                     notify.writeString(server->getSessionManager().getCustomStatus(onlineUser));
                     s->sendPacket(notify);
@@ -183,7 +183,7 @@ void RegisterHandler::handle(ClientSession* session, Packet& packet) {
     int sessionId = session->getId();
 
     server->getDb().postTask([server, sessionId, username, password]() {
-        bool ok = server->getDb().createUser(username, password);
+        bool ok = server->getDb().auth()->createUser(username, password);
 
         server->postResponse([server, sessionId, username, ok]() {
             ClientSession *s = server->getSession(sessionId);

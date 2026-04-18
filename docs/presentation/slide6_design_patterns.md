@@ -3,23 +3,28 @@
 ## 1. Feature Overview
 This slide is the "Senior Engineer" heart of the presentation. It lists 6 major design patterns that make WizzMania maintainable, scalable, and professional.
 
-## 2. How it Works (The 6 Patterns)
+## 2. How it Works (The Patterns)
 1. **Command Pattern**: Decouples "What to do" (The Handler) from "Who sends it" (The Router).
 2. **Service Layer**: Aggregates business logic (Session management) away from infrastructure (TCP).
 3. **Actor Model**: Ensures thread-safety for data persistence (The Database worker).
-4. **Adapter / Bridge**: Connects "Alien" systems (POSIX SHM) to "Native" systems (Qt Signals).
-5. **Observer Pattern**: The core of Qt (Signals/Slots).
-6. **Singleton Pattern**: Ensures a single source of truth for the global connection.
+4. **Facade Pattern**: The `DatabaseManager` acts as a simplified entry point to modular sub-systems.
+5. **Data Access Objects (DAO)**: Domain-specific classes (`Auth`, `Social`, `Crypto`) that encapsulate SQL complexity.
+6. **Adapter / Bridge**: Connects "Alien" systems (POSIX SHM) to "Native" systems (Qt Signals).
+7. **Observer Pattern**: The core of Qt (Signals/Slots).
+8. **Singleton Pattern**: Ensures a single source of truth for the global connection.
 
 ## 3. Why This Code (Rationale)
 We apply **SOLID Principles**:
-- **S (Single Responsibility)**: `TcpServer` only accepts. `PacketRouter` only routes.
-- **O (Open/Closed)**: We can add a "Video Call" feature by adding a new `VideoHandler` without changing a single line of `TcpServer.cpp`.
-- **D (Dependency Inversion)**: `GameBridge` depends on an abstraction (`NativeSharedMemory`), not a concrete game implementation.
+- **S (Single Responsibility)**: `TcpServer` only accepts. `AuthDAO` only authenticates.
+- **O (Open/Closed)**: We can add a "GameDAO" for persistence without touching `AuthDAO.cpp`.
+- **D (Dependency Inversion)**: Handlers depend on the `DatabaseManager` facade, not raw SQL queries.
 
 ## 4. How the Code Implements This
 ### `PacketRouter::registerHandler`
-Instead of a 500-line `switch` statement, we have a `std::unordered_map<PacketType, std::unique_ptr<IPacketHandler>>`. This is the **Command Pattern**. It allows us to unit test each handler in total isolation (see Slide 10).
+Instead of a 500-line `switch` statement, we have a `std::unordered_map<PacketType, std::unique_ptr<IPacketHandler>>`. This is the **Command Pattern**. It allows us to unit test each handler in total isolation.
+
+### `DatabaseManager` (Facade + DAOs)
+By splitting the database into `AuthDAO`, `SocialDAO`, and `CryptoDAO`, we ensure that a bug in messaging doesn't corrupt the authentication logic. The `DatabaseManager` exposes these via clean accessors (`auth()`, `social()`, `crypto()`), hiding the internal complexity.
 ### `NetworkManager::instance()` (Meyer's Singleton)
 Ensures thread-safe initialization. Notice the `moveToThread` call—this ensures the singleton's events happen on the correctly assigned worker thread.
 

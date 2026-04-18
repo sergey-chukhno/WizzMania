@@ -35,63 +35,62 @@ void UploadPreKeysHandler::handle(ClientSession* session, Packet& pkt) {
         otks.push_back({id, pub});
     }
 
-    auto& db = session->getServer()->getDb();
-    
+    auto* server = session->getServer();
     std::string username = normalize(session->getUsername());
+    
     // Post DB access to background worker thread
-    db.postTask([&db, username, identityKey, signedPreKey, signature, registrationId, otks, session]() {
-        db.clearUserKeys(username);
-        bool ok1 = db.storeUserKeys(username, identityKey, signedPreKey, signature, registrationId);
-        bool ok2 = db.storeOneTimeKeys(username, otks);
+    server->getDb().postTask([server, username, identityKey, signedPreKey, signature, registrationId, otks, session]() {
+        server->getDb().crypto()->clearUserKeys(username);
+        bool ok1 = server->getDb().crypto()->storeUserKeys(username, identityKey, signedPreKey, signature, registrationId);
+        bool ok2 = server->getDb().crypto()->storeOneTimeKeys(username, otks);
             
-            if (ok1 && ok2) {
-                // Post network response back to networking thread safely
-                session->getServer()->postResponse([session]() {
-                    Packet ack(PacketType::PreKeysUploaded);
-                    session->sendPacket(ack);
-                });
-                std::cout << "[Crypto] Keys uploaded for " << username << " (" << otks.size() << " OTKs)" << std::endl;
-            }
-        });
-    }
+        if (ok1 && ok2) {
+            // Post network response back to networking thread safely
+            server->postResponse([session]() {
+                Packet ack(PacketType::PreKeysUploaded);
+                session->sendPacket(ack);
+            });
+            std::cout << "[Crypto] Keys uploaded for " << username << " (" << otks.size() << " OTKs)" << std::endl;
+        }
+    });
+}
 
 void FetchPreKeyBundleHandler::handle(ClientSession* session, Packet& pkt) {
     if (!session || !session->getServer() || session->getUsername().empty()) return;
 
     std::string targetUsername = normalize(pkt.readString());
-    
-    auto& db = session->getServer()->getDb();
+    auto* server = session->getServer();
     
     // DB worker thread lookup
-    db.postTask([&db, targetUsername, session]() {
-        auto bundle = db.fetchPreKeyBundle(targetUsername);
+    server->getDb().postTask([server, targetUsername, session]() {
+        auto bundle = server->getDb().crypto()->fetchPreKeyBundle(targetUsername);
             
-            // Post result back to async networking thread
-            session->getServer()->postResponse([targetUsername, bundle, session]() {
-                if (bundle.identityKey.empty()) {
-                    std::cerr << "[Crypto] WARNING: Requested bundle for " << targetUsername << " is EMPTY. User has not uploaded keys!" << std::endl;
-                }
-                
-                Packet res(PacketType::PreKeyBundleResponse);
-                res.writeString(targetUsername);
-                
-                // Binary write for raw cryptographic material
-                res.writeData(reinterpret_cast<const uint8_t*>(bundle.identityKey.data()), bundle.identityKey.size());
-                res.writeData(reinterpret_cast<const uint8_t*>(bundle.signedPreKey.data()), bundle.signedPreKey.size());
-                res.writeData(reinterpret_cast<const uint8_t*>(bundle.signedPreKeySignature.data()), bundle.signedPreKeySignature.size());
-                
-                res.writeInt(bundle.registrationId);
-                res.writeInt(bundle.oneTimeKeyId);
-                
-                // OTK might be empty if exhausted
-                if (!bundle.oneTimeKey.empty()) {
-                    res.writeData(reinterpret_cast<const uint8_t*>(bundle.oneTimeKey.data()), bundle.oneTimeKey.size());
-                } else {
-                    res.writeData(nullptr, 0);
-                }
-                
-                session->sendPacket(res);
-            });
+        // Post result back to async networking thread
+        server->postResponse([targetUsername, bundle, session]() {
+            if (bundle.identityKey.empty()) {
+                std::cerr << "[Crypto] WARNING: Requested bundle for " << targetUsername << " is EMPTY. User has not uploaded keys!" << std::endl;
+            }
+            
+            Packet res(PacketType::PreKeyBundleResponse);
+            res.writeString(targetUsername);
+            
+            // Binary write for raw cryptographic material
+            res.writeData(reinterpret_cast<const uint8_t*>(bundle.identityKey.data()), bundle.identityKey.size());
+            res.writeData(reinterpret_cast<const uint8_t*>(bundle.signedPreKey.data()), bundle.signedPreKey.size());
+            res.writeData(reinterpret_cast<const uint8_t*>(bundle.signedPreKeySignature.data()), bundle.signedPreKeySignature.size());
+            
+            res.writeInt(bundle.registrationId);
+            res.writeInt(bundle.oneTimeKeyId);
+            
+            // OTK might be empty if exhausted
+            if (!bundle.oneTimeKey.empty()) {
+                res.writeData(reinterpret_cast<const uint8_t*>(bundle.oneTimeKey.data()), bundle.oneTimeKey.size());
+            } else {
+                res.writeData(nullptr, 0);
+            }
+            
+            session->sendPacket(res);
+        });
         std::cout << "[Crypto] Dispatched Key Bundle of " << targetUsername << " to " << session->getUsername() << std::endl;
     });
 }

@@ -55,7 +55,7 @@ void E2EMessageHandler::handle(ClientSession* session, Packet& packet) {
     std::string stringifiedBlob(reinterpret_cast<const char*>(cipherBlob.data()), cipherBlob.size());
     
     server->getDb().postTask([server, senderName = session->getUsername(), targetUser, stringifiedBlob, delivered]() {
-        server->getDb().storeMessage(senderName, targetUser, stringifiedBlob, delivered);
+        server->getDb().social()->storeMessage(senderName, targetUser, stringifiedBlob, delivered);
     });
 }
 
@@ -67,7 +67,7 @@ void NudgeHandler::handle(ClientSession* session, Packet& packet) {
     TcpServer* server = session->getServer();
     if (!server) return;
 
-    int status = server->getSessionManager().getStatus(targetUser);
+    wizz::UserStatus status = server->getSessionManager().getStatus(targetUser);
     ClientSession *targetSession = server->getSessionManager().getSessionByUsername(targetUser);
     bool isOnline = (targetSession != nullptr);
 
@@ -77,7 +77,7 @@ void NudgeHandler::handle(ClientSession* session, Packet& packet) {
         session->sendPacket(err);
         return;
     }
-    if (status == 2) { // Busy
+    if (status == wizz::UserStatus::Busy) { // Busy
         Packet err(PacketType::Error);
         err.writeString("User " + targetUser + " is busy and cannot be nudged.");
         session->sendPacket(err);
@@ -125,7 +125,7 @@ void VoiceMessageHandler::handle(ClientSession* session, Packet& packet) {
     } else {
         std::string proxyMsg = "VOICE:" + std::to_string(duration) + ":" + filepath;
         server->getDb().postTask([server, senderName = session->getUsername(), targetUser, proxyMsg]() {
-            server->getDb().storeMessage(senderName, targetUser, proxyMsg, false);
+            server->getDb().social()->storeMessage(senderName, targetUser, proxyMsg, false);
         });
     }
 }
@@ -162,11 +162,11 @@ void StatusChangeHandler::handle(ClientSession* session, Packet& packet) {
     if (!server) return;
 
     std::string username = session->getUsername();
-    server->getSessionManager().updateStatus(username, newStatus);
+    server->getSessionManager().updateStatus(username, static_cast<wizz::UserStatus>(newStatus));
 
     server->getDb().postTask([server, username, newStatus]() {
-        auto followers = server->getDb().getFollowers(username);
-        auto friends = server->getDb().getFriends(username);
+        auto followers = server->getDb().social()->getFollowers(username);
+        auto friends = server->getDb().social()->getFriends(username);
 
         server->postResponse([server, username, newStatus, followers = std::move(followers), friends = std::move(friends)]() {
             std::string customStatus = server->getSessionManager().getCustomStatus(username);
@@ -200,16 +200,16 @@ void UpdateStatusHandler::handle(ClientSession* session, Packet& packet) {
     server->getSessionManager().updateCustomStatus(username, statusMsg);
 
     server->getDb().postTask([server, username, statusMsg]() {
-        server->getDb().updateCustomStatus(username, statusMsg);
-        auto followers = server->getDb().getFollowers(username);
-        auto friends = server->getDb().getFriends(username);
+        server->getDb().social()->updateCustomStatus(username, statusMsg);
+        auto followers = server->getDb().social()->getFollowers(username);
+        auto friends = server->getDb().social()->getFriends(username);
 
         server->postResponse([server, username, statusMsg, followers = std::move(followers), friends = std::move(friends)]() {
             std::set<std::string> contacts;
             for (const auto &f : followers) contacts.insert(f);
             for (const auto &f : friends) contacts.insert(f);
 
-            int currentStatus = server->getSessionManager().getStatus(username);
+            wizz::UserStatus currentStatus = server->getSessionManager().getStatus(username);
             Packet notify(PacketType::ContactStatusChange);
             notify.writeInt(static_cast<uint32_t>(currentStatus));
             notify.writeString(username);
@@ -249,8 +249,8 @@ void UpdateAvatarHandler::handle(ClientSession* session, Packet& packet) {
     outfile.close();
 
     server->getDb().postTask([server, username, filepath, data]() {
-        if (server->getDb().updateUserAvatar(username, filepath)) {
-            auto friends = server->getDb().getFriends(username);
+        if (server->getDb().social()->updateUserAvatar(username, filepath)) {
+            auto friends = server->getDb().social()->getFriends(username);
             server->postResponse([server, username, friends = std::move(friends), data]() {
                 for (const auto &friendName : friends) {
                     ClientSession *targetSession = server->getSessionManager().getSessionByUsername(friendName);
@@ -277,7 +277,7 @@ void GetAvatarHandler::handle(ClientSession* session, Packet& packet) {
     int sessionId = session->getId();
 
     server->getDb().postTask([server, sessionId, targetUser]() {
-        std::string filepath = server->getDb().getUserAvatar(targetUser);
+        std::string filepath = server->getDb().social()->getUserAvatar(targetUser);
         std::vector<uint8_t> buffer;
         if (!filepath.empty() && std::filesystem::exists(std::filesystem::path(filepath))) {
             std::ifstream infile(filepath, std::ios::binary | std::ios::ate);
@@ -313,9 +313,9 @@ void AddContactHandler::handle(ClientSession* session, Packet& packet) {
     std::string username = session->getUsername();
 
     server->getDb().postTask([server, sessionId, username, targetUser]() {
-        int status = server->getDb().addFriend(username, targetUser);
+        int status = server->getDb().social()->addFriend(username, targetUser);
         std::vector<std::string> friends;
-        if (status == 0) friends = server->getDb().getFriends(username);
+        if (status == 0) friends = server->getDb().social()->getFriends(username);
 
         server->postResponse([server, sessionId, status, friends = std::move(friends)]() {
             ClientSession *s = server->getSession(sessionId);
@@ -353,9 +353,9 @@ void RemoveContactHandler::handle(ClientSession* session, Packet& packet) {
     std::string username = session->getUsername();
 
     server->getDb().postTask([server, sessionId, username, targetUser]() {
-        bool ok = server->getDb().removeFriend(username, targetUser);
+        bool ok = server->getDb().social()->removeFriend(username, targetUser);
         std::vector<std::string> friends;
-        if (ok) friends = server->getDb().getFriends(username);
+        if (ok) friends = server->getDb().social()->getFriends(username);
 
         server->postResponse([server, sessionId, ok, friends = std::move(friends)]() {
             ClientSession *s = server->getSession(sessionId);

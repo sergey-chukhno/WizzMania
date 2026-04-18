@@ -8,6 +8,9 @@ add_library(wizz_server_lib STATIC
     core/TcpServer.cpp
     core/ClientSession.cpp
     data/DatabaseManager.cpp
+    data/AuthDAO.cpp
+    data/SocialDAO.cpp
+    data/CryptoDAO.cpp
     logic/SessionManager.cpp
     logic/GameRoomManager.cpp
     logic/handlers/PacketRouter.cpp

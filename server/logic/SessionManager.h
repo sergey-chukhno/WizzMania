@@ -5,6 +5,7 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
+#include "../common/Packet.h"
 
 namespace wizz {
 
@@ -27,9 +28,9 @@ public:
   ClientSession* getSessionByUsername(const std::string& username) const;
   bool isUserOnline(const std::string& username) const;
 
-  // Status Management (0=Online, 1=Away, 2=Busy, 3=Offline)
-  void updateStatus(const std::string& username, int status);
-  int getStatus(const std::string& username) const;
+  // Status Management
+  void updateStatus(const std::string& username, UserStatus status);
+  UserStatus getStatus(const std::string& username) const;
 
   void updateCustomStatus(const std::string& username, const std::string& customStatus);
   std::string getCustomStatus(const std::string& username) const;
@@ -39,13 +40,13 @@ public:
   std::vector<std::string> getAllOnlineUsernames() const;
 
 private:
-  mutable std::recursive_mutex m_mutex;
+  mutable std::mutex m_mutex;
   // Prevents shared_ptr lifecycle drops during async I/O
   std::unordered_map<int, std::shared_ptr<ClientSession>> m_sessions;
   
   // Active user mapping
   std::unordered_map<std::string, ClientSession*> m_onlineUsers;
-  std::unordered_map<std::string, int> m_userStatuses;
+  std::unordered_map<std::string, UserStatus> m_userStatuses;
   std::unordered_map<std::string, std::string> m_customStatuses;
 };
 

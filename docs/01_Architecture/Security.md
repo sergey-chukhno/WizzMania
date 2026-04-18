@@ -23,6 +23,7 @@ WizzMania provides **Zero-Knowledge** operational integrity. Even if the TLS lay
 We implement the Signal Protocol (`libsignal-protocol-c`) to provide:
 - **Perfect Forward Secrecy**: Every message uses a unique, ratcheted key. Compromising one key does not reveal past or future messages.
 - **Asynchronicity**: Users can establish a secure session even if the recipient is offline by fetching **PreKey Bundles** from the server.
+- **Dynamic Deserialization Pipeline**: Due to Protocol Buffer tag overlaps where `data[0] & 0xF == 3` ambiguously maps to Handshakes and Standard Messages, the client uses a fault-tolerant multi-pass deserializer. It natively tries to parse standard `SignalMessage` blobs first, safely falling back to `PreKeySignalMessage` upon Protobuf parsing failure. This explicitly prevents false Protobuf errors (`-1100`) from erroneously triggering session teardowns.
 
 ### 2.2 Blind Relay Model
 The server acts as a **Blind Relay**. It facilitates the exchange of public key bundles and forwards `E2EMessage` blobs without ever possessing the private keys needed to decrypt them.

@@ -9,6 +9,8 @@
 #include <QDebug>
 #include <vector>
 #include <session_pre_key.h>
+#include <session_cipher.h>
+#include <protocol.h>
 
 namespace wizz {
 namespace client {
@@ -351,6 +353,55 @@ bool initializeLocalKeys(signal_context* global_context, LocalDatabase* db) {
     SIGNAL_UNREF(identityPair);
 
     return true;
+}
+std::optional<std::string> decryptMessage(const std::string& sender, const std::vector<uint8_t>& payload, 
+LocalDatabase* localDb,
+signal_context* globalContext, 
+signal_protocol_store_context* storeContext) {
+    
+    if (payload.empty()) return std::nullopt;
+
+    const signal_protocol_address address = {sender.c_str(), static_cast<size_t> (sender.length()), 1};
+
+    session_cipher *cipher = nullptr;
+    session_cipher_create(&cipher, storeContext, &address, globalContext); 
+
+    signal_buffer *plaintext = nullptr; 
+    int res = -1; 
+
+    //Phase 1: Try Native SignalMessage
+    signal_message *sm = nullptr; 
+    int dRes = signal_message_deserialize(&sm, payload.data(), payload.size(), globalContext); 
+
+    if (dRes == 0 && sm) {
+        res = session_cipher_decrypt_signal_message(cipher, sm, nullptr, &plaintext);
+        SIGNAL_UNREF(sm);
+    } else {
+        pre_key_signal_message *pm = nullptr;
+        dRes = pre_key_signal_message_deserialize(&pm, payload.data(), payload.size(), globalContext);
+        
+        if (dRes == 0 && pm) {
+            res = session_cipher_decrypt_pre_key_signal_message(cipher, pm, nullptr, &plaintext);
+            SIGNAL_UNREF(pm);
+        } else {
+            // Fatal Rejection: Wipe invalid channel
+            if (dRes == -1100 || dRes == SG_ERR_INVALID_MESSAGE) {
+                std::string addStr = sender + ":1";
+                localDb->deleteSession(addStr);
+            }
+        }
+    }
+        
+    session_cipher_free(cipher); 
+    
+    if (res == 0 && plaintext) {
+        std::string decrypted(reinterpret_cast<const char*>(signal_buffer_data(plaintext)), 
+                              signal_buffer_len(plaintext));
+        signal_buffer_free(plaintext);
+        return decrypted;
+    }
+    
+    return std::nullopt;
 }
 
 } // namespace crypto
