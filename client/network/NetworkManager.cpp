@@ -539,6 +539,23 @@ void NetworkManager::sendGameStatus(const QString &gameName, uint32_t score) {
   sendPacket(pkt);
 }
 
+void NetworkManager::sendRichPresence(int type, const QString &activityName,
+                                      const QString &activityDetail) {
+  if (QThread::currentThread() != this->thread()) {
+    QMetaObject::invokeMethod(this, "sendRichPresence", Qt::QueuedConnection,
+                              Q_ARG(int, type), Q_ARG(QString, activityName),
+                              Q_ARG(QString, activityDetail));
+    return;
+  }
+  if (!isConnected()) return;
+
+  wizz::Packet pkt(wizz::PacketType::RichStatusUpdate);
+  pkt.writeInt(static_cast<uint32_t>(type));
+  pkt.writeString(activityName.toStdString());
+  pkt.writeString(activityDetail.toStdString());
+  sendPacket(pkt);
+}
+
 void NetworkManager::sendGameInvite(const QString &target,
                                     const QString &gameName) {
   if (QThread::currentThread() != this->thread()) {
@@ -669,6 +686,9 @@ void NetworkManager::registerHandlers() {
   };
   m_packetHandlers[wizz::PacketType::E2EMessage] = [this](wizz::Packet &pkt) {
     handleE2EMessagePacket(pkt);
+  };
+  m_packetHandlers[wizz::PacketType::RichStatusUpdate] = [this](wizz::Packet &pkt) {
+    handleRichStatusUpdatePacket(pkt);
   };
 }
 
@@ -925,4 +945,13 @@ void NetworkManager::purgeParticipantState(const QString &target) {
 
 QString NetworkManager::normalizeUsername(const QString &username) {
     return username.trimmed().toLower();
+}
+
+void NetworkManager::handleRichStatusUpdatePacket(wizz::Packet &pkt) {
+    QString username = QString::fromStdString(pkt.readString());
+    int type = static_cast<int>(pkt.readInt());
+    QString name = QString::fromStdString(pkt.readString());
+    QString detail = QString::fromStdString(pkt.readString());
+    
+    emit richPresenceReceived(username, type, name, detail);
 }

@@ -59,6 +59,7 @@ public slots:
                               const QString &gameName, bool accepted);
   void sendGameMove(const QString &roomId, uint8_t cellIndex);
   void sendEncryptedMessage(const QString &target, const QString &text);
+  void sendRichPresence(int type, const QString &activityName, const QString &activityDetail);
 
 signals:
   // Status Signals
@@ -88,6 +89,7 @@ signals:
   void gameStartReceived(const QString &gameName, const QString &roomId,
                          char symbol, const QString &opponent);
   void gameMoveReceived(const QString &roomId, uint8_t cellIndex);
+  void richPresenceReceived(const QString &username, int type, const QString &name, const QString &detail);
 
 private slots:
   void onSocketConnected();
@@ -146,6 +148,7 @@ private:
   void handleGameMovePacket(wizz::Packet &pkt);
   void handlePreKeyBundleResponse(wizz::Packet &pkt);
   void handleE2EMessagePacket(wizz::Packet &pkt);
+  void handleRichStatusUpdatePacket(wizz::Packet &pkt);
   void doSendEncryptedMessage(const signal_protocol_address* address, const QString& target, const QString& text);
   void purgeParticipantState(const QString &target);
   QString normalizeUsername(const QString &username);

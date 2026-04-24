@@ -17,6 +17,9 @@ public:
 signals:
   void addRequested(const QString &username);
 
+protected:
+  void paintEvent(QPaintEvent *event) override;
+
 private slots:
   void onAddClicked();
   void onWatchdogTimeout();

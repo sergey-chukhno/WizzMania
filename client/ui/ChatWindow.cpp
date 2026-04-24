@@ -1,5 +1,7 @@
 #include "ChatWindow.h"
 #include "../network/NetworkManager.h"
+#include "theme/ThemeEngine.h"
+#include "widgets/TitleBar.h"
 #include <QApplication>
 #include <QDateTime>
 #include <QDebug>
@@ -104,9 +106,9 @@ ChatWindow::ChatWindow(const QString &partnerName, const QPoint &initialPos,
           [this](const QString &sender, bool isTyping) {
             if (sender == m_partnerName) {
               if (isTyping) {
-                m_typingLabel->setText(sender + " is typing...");
+                m_typingBubble->startAnimation();
               } else {
-                m_typingLabel->setText("");
+                m_typingBubble->stopAnimation();
               }
             }
           });
@@ -125,43 +127,129 @@ void ChatWindow::paintEvent(QPaintEvent *event) {
   QPainter painter(this);
   painter.setRenderHint(QPainter::Antialiasing);
 
-  // Rounded Path
-  QPainterPath path;
-  path.addRoundedRect(rect(), 20, 20);
+  const int shadowMargin = 10;
+  QRect windowRect = rect().adjusted(shadowMargin, shadowMargin, -shadowMargin, -shadowMargin);
 
-  // Clip to rounded rect
-  painter.setClipPath(path);
-
-  if (!m_background.isNull()) {
-    // Fill with scaled background
-    painter.drawPixmap(
-        rect(), m_background.scaled(size(), Qt::KeepAspectRatioByExpanding,
-                                    Qt::SmoothTransformation));
+  // 1. Draw Manual Soft Shadow
+  for (int i = 0; i < shadowMargin; ++i) {
+    QPainterPath shadowPath;
+    shadowPath.addRoundedRect(rect().adjusted(i, i, -i, -i), 30, 30);
+    painter.setPen(QPen(QColor(0, 0, 0, (shadowMargin - i) * 15), 1));
+    painter.drawPath(shadowPath);
   }
-  // Overlay to ensure readability
-  painter.fillRect(rect(),
-                   QColor(255, 255, 255, 150)); // Semi-transparent white
+
+  QPainterPath path;
+  path.addRoundedRect(windowRect, 30, 30); // ThemeEngine::rLg
+
+  // Use ThemeEngine surface as background
+  painter.fillPath(path, wizz::ui::ThemeEngine::surface());
+
+  // Subtle border
+  painter.setPen(QPen(QColor(255, 255, 255, 20), 1));
+  painter.drawPath(path);
 
   // Flash Overlay
   if (m_overlayColor.alpha() > 0) {
-    painter.fillRect(rect(), m_overlayColor);
+    painter.setClipPath(path);
+    painter.fillRect(windowRect, m_overlayColor);
   }
 }
 
 // Dragging logic
-void ChatWindow::mousePressEvent(QMouseEvent *event) {
-  if (event->button() == Qt::LeftButton) {
-    if (window()->windowHandle()) {
-      window()->windowHandle()->startSystemMove();
-    }
-    event->accept();
+ChatWindow::ResizeEdge ChatWindow::edgeAtPoint(const QPoint& p) const {
+  const int margin = 6;
+  bool left = p.x() < margin;
+  bool right = p.x() > width() - margin;
+  bool top = p.y() < margin;
+  bool bottom = p.y() > height() - margin;
+
+  if (top && left) return ResizeEdge::TopLeft;
+  if (top && right) return ResizeEdge::TopRight;
+  if (bottom && left) return ResizeEdge::BottomLeft;
+  if (bottom && right) return ResizeEdge::BottomRight;
+  if (left) return ResizeEdge::Left;
+  if (right) return ResizeEdge::Right;
+  if (top) return ResizeEdge::Top;
+  if (bottom) return ResizeEdge::Bottom;
+
+  return ResizeEdge::None;
+}
+
+void ChatWindow::updateCursor(const QPoint& p) {
+  if (m_isResizing) return;
+  ResizeEdge edge = edgeAtPoint(p);
+  switch (edge) {
+      case ResizeEdge::Left:
+      case ResizeEdge::Right: setCursor(Qt::SizeHorCursor); break;
+      case ResizeEdge::Top:
+      case ResizeEdge::Bottom: setCursor(Qt::SizeVerCursor); break;
+      case ResizeEdge::TopLeft:
+      case ResizeEdge::BottomRight: setCursor(Qt::SizeFDiagCursor); break;
+      case ResizeEdge::TopRight:
+      case ResizeEdge::BottomLeft: setCursor(Qt::SizeBDiagCursor); break;
+      default: setCursor(Qt::ArrowCursor); break;
   }
 }
 
-void ChatWindow::mouseMoveEvent(QMouseEvent *event) {
-  // Native drag handles movement (Wayland/X11 compatibility)
-  event->ignore();
+void ChatWindow::mousePressEvent(QMouseEvent *event) {
+  if (event->button() == Qt::LeftButton) {
+      m_currentEdge = edgeAtPoint(event->pos());
+      if (m_currentEdge != ResizeEdge::None) {
+          m_isResizing = true;
+          m_resizeStartPos = event->globalPos();
+          m_resizeStartGeometry = geometry();
+          event->accept();
+          return;
+      }
+      
+      // Allow window dragging from title bar area handled by TitleBar itself
+      // Fallback native drag
+      if (window()->windowHandle()) {
+          window()->windowHandle()->startSystemMove();
+      }
+  }
+  QWidget::mousePressEvent(event);
 }
+
+void ChatWindow::mouseMoveEvent(QMouseEvent *event) {
+  if (m_isResizing) {
+      QPoint delta = event->globalPos() - m_resizeStartPos;
+      QRect g = m_resizeStartGeometry;
+
+      switch (m_currentEdge) {
+          case ResizeEdge::Left: g.setLeft(g.left() + delta.x()); break;
+          case ResizeEdge::Right: g.setRight(g.right() + delta.x()); break;
+          case ResizeEdge::Top: g.setTop(g.top() + delta.y()); break;
+          case ResizeEdge::Bottom: g.setBottom(g.bottom() + delta.y()); break;
+          case ResizeEdge::TopLeft: g.setTopLeft(g.topLeft() + delta); break;
+          case ResizeEdge::TopRight: g.setTopRight(g.topRight() + QPoint(delta.x(), delta.y())); break;
+          case ResizeEdge::BottomLeft: g.setBottomLeft(g.bottomLeft() + QPoint(delta.x(), delta.y())); break;
+          case ResizeEdge::BottomRight: g.setBottomRight(g.bottomRight() + delta); break;
+          default: break;
+      }
+      
+      g.setWidth(qMax(g.width(), minimumWidth()));
+      g.setHeight(qMax(g.height(), minimumHeight()));
+      setGeometry(g);
+      event->accept();
+      return;
+  }
+  
+  updateCursor(event->pos());
+  QWidget::mouseMoveEvent(event);
+}
+
+void ChatWindow::mouseReleaseEvent(QMouseEvent *event) {
+  if (event->button() == Qt::LeftButton && m_isResizing) {
+      m_isResizing = false;
+      m_currentEdge = ResizeEdge::None;
+      updateCursor(event->pos());
+      event->accept();
+      return;
+  }
+  QWidget::mouseReleaseEvent(event);
+}
+
 
 void ChatWindow::addVoiceMessage(const QString &sender, uint16_t duration,
                                  const std::vector<uint8_t> &data,
@@ -185,6 +273,67 @@ void ChatWindow::addGameInvite(const QString &sender, const QString &gameName) {
   QTimer::singleShot(10, [this]() {
     m_chatArea->verticalScrollBar()->setValue(
         m_chatArea->verticalScrollBar()->maximum());
+  });
+}
+
+void ChatWindow::addRichMessage(const QString &sender, const QString &category, const QString &text, bool isSelf) {
+  Q_UNUSED(sender);
+  QString time = QDateTime::currentDateTime().toString("HH:mm");
+  
+  QWidget *container = new QWidget();
+  QHBoxLayout *layout = new QHBoxLayout(container);
+  layout->setContentsMargins(0, 5, 0, 5);
+
+  QWidget *contentWidget = new QWidget();
+  QVBoxLayout *contentLayout = new QVBoxLayout(contentWidget);
+  contentLayout->setContentsMargins(0, 0, 0, 0);
+  contentLayout->setSpacing(2);
+
+  // Main Card
+  QWidget* card = new QWidget();
+  QVBoxLayout* cardLayout = new QVBoxLayout(card);
+  cardLayout->setContentsMargins(12, 12, 12, 12);
+  cardLayout->setSpacing(4);
+  
+  // Icon and Title
+  QLabel* titleLbl = new QLabel(QString("<b>%1 Activity</b>").arg(category));
+  titleLbl->setStyleSheet(QString("color: %1;").arg(wizz::ui::ThemeEngine::accent().name()));
+  
+  QLabel* textLbl = new QLabel(text);
+  textLbl->setWordWrap(true);
+  textLbl->setStyleSheet(QString("color: %1; font-size: 13px;").arg(wizz::ui::ThemeEngine::onSurface().name()));
+  
+  cardLayout->addWidget(titleLbl);
+  cardLayout->addWidget(textLbl);
+  
+  card->setStyleSheet(QString(R"(
+      QWidget {
+          background-color: %1;
+          border: 1px solid %2;
+          border-radius: %3px;
+      }
+  )").arg(wizz::ui::ThemeEngine::surfaceHigh().name())
+     .arg(wizz::ui::ThemeEngine::accent().name())
+     .arg(wizz::ui::ThemeEngine::rMd));
+
+  QLabel *timeLabel = new QLabel(time);
+  timeLabel->setStyleSheet("color: #718096; font-size: 10px;");
+
+  if (isSelf) {
+    layout->addStretch();
+    layout->addWidget(contentWidget);
+    contentLayout->addWidget(card, 0, Qt::AlignRight);
+    contentLayout->addWidget(timeLabel, 0, Qt::AlignRight);
+  } else {
+    layout->addWidget(contentWidget);
+    layout->addStretch();
+    contentLayout->addWidget(card, 0, Qt::AlignLeft);
+    contentLayout->addWidget(timeLabel, 0, Qt::AlignLeft);
+  }
+
+  m_chatLayout->addWidget(container);
+  QTimer::singleShot(10, [this]() {
+    m_chatArea->verticalScrollBar()->setValue(m_chatArea->verticalScrollBar()->maximum());
   });
 }
 
@@ -351,15 +500,16 @@ QWidget *ChatWindow::createMessageBubble(const QString &text,
     contentLayout->addWidget(bubble, 0, Qt::AlignRight);
     contentLayout->addWidget(timeLabel, 0, Qt::AlignRight);
 
-    bubble->setStyleSheet(R"(
+    bubble->setStyleSheet(QString(R"(
         QLabel {
-            background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #4facfe, stop:1 #00f2fe);
-            color: white;
+            background-color: %1;
+            color: %2;
             border-radius: 15px;
             padding: 10px;
             font-size: 13px;
         }
-    )");
+    )").arg(wizz::ui::ThemeEngine::accent().name())
+       .arg(wizz::ui::ThemeEngine::surface().name()));
   } else {
     // Received
     layout->addWidget(contentWidget);
@@ -368,17 +518,16 @@ QWidget *ChatWindow::createMessageBubble(const QString &text,
     contentLayout->addWidget(bubble, 0, Qt::AlignLeft);
     contentLayout->addWidget(timeLabel, 0, Qt::AlignLeft);
 
-    // Glassy gray style
-    bubble->setStyleSheet(R"(
+    bubble->setStyleSheet(QString(R"(
         QLabel {
-            background-color: rgba(255, 255, 255, 180);
-            border: 1px solid rgba(255, 255, 255, 100);
-            color: #2d3748;
+            background-color: %1;
+            color: %2;
             border-radius: 15px;
             padding: 10px;
             font-size: 13px;
         }
-    )");
+    )").arg(wizz::ui::ThemeEngine::surfaceHigh().name())
+       .arg(wizz::ui::ThemeEngine::onSurface().name()));
   }
 
   return container;
@@ -471,19 +620,21 @@ QWidget *ChatWindow::createInviteBubble(const QString &sender,
   contentLayout->setSpacing(5);
 
   // Styling for the glassmorphism card
-  contentWidget->setStyleSheet(R"(
+  contentWidget->setStyleSheet(QString(R"(
       QWidget {
-          background-color: rgba(20, 25, 40, 180);
-          border: 1px solid rgba(0, 255, 255, 100);
-          border-radius: 12px;
+          background-color: %1;
+          border: 1px solid %2;
+          border-radius: %3px;
       }
-  )");
+  )").arg(wizz::ui::ThemeEngine::surfaceHigh().name())
+     .arg(wizz::ui::ThemeEngine::accent().name())
+     .arg(wizz::ui::ThemeEngine::rMd));
 
   QLabel *titleLabel =
       new QLabel("⚡ " + sender + " challenged you to " + gameName + "! ⚡");
-  titleLabel->setStyleSheet(
-      "color: #00ffff; font-weight: bold; font-size: 13px; background: "
-      "transparent; border: none; padding: 5px;");
+  titleLabel->setStyleSheet(QString(
+      "color: %1; font-weight: bold; font-size: 13px; background: "
+      "transparent; border: none; padding: 5px;").arg(wizz::ui::ThemeEngine::onSurface().name()));
   titleLabel->setAlignment(Qt::AlignCenter);
   titleLabel->setWordWrap(true);
   titleLabel->setMinimumWidth(220);
@@ -505,8 +656,8 @@ QWidget *ChatWindow::createInviteBubble(const QString &sender,
 
   acceptBtn->setStyleSheet(
       btnStyle +
-      "QPushButton { background-color: rgba(0, 200, 100, 200); } "
-      "QPushButton:hover { background-color: rgba(0, 255, 120, 255); }");
+      QString("QPushButton { background-color: %1; } ").arg(wizz::ui::ThemeEngine::accent().name()) +
+      QString("QPushButton:hover { background-color: %1; }").arg(QColor(wizz::ui::ThemeEngine::accent().name()).lighter(115).name()));
   declineBtn->setStyleSheet(
       btnStyle +
       "QPushButton { background-color: rgba(200, 50, 50, 200); } "
@@ -549,76 +700,40 @@ QWidget *ChatWindow::createInviteBubble(const QString &sender,
   return container;
 }
 
+void ChatWindow::resizeEvent(QResizeEvent *event) {
+  QWidget::resizeEvent(event);
+  
+  // Apply Rounded Mask to remove black corners
+  QPainterPath path;
+  path.addRoundedRect(rect(), 30, 30);
+  this->setMask(path.toFillPolygon().toPolygon());
+}
+
 void ChatWindow::setupUI() {
+  setMouseTracking(true); // Required for frameless edge detection
+  setMinimumSize(320, 450);
+
   QVBoxLayout *mainLayout = new QVBoxLayout(this);
-  mainLayout->setContentsMargins(15, 15, 15, 15);
+  mainLayout->setContentsMargins(0, 0, 0, 0); // No margins for frameless
+  mainLayout->setSpacing(0);
 
-  // Header
-  QWidget *header = new QWidget(this);
-  QHBoxLayout *headerLayout = new QHBoxLayout(header);
-  headerLayout->setContentsMargins(0, 0, 0, 10);
+  // Header -> TitleBar
+  auto *titleBar = new TitleBar(m_partnerName, this);
+  mainLayout->addWidget(titleBar);
 
-  // Butterfly Icon
-  QLabel *icon = new QLabel(header);
-  QPixmap butterfly(":/assets/butterfly.png");
-  if (!butterfly.isNull())
-    icon->setPixmap(butterfly.scaled(24, 24, Qt::KeepAspectRatio,
-                                     Qt::SmoothTransformation));
-  icon->setStyleSheet("background: transparent;");
-
-  // Title Column
-  QWidget *titleGroup = new QWidget(header);
-  QVBoxLayout *titleLayout = new QVBoxLayout(titleGroup);
-  titleLayout->setContentsMargins(8, 0, 0, 0);
-  titleLayout->setSpacing(0);
-
-  QLabel *mainTitle = new QLabel("Wizz Mania", titleGroup);
-  mainTitle->setStyleSheet("font-size: 14px; font-weight: bold; color: "
-                           "#1a2530; background: transparent;");
-
-  QLabel *subTitle = new QLabel(m_partnerName + " - Conversation", titleGroup);
-  subTitle->setStyleSheet(
-      "font-size: 11px; color: #4a5568; background: transparent;");
-
-  titleLayout->addWidget(mainTitle);
-  titleLayout->addWidget(subTitle);
-
-  headerLayout->addWidget(icon);
-  headerLayout->addWidget(titleGroup);
-  headerLayout->addStretch();
-
-  QPushButton *closeBtn = new QPushButton("X", header);
-  closeBtn->setFixedSize(28, 28);
-  closeBtn->setCursor(Qt::PointingHandCursor);
-  closeBtn->setStyleSheet(R"(
-      QPushButton {
-          background: rgba(0, 0, 0, 20);
-          color: #4a5568;
-          border-radius: 14px;
-          border: none;
-          font-weight: bold;
-      }
-      QPushButton:hover {
-          background: #e53e3e;
-          color: white;
-      }
-  )");
-  connect(closeBtn, &QPushButton::clicked, this, &QWidget::close);
-
-  headerLayout->addWidget(closeBtn);
-
-  mainLayout->addWidget(header);
-
-  header->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
-  header->setFixedHeight(50);
+  // Content Area
+  QWidget *contentWidget = new QWidget(this);
+  QVBoxLayout *contentLayout = new QVBoxLayout(contentWidget);
+  contentLayout->setContentsMargins(15, 15, 15, 15);
+  contentLayout->setSpacing(10);
+  mainLayout->addWidget(contentWidget, 1);
 
   // Chat Area
   m_chatArea = new QScrollArea(this);
   m_chatArea->setWidgetResizable(true);
   m_chatArea->setStyleSheet("background: transparent; border: none;");
   m_chatArea->viewport()->setStyleSheet("background: transparent;");
-  m_chatArea->setSizePolicy(QSizePolicy::Expanding,
-                            QSizePolicy::Expanding); 
+  m_chatArea->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding); 
 
   m_chatContainer = new QWidget();
   m_chatContainer->setStyleSheet("background: transparent;");
@@ -626,7 +741,7 @@ void ChatWindow::setupUI() {
   m_chatLayout->addStretch(); // Push messages down
 
   m_chatArea->setWidget(m_chatContainer);
-  mainLayout->addWidget(m_chatArea);
+  contentLayout->addWidget(m_chatArea);
 
   // Input Area
   QWidget *inputContainer = new QWidget(this);
@@ -654,24 +769,24 @@ void ChatWindow::setupUI() {
   connect(emojiBtn, &QPushButton::clicked, this, &ChatWindow::onEmojiClicked);
 
   m_messageInput = new QLineEdit(inputContainer);
-  m_messageInput->setPlaceholderText("Type a message...");
-  m_messageInput->setAttribute(Qt::WA_MacShowFocusRect,
-                               false); 
-  m_messageInput->setStyleSheet(R"(
+  m_messageInput->setPlaceholderText("Message...");
+  m_messageInput->setAttribute(Qt::WA_MacShowFocusRect, false); 
+  m_messageInput->setStyleSheet(QString(R"(
       QLineEdit {
-          background-color: rgba(255, 255, 255, 200);
-          border: 1px solid rgba(255, 255, 255, 150);
-          border-radius: 20px;
+          background-color: %1;
+          border: 1px solid rgba(255, 255, 255, 15);
+          border-radius: 18px;
           padding: 8px 15px;
           font-size: 13px;
-          color: #1a2530; 
+          color: %2; 
           min-height: 24px;
       }
       QLineEdit:focus {
-          background-color: white;
-          border: 2px solid #4facfe;
+          border: 1px solid %3;
       }
-  )");
+  )").arg(wizz::ui::ThemeEngine::surfaceHigh().name())
+     .arg(wizz::ui::ThemeEngine::onSurface().name())
+     .arg(wizz::ui::ThemeEngine::accent().name()));
   connect(m_messageInput, &QLineEdit::returnPressed, this,
           &ChatWindow::onSendClicked);
 
@@ -717,18 +832,20 @@ void ChatWindow::setupUI() {
   QPushButton *sendBtn = new QPushButton("➤", inputContainer);
   sendBtn->setFixedSize(36, 36);
   sendBtn->setCursor(Qt::PointingHandCursor);
-  sendBtn->setStyleSheet(R"(
+  sendBtn->setStyleSheet(QString(R"(
       QPushButton {
-          background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #4facfe, stop:1 #00f2fe);
-          color: white;
+          background: %1;
+          color: %2;
           border-radius: 18px;
           font-size: 14px;
           border: none;
       }
       QPushButton:hover {
-          background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #439ce0, stop:1 #00dce8);
+          background: %3;
       }
-  )");
+  )").arg(wizz::ui::ThemeEngine::accent().name())
+     .arg(wizz::ui::ThemeEngine::surface().name())
+     .arg(QColor(wizz::ui::ThemeEngine::accent().name()).lighter(115).name()));
   connect(sendBtn, &QPushButton::clicked, this, &ChatWindow::onSendClicked);
 
   // Mic Button
@@ -757,11 +874,15 @@ void ChatWindow::setupUI() {
   QVBoxLayout *bottomLayout = new QVBoxLayout();
   bottomLayout->addWidget(inputContainer);
 
-  // Typing Label
-  m_typingLabel = new QLabel("", this);
-  m_typingLabel->setStyleSheet("font-size: 10px; color: #4a5568; font-style: "
-                               "italic; margin-left: 50px;");
-  bottomLayout->addWidget(m_typingLabel);
+  // Typing Bubble (Hidden by default)
+  m_typingBubble = new wizz::ui::TypingBubble(this);
+  m_typingBubble->hide();
+  
+  QHBoxLayout* typingLayout = new QHBoxLayout();
+  typingLayout->addWidget(m_typingBubble);
+  typingLayout->addStretch();
+  
+  bottomLayout->addLayout(typingLayout);
 
-  mainLayout->addLayout(bottomLayout);
+  contentLayout->addLayout(bottomLayout);
 }

@@ -1,11 +1,16 @@
 #include "AddFriendDialog.h"
+#include "theme/ThemeEngine.h"
+#include "widgets/TitleBar.h"
 #include <QGraphicsDropShadowEffect>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QPainter>
+#include <QPainterPath>
 #include <QPushButton>
 #include <QVBoxLayout>
 #include <QTimer>
+
+using TE = wizz::ui::ThemeEngine;
 
 AddFriendDialog::AddFriendDialog(QWidget *parent) : QDialog(parent) {
   setWindowFlags(Qt::FramelessWindowHint | Qt::Dialog);
@@ -60,120 +65,130 @@ void AddFriendDialog::onWatchdogTimeout() {
   }
 }
 
+void AddFriendDialog::paintEvent(QPaintEvent* event) {
+  Q_UNUSED(event);
+  QPainter painter(this);
+  painter.setRenderHint(QPainter::Antialiasing);
+
+  QPainterPath path;
+  path.addRoundedRect(rect(), TE::rLg, TE::rLg);
+
+  painter.fillPath(path, TE::surfaceHigh());
+  painter.setPen(QPen(QColor(255, 255, 255, 20), 1));
+  painter.drawPath(path);
+}
+
 void AddFriendDialog::setupUI() {
   QVBoxLayout *mainLayout = new QVBoxLayout(this);
-  mainLayout->setContentsMargins(10, 10, 10, 10);
+  mainLayout->setContentsMargins(0, 0, 0, 0);
+  mainLayout->setSpacing(0);
 
-  // Glass Frame
-  QFrame *glassFrame = new QFrame(this);
-  glassFrame->setObjectName("dialogFrame");
-  glassFrame->setStyleSheet(R"(
-        #dialogFrame {
-            background-color: rgba(255, 255, 255, 20);
-            border: 2px solid rgba(255, 255, 255, 180);
-            border-radius: 20px;
-        }
-    )");
+  auto *titleBar = new TitleBar("Add Friend", this);
+  mainLayout->addWidget(titleBar);
 
-  QGraphicsDropShadowEffect *shadow = new QGraphicsDropShadowEffect(this);
-  shadow->setBlurRadius(20);
-  shadow->setColor(QColor(0, 0, 0, 40));
-  shadow->setOffset(0, 5);
-  glassFrame->setGraphicsEffect(shadow);
+  QWidget *contentWidget = new QWidget(this);
+  QVBoxLayout *contentLayout = new QVBoxLayout(contentWidget);
+  contentLayout->setContentsMargins(25, 10, 25, 25);
+  contentLayout->setSpacing(15);
+  mainLayout->addWidget(contentWidget);
 
-  QVBoxLayout *frameLayout = new QVBoxLayout(glassFrame);
-  frameLayout->setContentsMargins(25, 25, 25, 25);
-  frameLayout->setSpacing(15);
-
-  // Title
-  QLabel *titleLabel = new QLabel("Add Friend", glassFrame);
-  titleLabel->setStyleSheet(
-      "font-size: 20px; font-weight: 700; color: #1a2530; "
-      "background: transparent;");
-  titleLabel->setAlignment(Qt::AlignCenter);
-  frameLayout->addWidget(titleLabel);
+  // Icon / Header
+  QLabel *iconLabel = new QLabel("👤", contentWidget);
+  iconLabel->setStyleSheet("font-size: 40px; background: transparent;");
+  iconLabel->setAlignment(Qt::AlignCenter);
+  contentLayout->addWidget(iconLabel);
 
   // Error Label
-  m_errorLabel = new QLabel("", glassFrame);
-  m_errorLabel->setStyleSheet(
-      "font-size: 12px; color: #e53e3e; font-weight: 600; "
-      "background: transparent;");
+  m_errorLabel = new QLabel("", contentWidget);
+  m_errorLabel->setStyleSheet(QString("font-size: 12px; color: %1; font-weight: 600; background: transparent;").arg(TE::danger().name()));
   m_errorLabel->setAlignment(Qt::AlignCenter);
-  m_errorLabel->setMinimumWidth(300);
   m_errorLabel->setFixedHeight(20);
-  frameLayout->addWidget(m_errorLabel);
+  contentLayout->addWidget(m_errorLabel);
 
   // Input
-  m_usernameInput = new QLineEdit(glassFrame);
+  m_usernameInput = new QLineEdit(contentWidget);
   m_usernameInput->setPlaceholderText("Enter username");
-  m_usernameInput->setStyleSheet(R"(
-        QLineEdit {
-            background-color: rgba(255, 255, 255, 180);
-            border: 1px solid rgba(200, 220, 240, 150);
-            border-radius: 12px;
-            padding: 10px 15px;
-            font-size: 14px;
-            color: #2d3748;
-        }
-        QLineEdit:focus {
-            border: 1px solid #4A90E2;
-            background-color: #FFFFFF;
-        }
-    )");
-  connect(m_usernameInput, &QLineEdit::returnPressed, this,
-          &AddFriendDialog::onAddClicked);
-  frameLayout->addWidget(m_usernameInput);
+  m_usernameInput->setAttribute(Qt::WA_MacShowFocusRect, false);
+  
+  auto updateInputStyle = [this](bool isValid, bool isFocused) {
+      QString borderColor = isFocused ? TE::accent().name() : "rgba(255, 255, 255, 15)";
+      if (!m_usernameInput->text().isEmpty()) {
+          borderColor = isValid ? TE::success().name() : TE::danger().name();
+      }
+      
+      m_usernameInput->setStyleSheet(QString(R"(
+          QLineEdit {
+              background-color: %1;
+              border: 1px solid %2;
+              border-bottom: 2px solid %2;
+              border-radius: %3px;
+              padding: 10px 15px;
+              font-size: 14px;
+              color: %4;
+          }
+      )").arg(TE::surface().name()).arg(borderColor).arg(TE::rMd).arg(TE::onSurface().name()));
+  };
+  
+  updateInputStyle(true, false);
+
+  connect(m_usernameInput, &QLineEdit::textChanged, this, [this, updateInputStyle](const QString& text) {
+      bool isValid = text.length() >= 3 && !text.contains(" ");
+      updateInputStyle(isValid, m_usernameInput->hasFocus());
+  });
+
+  connect(m_usernameInput, &QLineEdit::returnPressed, this, &AddFriendDialog::onAddClicked);
+  contentLayout->addWidget(m_usernameInput);
+
+  contentLayout->addStretch();
 
   // Buttons
   QHBoxLayout *btnLayout = new QHBoxLayout();
   btnLayout->setSpacing(15);
 
-  m_cancelBtn = new QPushButton("Cancel", glassFrame);
+  m_cancelBtn = new QPushButton("Cancel", contentWidget);
   m_cancelBtn->setCursor(Qt::PointingHandCursor);
-  m_cancelBtn->setStyleSheet(R"(
+  m_cancelBtn->setFixedHeight(36);
+  m_cancelBtn->setStyleSheet(QString(R"(
         QPushButton {
-            background-color: rgba(255, 255, 255, 150);
-            border: 1px solid rgba(200, 200, 200, 150);
-            border-radius: 12px;
-            padding: 8px 15px;
-            color: #4a5568;
+            background-color: transparent;
+            border: 1px solid rgba(255, 255, 255, 30);
+            border-radius: %1px;
+            color: %2;
             font-weight: 600;
         }
         QPushButton:hover {
-            background-color: rgba(255, 255, 255, 220);
-            color: #2d3748;
+            background-color: rgba(255, 255, 255, 10);
+            color: %3;
         }
         QPushButton:disabled {
-            background-color: rgba(200, 200, 200, 100);
-            color: #a0aec0;
+            color: rgba(255, 255, 255, 50);
         }
-    )");
+    )").arg(TE::rMd).arg(TE::onSurface2().name()).arg(TE::onSurface().name()));
   connect(m_cancelBtn, &QPushButton::clicked, this, &QDialog::reject);
 
-  m_addBtn = new QPushButton("Add", glassFrame);
+  m_addBtn = new QPushButton("Add", contentWidget);
   m_addBtn->setCursor(Qt::PointingHandCursor);
-  m_addBtn->setStyleSheet(R"(
+  m_addBtn->setFixedHeight(36);
+  m_addBtn->setStyleSheet(QString(R"(
         QPushButton {
-            background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #4facfe, stop:1 #00f2fe);
+            background: %1;
             border: none;
-            border-radius: 12px;
-            padding: 8px 20px;
+            border-radius: %2px;
             color: white;
             font-weight: 700;
         }
         QPushButton:hover {
-            background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #439ce0, stop:1 #00dce8);
+            background: %3;
         }
         QPushButton:disabled {
-            background: rgba(100, 180, 255, 80);
-            color: rgba(255, 255, 255, 150);
+            background: rgba(255, 255, 255, 20);
+            color: rgba(255, 255, 255, 50);
         }
-    )");
+    )").arg(TE::accent().name()).arg(TE::rMd).arg(QColor(TE::accent().name()).lighter(115).name()));
   connect(m_addBtn, &QPushButton::clicked, this, &AddFriendDialog::onAddClicked);
 
   btnLayout->addWidget(m_cancelBtn);
   btnLayout->addWidget(m_addBtn);
 
-  frameLayout->addLayout(btnLayout);
-  mainLayout->addWidget(glassFrame);
+  contentLayout->addLayout(btnLayout);
 }

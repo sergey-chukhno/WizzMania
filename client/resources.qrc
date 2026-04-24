@@ -7,5 +7,14 @@
         <file>assets/icon_user.png</file>
         <file>assets/icon_lock.png</file>
         <file>assets/wizz.wav</file>
+        <file>assets/cyberpunk_city_bg.png</file>
+        <file>resources/fonts/Inter-Regular.ttf</file>
+        <file>resources/fonts/Inter-Bold.ttf</file>
+        <file>resources/fonts/JetBrainsMono-Regular.ttf</file>
+        <file>assets/tictactoe_neon_icon.png</file>
+        <file>assets/icon_open_chat.png</file>
+        <file>assets/icon_send_nudge.png</file>
+        <file>assets/icon_invite_game.png</file>
+        <file>assets/icon_remove_contact.png</file>
     </qresource>
 </RCC>

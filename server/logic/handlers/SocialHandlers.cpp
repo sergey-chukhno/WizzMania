@@ -375,4 +375,45 @@ void RemoveContactHandler::handle(ClientSession* session, Packet& packet) {
     });
 }
 
+void RichStatusUpdateHandler::handle(ClientSession* session, Packet& packet) {
+    if (!session->isLoggedIn()) return;
+    
+    RichPresence presence;
+    try {
+        presence.type = static_cast<int>(packet.readInt());
+        presence.activityName = packet.readString();
+        presence.activityDetail = packet.readString();
+        presence.startTime = std::time(nullptr);
+    } catch (...) { return; }
+
+    TcpServer* server = session->getServer();
+    if (!server) return;
+
+    std::string username = session->getUsername();
+    server->getSessionManager().updateRichPresence(username, presence);
+
+    server->getDb().postTask([server, username, presence]() {
+        auto followers = server->getDb().social()->getFollowers(username);
+        auto friends = server->getDb().social()->getFriends(username);
+
+        server->postResponse([server, username, presence, followers = std::move(followers), friends = std::move(friends)]() {
+            std::set<std::string> contacts;
+            for (const auto &f : followers) contacts.insert(f);
+            for (const auto &f : friends) contacts.insert(f);
+
+            for (const auto &contactName : contacts) {
+                ClientSession *targetSession = server->getSessionManager().getSessionByUsername(contactName);
+                if (targetSession) {
+                    Packet notify(PacketType::RichStatusUpdate);
+                    notify.writeString(username);
+                    notify.writeInt(static_cast<uint32_t>(presence.type));
+                    notify.writeString(presence.activityName);
+                    notify.writeString(presence.activityDetail);
+                    targetSession->sendPacket(notify);
+                }
+            }
+        });
+    });
 }
+
+} // namespace wizz

@@ -1,18 +1,28 @@
 #include "MainWindow.h"
 #include "../../common/GameIPC.h"
 #include "../../common/TicTacToeIPC.h"
-#include "AddFriendDialog.h"
 #include "../logic/AvatarManager.h"
-#include "ChatWindow.h"
-#include "../logic/GameLauncher.h"
 #include "../logic/GameBridge.h"
+#include "../logic/GameLauncher.h"
 #include "../network/NetworkManager.h"
+#include "AddFriendDialog.h"
+#include "ChatWindow.h"
+#include "arcade/CategoryPopup.h"
+#include "theme/ThemeEngine.h"
+#include "widgets/ContactDelegate.h"
+#include "widgets/SearchBar.h"
+#include "widgets/TitleBar.h"
+#include <QPropertyAnimation>
+#include <QEasingCurve>
 #include <QBuffer>
 #include <QCoreApplication>
 #include <QDebug>
 #include <QDir>
 #include <QFileDialog>
 #include <QGraphicsDropShadowEffect>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QMenu>
 #include <QMessageBox>
 #include <QPaintEvent>
 #include <QPainterPath>
@@ -25,20 +35,32 @@
 MainWindow::MainWindow(const QString &username, const QPoint &initialPos,
                        QWidget *parent)
     : QWidget(parent), m_username(username), m_statusMessageInput(nullptr) {
-  std::cout << "[MainWindow] Constructing for user: " << username.toStdString() << std::endl;
+  std::cout << "[MainWindow] Constructing for user: " << username.toStdString()
+            << std::endl;
   setWindowTitle("Wizz Mania - " + username);
   setMinimumSize(350, 500);
   resize(350, 700);
   setAttribute(Qt::WA_DeleteOnClose);
+  // Frameless window — TitleBar handles dragging and chrome
+  setWindowFlags(Qt::FramelessWindowHint | Qt::Window);
+  setAttribute(Qt::WA_TranslucentBackground, false);
+  setMouseTracking(true); // Required for resize cursor updates
+
+  // Global style now applied via QApplication in main.cpp
 
   m_gameBridge = new GameBridge(m_username, this);
-  connect(m_gameBridge, &GameBridge::localGameStatusChanged, this, &MainWindow::onLocalGameStatusChanged);
-  connect(m_gameBridge, &GameBridge::localMoveMade, this, &MainWindow::onLocalMoveMade);
-  connect(m_gameBridge, &GameBridge::ticTacToeFinished, this, &MainWindow::onTicTacToeFinished);
-  connect(m_gameBridge, &GameBridge::rematchRequested, this, [this](const QString& opponent) {
-    // Player pressed "Play Again" inside the game — send a fresh TicTacToe invite
-    NetworkManager::instance().sendGameInvite(opponent, "TicTacToe");
-  });
+  connect(m_gameBridge, &GameBridge::localGameStatusChanged, this,
+          &MainWindow::onLocalGameStatusChanged);
+  connect(m_gameBridge, &GameBridge::localMoveMade, this,
+          &MainWindow::onLocalMoveMade);
+  connect(m_gameBridge, &GameBridge::ticTacToeFinished, this,
+          &MainWindow::onTicTacToeFinished);
+  connect(m_gameBridge, &GameBridge::rematchRequested, this,
+          [this](const QString &opponent) {
+            // Player pressed "Play Again" inside the game — send a fresh
+            // TicTacToe invite
+            NetworkManager::instance().sendGameInvite(opponent, "TicTacToe");
+          });
   m_gameBridge->startGameIPC();
 
   std::cout << "[MainWindow] GameBridge Setup complete" << std::endl;
@@ -54,7 +76,8 @@ MainWindow::MainWindow(const QString &username, const QPoint &initialPos,
   connect(&NetworkManager::instance(), &NetworkManager::contactListReceived,
           this,
           [this](const QList<std::tuple<QString, int, QString>> &friends) {
-            std::cout << "[MainWindow] Received contact list update, count: " << friends.size() << std::endl;
+            std::cout << "[MainWindow] Received contact list update, count: "
+                      << friends.size() << std::endl;
             QList<ContactInfo> newContacts;
             for (const auto &tup : friends) {
               QString name = std::get<0>(tup);
@@ -66,7 +89,7 @@ MainWindow::MainWindow(const QString &username, const QPoint &initialPos,
                 status = UserStatus::Offline; // Fail-safe
 
               newContacts.append(
-                   {name, status, statusMsg, QPixmap(), false, "", 0});
+                  {name, status, statusMsg, QPixmap(), false, "", 0});
             }
             setContacts(newContacts);
 
@@ -77,11 +100,14 @@ MainWindow::MainWindow(const QString &username, const QPoint &initialPos,
           });
 
   // Connect Status Change
-  connect(&NetworkManager::instance(), &NetworkManager::contactStatusChanged,
-          this, [this](const QString &username, int status, const QString &statusMsg) {
-            std::cout << "[MainWindow] Status update for: " << username.toStdString() << " to " << status << std::endl;
-            updateContactStatus(username, static_cast<UserStatus>(status), statusMsg);
-          });
+  connect(
+      &NetworkManager::instance(), &NetworkManager::contactStatusChanged, this,
+      [this](const QString &username, int status, const QString &statusMsg) {
+        std::cout << "[MainWindow] Status update for: "
+                  << username.toStdString() << " to " << status << std::endl;
+        updateContactStatus(username, static_cast<UserStatus>(status),
+                            statusMsg);
+      });
 
   // Connect Error
   connect(&NetworkManager::instance(), &NetworkManager::errorOccurred, this,
@@ -91,7 +117,7 @@ MainWindow::MainWindow(const QString &username, const QPoint &initialPos,
             } else {
               QMessageBox::warning(this, "Error", msg);
             }
-          });  // Connect Message Received (Mediator)
+          }); // Connect Message Received (Mediator)
   connect(&NetworkManager::instance(), &NetworkManager::messageReceived, this,
           [this](const QString &sender, const QString &text) {
             QString lowerSender = sender.toLower();
@@ -99,7 +125,20 @@ MainWindow::MainWindow(const QString &username, const QPoint &initialPos,
               onContactDoubleClicked(sender);
             }
             if (m_openChats.contains(lowerSender)) {
-              m_openChats[lowerSender]->addMessage(sender, text, false);
+              if (text.startsWith("{\"type\":\"arcade_share\"")) {
+                QJsonDocument doc = QJsonDocument::fromJson(text.toUtf8());
+                if (!doc.isNull() && doc.isObject()) {
+                  QJsonObject obj = doc.object();
+                  QString cat = obj["category"].toString();
+                  QString txt = obj["text"].toString();
+                  m_openChats[lowerSender]->addRichMessage(sender, cat, txt,
+                                                           false);
+                } else {
+                  m_openChats[lowerSender]->addMessage(sender, text, false);
+                }
+              } else {
+                m_openChats[lowerSender]->addMessage(sender, text, false);
+              }
               m_openChats[lowerSender]->show();
               m_openChats[lowerSender]->activateWindow();
             }
@@ -113,8 +152,8 @@ MainWindow::MainWindow(const QString &username, const QPoint &initialPos,
               onContactDoubleClicked(sender); // Open window
             }
             if (m_openChats.contains(lowerSender)) {
-              m_openChats[lowerSender]->addMessage(sender, sender + " sent a Wizz!",
-                                                false);
+              m_openChats[lowerSender]->addMessage(
+                  sender, sender + " sent a Wizz!", false);
               m_openChats[lowerSender]->shake();
               m_openChats[lowerSender]->show();
               m_openChats[lowerSender]->activateWindow();
@@ -122,32 +161,48 @@ MainWindow::MainWindow(const QString &username, const QPoint &initialPos,
           });
 
   // Connect Voice Message Received
-  connect(
-       &NetworkManager::instance(), &NetworkManager::voiceMessageReceived, this,
-      [this](const QString &sender, uint16_t duration,
-             const std::vector<uint8_t> &data) {
-        QString lowerSender = sender.toLower();
-        if (!m_openChats.contains(lowerSender)) {
-          onContactDoubleClicked(sender); // Open window
-        }
-        if (m_openChats.contains(lowerSender)) {
-          m_openChats[lowerSender]->addVoiceMessage(sender, duration, data, false);
-          m_openChats[lowerSender]->show();
-          m_openChats[lowerSender]->activateWindow();
-        }
-      });
-;
+  connect(&NetworkManager::instance(), &NetworkManager::voiceMessageReceived,
+          this,
+          [this](const QString &sender, uint16_t duration,
+                 const std::vector<uint8_t> &data) {
+            QString lowerSender = sender.toLower();
+            if (!m_openChats.contains(lowerSender)) {
+              onContactDoubleClicked(sender); // Open window
+            }
+            if (m_openChats.contains(lowerSender)) {
+              m_openChats[lowerSender]->addVoiceMessage(sender, duration, data,
+                                                        false);
+              m_openChats[lowerSender]->show();
+              m_openChats[lowerSender]->activateWindow();
+            }
+          });
+  ;
 
   // Connect Avatar Updated
   connect(&AvatarManager::instance(), &AvatarManager::avatarUpdated, this,
           &MainWindow::updateContactAvatar);
 
-  // Connect Game Status
+  // Handle Game Status
   connect(
-       &NetworkManager::instance(), &NetworkManager::gameStatusChanged, this,
+      &NetworkManager::instance(), &NetworkManager::gameStatusChanged, this,
       [this](const QString &username, const QString &gameName, uint32_t score) {
         updateContactGameStatus(username, gameName, score);
       });
+
+  // Handle Rich Presence
+  connect(&NetworkManager::instance(), &NetworkManager::richPresenceReceived,
+          this,
+          [this](const QString &username, int type, const QString &name,
+                 const QString &detail) {
+            // For now, we reuse the game status logic but we could expand it
+            // later
+            if (type == 1) { // Gaming
+              updateContactGameStatus(username, name,
+                                      0); // Detail could be parsed for score
+            } else if (type == 0) {       // None
+              updateContactGameStatus(username, "", 0);
+            }
+          });
 
   // Handle Game Invites
   connect(&NetworkManager::instance(), &NetworkManager::gameInviteReceived,
@@ -161,7 +216,7 @@ MainWindow::MainWindow(const QString &username, const QPoint &initialPos,
 
   // Handle Game Invite Responses
   connect(
-       &NetworkManager::instance(), &NetworkManager::gameInviteResponseReceived,
+      &NetworkManager::instance(), &NetworkManager::gameInviteResponseReceived,
       this,
       [this](const QString &target, const QString &gameName, bool accepted) {
         ChatWindow *chatW = openChatWindow(target);
@@ -172,7 +227,7 @@ MainWindow::MainWindow(const QString &username, const QPoint &initialPos,
                             false);
         } else {
           chatW->addMessage(
-               "System", target + " declined your " + gameName + " challenge.",
+              "System", target + " declined your " + gameName + " challenge.",
               false);
         }
         chatW->show();
@@ -184,8 +239,10 @@ MainWindow::MainWindow(const QString &username, const QPoint &initialPos,
           [this](const QString &gameName, const QString &roomId, char symbol,
                  const QString &opponent) {
             if (gameName == "TicTacToe") {
-              QPixmap avatar = AvatarManager::instance().getAvatar(opponent, 64);
-              m_gameBridge->startTicTacToe(m_username, roomId, opponent, symbol, avatar);
+              QPixmap avatar =
+                  AvatarManager::instance().getAvatar(opponent, 64);
+              m_gameBridge->startTicTacToe(m_username, roomId, opponent, symbol,
+                                           avatar);
             }
           });
 
@@ -247,29 +304,34 @@ MainWindow::~MainWindow() {
 }
 
 void MainWindow::paintEvent(QPaintEvent *event) {
+  Q_UNUSED(event);
   QPainter painter(this);
+  painter.setRenderHint(QPainter::Antialiasing);
+
+  // Rounded clip — no manual shadow (mask handles corner clipping)
+  QPainterPath path;
+  path.addRoundedRect(rect(), 30, 30);
+  painter.setClipPath(path);
 
   if (!m_backgroundPixmap.isNull()) {
     painter.drawPixmap(rect(), m_backgroundPixmap.scaled(
                                    size(), Qt::KeepAspectRatioByExpanding,
                                    Qt::SmoothTransformation));
   }
-
-  QWidget::paintEvent(event);
 }
 
 QColor MainWindow::getStatusColor(UserStatus status) {
   switch (status) {
   case UserStatus::Online:
-    return QColor("#4CAF50"); // Green
+    return wizz::ui::ThemeEngine::success();
   case UserStatus::Away:
-    return QColor("#FF9800"); // Orange
+    return wizz::ui::ThemeEngine::warning();
   case UserStatus::Busy:
-    return QColor("#F44336"); // Red
+    return wizz::ui::ThemeEngine::danger();
   case UserStatus::Offline:
-    return QColor("#9E9E9E"); // Gray
+    return wizz::ui::ThemeEngine::onSurface3();
   }
-  return QColor("#9E9E9E");
+  return wizz::ui::ThemeEngine::onSurface3();
 }
 
 QString MainWindow::getStatusText(UserStatus status) {
@@ -286,144 +348,163 @@ QString MainWindow::getStatusText(UserStatus status) {
   return "Offline";
 }
 
+void MainWindow::resizeEvent(QResizeEvent *event) {
+  QWidget::resizeEvent(event);
+  
+  // Apply Rounded Mask to remove black corners
+  QPainterPath path;
+  path.addRoundedRect(rect(), 30, 30);
+  this->setMask(path.toFillPolygon().toPolygon());
+}
+
 void MainWindow::setupUI() {
   QVBoxLayout *mainLayout = new QVBoxLayout(this);
-  mainLayout->setContentsMargins(15, 15, 15, 15);
-  mainLayout->setSpacing(10);
+  mainLayout->setContentsMargins(0, 0, 0, 0);
+  mainLayout->setSpacing(0);
 
-  // --- Main Glass Card ---
-  QFrame *glassCard = new QFrame(this);
-  glassCard->setObjectName("mainGlassCard");
-  glassCard->setStyleSheet(R"(
-        #mainGlassCard {
-            background-color: rgba(255, 255, 255, 45);
-            border: 2px solid rgba(255, 255, 255, 150);
-            border-radius: 25px;
+  // ── TitleBar ──────────────────────────────────────────────────────────────
+  auto *titleBar = new TitleBar("WizzMania Pro", this);
+  mainLayout->addWidget(titleBar);
+
+  // ── Inner content area (with padding) ────────────────────────────────────
+  auto *contentWidget = new QWidget(this);
+  auto *contentLayout = new QVBoxLayout(contentWidget);
+  contentLayout->setContentsMargins(16, 12, 16, 12);
+  contentLayout->setSpacing(12);
+  mainLayout->addWidget(contentWidget, 1);
+
+  // Re-point mainLayout for all code below this point
+  // (all child widgets will be added to contentLayout)
+  QVBoxLayout *&innerLayout = contentLayout;
+  Q_UNUSED(innerLayout) // used as alias below
+
+  // ── Profile card ──────────────────────────────────────────────────────────
+  // --- User Profile Section (Subtle Glass) ---
+  QFrame *profileFrame = new QFrame(this);
+  profileFrame->setObjectName("userProfileFrame");
+  profileFrame->setStyleSheet(R"(
+        #userProfileFrame {
+            background-color: rgba(255, 255, 255, 30);
+            border: 1px solid rgba(255, 255, 255, 20);
+            border-radius: 28px;
         }
     )");
 
-  QGraphicsDropShadowEffect *cardShadow = new QGraphicsDropShadowEffect(this);
-  cardShadow->setBlurRadius(40);
-  cardShadow->setColor(QColor(0, 60, 120, 80));
-  cardShadow->setOffset(0, 10);
-  glassCard->setGraphicsEffect(cardShadow);
-
-  QVBoxLayout *cardLayout = new QVBoxLayout(glassCard);
-  cardLayout->setContentsMargins(20, 20, 20, 15);
-  cardLayout->setSpacing(12);
-
-  // --- Header: Butterfly + Title ---
-  QHBoxLayout *headerLayout = new QHBoxLayout();
-
-  QLabel *butterflyIcon = new QLabel(glassCard);
-  QPixmap butterfly(":/assets/butterfly.png");
-  butterflyIcon->setPixmap(
-      butterfly.scaled(40, 40, Qt::KeepAspectRatio, Qt::SmoothTransformation));
-  butterflyIcon->setFixedSize(40, 40);
-  butterflyIcon->setStyleSheet("background: transparent;");
-
-  QLabel *titleLabel = new QLabel("Wizz Mania", glassCard);
-  titleLabel->setStyleSheet("font-size: 22px; font-weight: 700; color: "
-                            "#1a2530; background: transparent;");
-
-  QVBoxLayout *titleLayout = new QVBoxLayout();
-  titleLayout->setSpacing(0);
-  titleLayout->addWidget(titleLabel);
-
-  QLabel *subtitleLabel =
-      new QLabel("Undefined Behaviour Included for Free", glassCard);
-  subtitleLabel->setStyleSheet(
-      "font-size: 12px; font-weight: 500; color: #5a6b7c; "
-      "font-style: italic; background: transparent; padding-left: 2px;");
-  titleLayout->addWidget(subtitleLabel);
-
-  headerLayout->addWidget(butterflyIcon);
-  headerLayout->addLayout(titleLayout);
-  headerLayout->addStretch();
-  cardLayout->addLayout(headerLayout);
-
-  // --- User Profile Section ---
-  QFrame *profileFrame = new QFrame(glassCard);
-  profileFrame->setStyleSheet(R"(
-        background-color: rgba(255, 255, 255, 30);
-        border: 1px solid rgba(200, 230, 255, 150);
-        border-radius: 15px;
-    )");
+  profileFrame->setGraphicsEffect(
+      wizz::ui::ThemeEngine::shadow(1, profileFrame));
 
   QHBoxLayout *profileLayout = new QHBoxLayout(profileFrame);
-  profileLayout->setContentsMargins(12, 10, 12, 10);
+  profileLayout->setContentsMargins(15, 15, 15, 15);
+  profileLayout->setSpacing(18);
 
-  // Avatar
+  // Avatar 2.0
   m_avatarLabel = new QLabel(profileFrame);
-  m_avatarLabel->setPixmap(AvatarManager::instance().getAvatar(m_username, 50));
-  m_avatarLabel->setFixedSize(50, 50);
+  m_avatarLabel->setFixedSize(80, 80);
   m_avatarLabel->setStyleSheet("background: transparent;");
-  m_avatarLabel->setCursor(Qt::PointingHandCursor);
 
-  // Make Avatar Clickable using Event Filter or lambda
+  QGraphicsDropShadowEffect *avatarGlow = new QGraphicsDropShadowEffect(this);
+  avatarGlow->setBlurRadius(25);
+  avatarGlow->setColor(wizz::ui::ThemeEngine::accent());
+  avatarGlow->setOffset(0, 0);
+  m_avatarLabel->setGraphicsEffect(avatarGlow);
+
+  // Pulse Animation
+  QPropertyAnimation *pulse = new QPropertyAnimation(avatarGlow, "blurRadius", this);
+  pulse->setDuration(2000);
+  pulse->setStartValue(15.0);
+  pulse->setEndValue(35.0);
+  pulse->setEasingCurve(QEasingCurve::InOutSine);
+  pulse->setLoopCount(-1); // Infinite
+  pulse->start();
+
   QPushButton *avatarBtn = new QPushButton(m_avatarLabel);
-  avatarBtn->setFixedSize(50, 50);
+  avatarBtn->setFixedSize(80, 80);
   avatarBtn->setStyleSheet("background: transparent; border: none;");
   avatarBtn->setCursor(Qt::PointingHandCursor);
   connect(avatarBtn, &QPushButton::clicked, this, &MainWindow::onAvatarClicked);
 
   // User info
   QVBoxLayout *userInfoLayout = new QVBoxLayout();
-  userInfoLayout->setSpacing(4);
+  userInfoLayout->setSpacing(6);
 
+  QHBoxLayout *nameRow = new QHBoxLayout();
   m_usernameLabel = new QLabel(m_username, profileFrame);
-  m_usernameLabel->setStyleSheet("font-size: 16px; font-weight: 600; color: "
-                                 "#1a2530; background: transparent;");
+  m_usernameLabel->setStyleSheet(
+      QString("font-size: 20px; font-weight: 700; color: %1; background: "
+              "transparent;")
+          .arg(wizz::ui::ThemeEngine::onSurface().name()));
+
+  // SOVEREIGN BADGE — use emoji instead of PNG to avoid black background artifact
+  QLabel *sovereignBadge = new QLabel("🔒", profileFrame);
+  sovereignBadge->setToolTip("Sovereign Identity Verified (Ed25519)");
+  sovereignBadge->setStyleSheet(
+      "font-size: 14px; background: transparent; border: none; padding: 2px;");
+
+  nameRow->addWidget(m_usernameLabel);
+  nameRow->addWidget(sovereignBadge);
+  nameRow->addStretch();
 
   // Status dropdown
   m_statusCombo = new QComboBox(profileFrame);
   m_statusCombo->addItem("🟢 Online");
   m_statusCombo->addItem("🟠 Away");
   m_statusCombo->addItem("🔴 Busy");
-  m_statusCombo->addItem("⚫ Appear Offline");
+  m_statusCombo->addItem("⚫ Offline");
+  m_statusCombo->setFixedWidth(150);
+  // Use a dark glass palette for the popup so Qt doesn't override with system white
+  QPalette comboPalette = m_statusCombo->palette();
+  comboPalette.setColor(QPalette::Base, QColor(30, 35, 50, 220));     // dark glass
+  comboPalette.setColor(QPalette::Text, Qt::white);
+  comboPalette.setColor(QPalette::ButtonText, Qt::white);
+  comboPalette.setColor(QPalette::WindowText, Qt::white);
+  comboPalette.setColor(QPalette::Highlight, wizz::ui::ThemeEngine::accent());
+  comboPalette.setColor(QPalette::HighlightedText, Qt::white);
+  m_statusCombo->setPalette(comboPalette);
   m_statusCombo->setStyleSheet(R"(
-        QComboBox {
-            background-color: rgba(255, 255, 255, 80);
-            border: 1px solid rgba(200, 220, 240, 150);
-            border-radius: 10px;
-            padding: 4px 10px;
-            font-size: 12px;
-            color: #2d3748;
-        }
-        QComboBox:hover {
-            border: 1px solid rgba(100, 180, 255, 200);
-        }
-        QComboBox::drop-down {
-            border: none;
-        }
-    )");
-  m_statusCombo->setFixedWidth(160);
+      QComboBox {
+          background-color: rgba(255, 255, 255, 15);
+          border: 1px solid rgba(255, 255, 255, 20);
+          border-radius: 8px;
+          padding: 4px 10px;
+          color: white;
+          font-weight: 600;
+      }
+      QComboBox::drop-down { border: none; }
+      QComboBox QAbstractItemView {
+          background-color: rgba(30, 35, 50, 220);
+          border: 1px solid rgba(255, 255, 255, 20);
+          outline: none;
+          color: white;
+          selection-background-color: rgba(64, 153, 255, 180);
+          selection-color: white;
+          padding: 4px;
+      }
+  )");
   connect(m_statusCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
           this, &MainWindow::onStatusChanged);
 
   m_statusMessageInput = new QLineEdit(profileFrame);
-  m_statusMessageInput->setPlaceholderText("Share a quick thought...");
-  m_statusMessageInput->setStyleSheet(R"(
-        QLineEdit {
-            background-color: rgba(220, 240, 255, 120);
-            border: none;
-            border-radius: 15px;
-            border-bottom-left-radius: 5px;
-            padding: 5px 12px;
-            font-size: 11px;
-            color: #2d3748;
-            font-style: italic;
-        }
-        QLineEdit:focus {
-            background-color: rgba(255, 255, 255, 200);
-            font-style: normal;
-        }
-    )");
-  m_statusMessageInput->setFixedWidth(160);
+  m_statusMessageInput->setPlaceholderText("Broadcast a thought...");
+  m_statusMessageInput->setFixedWidth(200);
+  m_statusMessageInput->setAttribute(Qt::WA_MacShowFocusRect, false);
+  m_statusMessageInput->setStyleSheet(QString(R"(
+      QLineEdit {
+          background-color: rgba(255, 255, 255, 8);
+          border: 1px solid rgba(255, 255, 255, 15);
+          border-radius: 6px;
+          padding: 6px 10px;
+          color: %1;
+          font-size: 11px;
+      }
+      QLineEdit:focus {
+          border: 1px solid %2;
+          background-color: rgba(255, 255, 255, 15);
+      }
+  )").arg(wizz::ui::ThemeEngine::onSurface().name()).arg(wizz::ui::ThemeEngine::accent().name()));
   connect(m_statusMessageInput, &QLineEdit::returnPressed, this,
           &MainWindow::onStatusMessageSubmitted);
 
-  userInfoLayout->addWidget(m_usernameLabel);
+  userInfoLayout->addLayout(nameRow);
   userInfoLayout->addWidget(m_statusCombo);
   userInfoLayout->addWidget(m_statusMessageInput);
 
@@ -431,92 +512,80 @@ void MainWindow::setupUI() {
   profileLayout->addLayout(userInfoLayout);
   profileLayout->addStretch();
 
-  cardLayout->addWidget(profileFrame);
+  contentLayout->addWidget(profileFrame);
 
-  // --- Friends Header Row ---
-  QWidget *friendHeader = new QWidget(glassCard);
-  QHBoxLayout *friendHeaderLayout = new QHBoxLayout(friendHeader);
-  friendHeaderLayout->setContentsMargins(0, 5, 0, 5);
+  // --- Friends Section Header ---
+  QHBoxLayout *friendHeaderLayout = new QHBoxLayout();
+  friendHeaderLayout->setContentsMargins(5, 5, 5, 0);
 
-  QLabel *friendsLabel = new QLabel("Friends", friendHeader);
-  friendsLabel->setStyleSheet("font-size: 14px; font-weight: 600; color: "
-                              "#4a5568; background: transparent;");
+  QLabel *friendsLabel = new QLabel("CITIZENS", this);
+  friendsLabel->setStyleSheet(
+      QString(
+          "font-size: 11px; font-weight: 800; color: %1; letter-spacing: 2px;")
+          .arg(wizz::ui::ThemeEngine::onSurface3().name()));
 
-  QPushButton *addFriendBtn = new QPushButton("+", friendHeader);
-  addFriendBtn->setFixedSize(24, 24);
+  QPushButton *addFriendBtn = new QPushButton("+", this);
+  addFriendBtn->setFixedSize(28, 28);
   addFriendBtn->setCursor(Qt::PointingHandCursor);
-  addFriendBtn->setStyleSheet(R"(
+  addFriendBtn->setStyleSheet(QString(R"(
         QPushButton {
-            background-color: rgba(80, 180, 255, 40);
-            border: 1px solid rgba(80, 180, 255, 100);
-            border-radius: 12px;
-            color: #2d3748;
+            background-color: transparent;
+            border: 1px solid rgba(255, 255, 255, 30);
+            border-radius: 14px;
+            color: %1;
             font-weight: bold;
-            padding-bottom: 2px;
+            font-size: 16px;
         }
         QPushButton:hover {
-            background-color: rgba(80, 180, 255, 80);
+            background-color: rgba(0, 0, 0, 80);
+            border: 1px solid %1;
         }
-    )");
+    )")
+                                  .arg(wizz::ui::ThemeEngine::accent().name()));
   connect(addFriendBtn, &QPushButton::clicked, this,
           &MainWindow::onAddFriendClicked);
-
-  QPushButton *removeFriendBtn = new QPushButton("-", friendHeader);
-  removeFriendBtn->setFixedSize(24, 24);
-  removeFriendBtn->setCursor(Qt::PointingHandCursor);
-  removeFriendBtn->setStyleSheet(R"(
-        QPushButton {
-            background-color: rgba(255, 80, 80, 40);
-            border: 1px solid rgba(255, 80, 80, 100);
-            border-radius: 12px;
-            color: #2d3748;
-            font-weight: bold;
-            padding-bottom: 2px;
-        }
-        QPushButton:hover {
-            background-color: rgba(255, 80, 80, 80);
-        }
-    )");
-  connect(removeFriendBtn, &QPushButton::clicked, this,
-          &MainWindow::onRemoveFriendClicked);
 
   friendHeaderLayout->addWidget(friendsLabel);
   friendHeaderLayout->addStretch();
   friendHeaderLayout->addWidget(addFriendBtn);
-  friendHeaderLayout->addWidget(removeFriendBtn);
+  contentLayout->addLayout(friendHeaderLayout);
 
-  cardLayout->addWidget(friendHeader);
+  // --- Search Bar ---
+  m_searchBar = new wizz::ui::SearchBar(this);
+  connect(m_searchBar, &wizz::ui::SearchBar::textChanged, this,
+          &MainWindow::onSearchTextChanged);
+  contentLayout->addWidget(m_searchBar);
 
   // --- Contact List ---
-  m_contactList = new QListWidget(glassCard);
-  m_contactList->setStyleSheet(R"(
-        QListWidget {
-            background-color: rgba(255, 255, 255, 30);
-            border: 1px solid rgba(200, 230, 255, 120);
-            border-radius: 12px;
-        }
-        QListWidget::item {
-            border-bottom: 1px solid rgba(200, 220, 240, 80);
-        }
-        QListWidget::item:hover {
-            background-color: rgba(100, 180, 255, 40);
-        }
-        QListWidget::item:selected {
-            background-color: rgba(80, 160, 255, 80);
-        }
-    )");
+  m_contactList = new QListWidget(this);
   m_contactList->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
+  m_contactList->setSpacing(8);
+  m_contactList->setItemDelegate(new wizz::ui::ContactDelegate(m_contactList));
+  m_contactList->setContextMenuPolicy(Qt::CustomContextMenu);
+  m_contactList->setStyleSheet("background: transparent !important; border: none;");
+  m_contactList->viewport()->setStyleSheet("background: transparent !important;");
+  m_contactList->setFrameShape(QFrame::NoFrame);
+  m_contactList->setAttribute(Qt::WA_MacShowFocusRect, false);
+  m_contactList->setAttribute(Qt::WA_OpaquePaintEvent, false);
+  m_contactList->setAttribute(Qt::WA_NoSystemBackground, true);
+
   connect(m_contactList, &QListWidget::itemDoubleClicked, this,
           [this](QListWidgetItem *item) {
             onContactDoubleClicked(item->data(Qt::UserRole).toString());
           });
+  connect(m_contactList, &QListWidget::customContextMenuRequested, this,
+          &MainWindow::showContactContextMenu);
 
-  cardLayout->addWidget(m_contactList, 1); // Stretch
+  contentLayout->addWidget(m_contactList, 1);
 
-  // --- Game Panel ---
-  setupGamePanel(cardLayout);
+  // --- Social Arcade ---
+  m_socialArcade = new wizz::ui::arcade::SocialArcade(this);
+  connect(m_socialArcade, &wizz::ui::arcade::SocialArcade::categorySelected,
+          this, &MainWindow::onCategorySelected);
+  contentLayout->addWidget(m_socialArcade);
 
-  mainLayout->addWidget(glassCard);
+  // --- System Tray ---
+  setupSystemTray();
 }
 
 void MainWindow::setContacts(const QList<ContactInfo> &contacts) {
@@ -524,8 +593,10 @@ void MainWindow::setContacts(const QList<ContactInfo> &contacts) {
   QList<ContactInfo> mergedContacts = contacts;
   for (int i = 0; i < mergedContacts.size(); ++i) {
     for (const auto &existing : m_contacts) {
-      if (mergedContacts[i].username.compare(existing.username, Qt::CaseInsensitive) == 0) {
-        // If the new list doesn't have an avatar but the existing one does, keep it
+      if (mergedContacts[i].username.compare(existing.username,
+                                             Qt::CaseInsensitive) == 0) {
+        // If the new list doesn't have an avatar but the existing one does,
+        // keep it
         if (mergedContacts[i].avatar.isNull() && !existing.avatar.isNull()) {
           mergedContacts[i].avatar = existing.avatar;
         }
@@ -553,7 +624,6 @@ void MainWindow::setContacts(const QList<ContactInfo> &contacts) {
 }
 
 void MainWindow::populateContactList() {
-  std::cout << "[MainWindow] Populating contact list (count: " << m_contacts.size() << ")" << std::endl;
   m_contactList->clear();
 
   // Sort: Online first, then Away, then Busy, then Offline
@@ -563,119 +633,31 @@ void MainWindow::populateContactList() {
               return static_cast<int>(a.status) < static_cast<int>(b.status);
             });
 
+  // Build a map of username -> index in m_contacts so we can safely store
+  // pointers
+  QMap<QString, int> contactIndices;
+  for (int i = 0; i < m_contacts.size(); ++i) {
+    contactIndices[m_contacts[i].username] = i;
+  }
+
   for (const ContactInfo &contact : sorted) {
-    QWidget *itemWidget = new QWidget();
-    itemWidget->setObjectName("contactItem");
-    itemWidget->setStyleSheet(R"(
-        QWidget#contactItem {
-            background: transparent;
-            border-radius: 10px;
-        }
-        QWidget#contactItem:hover {
-            background: rgba(255, 255, 255, 0.1);
-        }
-    )");
-
-    QHBoxLayout *itemLayout = new QHBoxLayout(itemWidget);
-    itemLayout->setContentsMargins(12, 10, 12, 10);
-    itemLayout->setSpacing(15);
-
-    // Group Avatar and Status Dot (Horizontal)
-    QHBoxLayout *avatarGroup = new QHBoxLayout();
-    avatarGroup->setSpacing(6);
-    avatarGroup->setAlignment(Qt::AlignCenter);
-
-    // Avatar
-    QLabel *avatar = new QLabel();
-    if (contact.avatar.isNull()) {
-      avatar->setPixmap(
-          AvatarManager::instance().getAvatar(contact.username, 36));
-    } else {
-      avatar->setPixmap(contact.avatar.scaled(36, 36, Qt::KeepAspectRatio,
-                                              Qt::SmoothTransformation));
-    }
-    avatar->setFixedSize(36, 36);
-    avatar->setStyleSheet("background: transparent;");
-
-    // Status indicator
-    QLabel *statusDot = new QLabel();
-    statusDot->setFixedSize(8, 8);
-    statusDot->setStyleSheet(
-        QString("background-color: %1; border-radius: 4px;")
-            .arg(getStatusColor(contact.status).name()));
-
-    avatarGroup->addWidget(avatar);
-    avatarGroup->addWidget(statusDot, 0, Qt::AlignVCenter);
-
-    // Name and status message
-    QVBoxLayout *textLayout = new QVBoxLayout();
-    textLayout->setSpacing(2);
-
-    QLabel *nameLabel = new QLabel(contact.username);
-    nameLabel->setStyleSheet("font-size: 14px; font-weight: 700; color: "
-                             "#2c3e50; background: transparent;");
-
-    QString statusText = contact.statusMessage.isEmpty()
-                             ? getStatusText(contact.status)
-                             : contact.statusMessage;
-
-    // Add game status if playing
-    if (contact.isPlayingGame && !contact.currentGameName.isEmpty()) {
-      statusText = QString("🎮 Playing %1 (Score: %2)")
-                       .arg(contact.currentGameName)
-                       .arg(contact.currentGameScore);
-    }
-
-    QLabel *statusLabel = new QLabel(statusText);
-    statusLabel->setStyleSheet(
-        "font-size: 12px; color: #5d6d7e; background: transparent;");
-    statusLabel->setWordWrap(true);
-    statusLabel->setToolTip(statusText);
-
-    textLayout->addWidget(nameLabel);
-    textLayout->addWidget(statusLabel);
-    // Add TicTacToe Invite Button if user is Online
-    if (contact.status == UserStatus::Online) {
-      QPushButton *inviteBtn = new QPushButton();
-      inviteBtn->setText("🎮 Invite to Play\nTic Tac Toe");
-      inviteBtn->setFixedWidth(150);
-      inviteBtn->setToolTip("Challenge " + contact.username + " to Tic Tac Toe");
-      inviteBtn->setCursor(Qt::PointingHandCursor);
-      inviteBtn->setStyleSheet(R"(
-        QPushButton {
-          background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #ff0080, stop:1 #e01e5a);
-          color: white;
-          border: none;
-          border-radius: 18px;
-          padding: 8px 12px;
-          font-weight: 800;
-          font-size: 10px;
-          margin-top: 8px;
-          text-align: center;
-        }
-        QPushButton:hover {
-          background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #ff4da6, stop:1 #ff0080);
-        }
-      )");
-      connect(inviteBtn, &QPushButton::clicked, this, [this, name = contact.username]() {
-        NetworkManager::instance().sendGameInvite(name, "TicTacToe");
-      });
-      textLayout->addWidget(inviteBtn);
-    }
-
-    itemLayout->addLayout(avatarGroup);
-    itemLayout->addLayout(textLayout, 1);
-
     QListWidgetItem *item = new QListWidgetItem(m_contactList);
     item->setData(Qt::UserRole, contact.username);
-    item->setSizeHint(itemWidget->sizeHint());
-    m_contactList->setItemWidget(item, itemWidget);
+
+    // Store pointer to the ACTUAL ContactInfo struct in m_contacts, not the
+    // sorted copy
+    int realIndex = contactIndices[contact.username];
+    void *ptr =
+        static_cast<void *>(const_cast<ContactInfo *>(&m_contacts[realIndex]));
+    item->setData(Qt::UserRole + 1, QVariant::fromValue(ptr));
   }
 }
 
 void MainWindow::updateContactStatus(const QString &username, UserStatus status,
                                      const QString &statusMessage) {
-  std::cout << "[MainWindow] updateContactStatus signal for: " << username.toStdString() << " Status: " << static_cast<int>(status) << std::endl;
+  std::cout << "[MainWindow] updateContactStatus signal for: "
+            << username.toStdString() << " Status: " << static_cast<int>(status)
+            << std::endl;
   bool found = false;
   for (ContactInfo &contact : m_contacts) {
     if (contact.username.compare(username, Qt::CaseInsensitive) == 0) {
@@ -690,7 +672,8 @@ void MainWindow::updateContactStatus(const QString &username, UserStatus status,
     }
   }
   if (!found) {
-      std::cout << "[MainWindow] WARNING: Contact not found in list for update: " << username.toStdString() << std::endl;
+    std::cout << "[MainWindow] WARNING: Contact not found in list for update: "
+              << username.toStdString() << std::endl;
   }
   populateContactList();
 }
@@ -754,12 +737,15 @@ void MainWindow::updateContactAvatar(const QString &username,
 
 void MainWindow::onStatusChanged(int index) {
   m_currentStatus = static_cast<UserStatus>(index);
-  QString statusMessage = m_statusMessageInput ? m_statusMessageInput->text() : "";
+  QString statusMessage =
+      m_statusMessageInput ? m_statusMessageInput->text() : "";
   emit statusChanged(m_currentStatus, statusMessage);
 
   // Inform NetworkManager
-  NetworkManager::instance().sendStatusChange(static_cast<int>(m_currentStatus), statusMessage);
-  std::cout << "[MainWindow] Direct Status change to index: " << index << std::endl;
+  NetworkManager::instance().sendStatusChange(static_cast<int>(m_currentStatus),
+                                              statusMessage);
+  std::cout << "[MainWindow] Direct Status change to index: " << index
+            << std::endl;
 }
 
 void MainWindow::onStatusMessageSubmitted() {
@@ -818,9 +804,13 @@ void MainWindow::onContactDoubleClicked(const QString &username) {
 
   ChatWindow *w = new ChatWindow(username, startPos);
   connect(w, &ChatWindow::windowClosed, this, &MainWindow::onChatWindowClosed);
-  connect(w, &ChatWindow::sendMessage, this, [username](const QString &text) {
-    NetworkManager::instance().sendEncryptedMessage(username, text);
-  });
+  connect(w, &ChatWindow::sendMessage, this,
+          [username, w](const QString &text) {
+            NetworkManager::instance().sendEncryptedMessage(username, text);
+            // Since we now have rich messages, let's just make sure local echo
+            // works for plain text. Actually, local echo is done inside
+            // ChatWindow::onSendClicked, so we just send here.
+          });
   connect(w, &ChatWindow::sendNudge, this, [username]() {
     wizz::Packet pkt(wizz::PacketType::Nudge);
     pkt.writeString(username.toStdString()); // Target
@@ -842,10 +832,121 @@ void MainWindow::onChatWindowClosed(const QString &partnerName) {
 }
 
 ChatWindow *MainWindow::openChatWindow(const QString &username) {
-  if (!m_openChats.contains(username)) {
+  QString lowerName = username.toLower();
+  if (!m_openChats.contains(lowerName)) {
     onContactDoubleClicked(username);
   }
-  return m_openChats.value(username, nullptr);
+  return m_openChats.value(lowerName, nullptr);
+}
+
+void MainWindow::onSearchTextChanged(const QString &text) {
+  QString lowerText = text.toLower();
+  for (int i = 0; i < m_contactList->count(); ++i) {
+    QListWidgetItem *item = m_contactList->item(i);
+    QString username = item->data(Qt::UserRole).toString().toLower();
+    item->setHidden(!username.contains(lowerText));
+  }
+}
+
+void MainWindow::showContactContextMenu(const QPoint &pos) {
+  QListWidgetItem *item = m_contactList->itemAt(pos);
+  if (!item)
+    return;
+
+  QString username = item->data(Qt::UserRole).toString();
+
+  // Find contact info to check status
+  const ContactInfo *contact = nullptr;
+  for (const auto &c : m_contacts) {
+    if (c.username == username) {
+      contact = &c;
+      break;
+    }
+  }
+  if (!contact)
+    return;
+
+  QMenu menu(this);
+  QPalette menuPalette = menu.palette();
+  menuPalette.setColor(QPalette::Base, QColor(30, 35, 50, 220));
+  menuPalette.setColor(QPalette::Text, Qt::white);
+  menuPalette.setColor(QPalette::ButtonText, Qt::white);
+  menuPalette.setColor(QPalette::WindowText, Qt::white);
+  menuPalette.setColor(QPalette::Highlight, wizz::ui::ThemeEngine::accent());
+  menuPalette.setColor(QPalette::HighlightedText, Qt::white);
+  menu.setPalette(menuPalette);
+  
+  menu.setStyleSheet(QString(R"(
+    QMenu {
+      background-color: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 rgba(30, 35, 50, 240), stop:1 rgba(15, 20, 30, 240));
+      border: 1px solid rgba(255, 255, 255, 20);
+      border-radius: 12px;
+      padding: 6px;
+    }
+    QMenu::item {
+      padding: 8px 24px 8px 12px;
+      border-radius: 6px;
+      color: rgba(255, 255, 255, 230);
+      font-size: 14px;
+      font-weight: 500;
+      margin: 2px 4px;
+    }
+    QMenu::item:selected {
+      background-color: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 rgba(64, 153, 255, 200), stop:1 rgba(64, 153, 255, 80));
+      color: white;
+      font-weight: 600;
+    }
+    QMenu::separator {
+      height: 1px;
+      background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 rgba(255,255,255,0), stop:0.5 rgba(255,255,255,30), stop:1 rgba(255,255,255,0));
+      margin: 6px 12px;
+    }
+  )"));
+
+  QAction *openChatAction = menu.addAction("💬 Open Chat");
+  QAction *nudgeAction = nullptr;
+  QMenu *gameMenu = nullptr;
+  QAction *ticTacToeAction = nullptr;
+
+  if (contact->status == UserStatus::Online) {
+    nudgeAction = menu.addAction("⚡ Send Nudge");
+
+    // Sub-menu for games
+    gameMenu = menu.addMenu("🎮 Invite to Game...");
+    
+    // Set matching palette for submenu
+    gameMenu->setPalette(menuPalette);
+    gameMenu->setStyleSheet(menu.styleSheet());
+
+    ticTacToeAction = gameMenu->addAction("❎🅾️ TicTacToe");
+
+    connect(ticTacToeAction, &QAction::triggered, this, [this, username]() {
+      NetworkManager::instance().sendGameInvite(username, "TicTacToe");
+    });
+  }
+
+  menu.addSeparator();
+  QAction *removeAction = menu.addAction("🗑️ Remove Contact");
+
+  QAction *selectedAction = menu.exec(m_contactList->mapToGlobal(pos));
+  if (selectedAction == openChatAction) {
+    onContactDoubleClicked(username);
+  } else if (nudgeAction && selectedAction == nudgeAction) {
+    wizz::Packet pkt(wizz::PacketType::Nudge);
+    pkt.writeString(username.toStdString());
+    NetworkManager::instance().sendPacket(pkt);
+  } else if (selectedAction == removeAction) {
+    QMessageBox::StandardButton reply = QMessageBox::question(
+        this, "Remove Contact",
+        "Are you sure you want to remove " + username + "?",
+        QMessageBox::Yes | QMessageBox::No);
+
+    if (reply == QMessageBox::Yes) {
+      wizz::Packet pkt(wizz::PacketType::RemoveContact);
+      pkt.writeString(username.toStdString());
+      NetworkManager::instance().sendPacket(pkt);
+    }
+  }
 }
 
 void MainWindow::onAvatarClicked() {
@@ -872,140 +973,71 @@ void MainWindow::onAvatarClicked() {
   NetworkManager::instance().sendUpdateAvatar(bytes);
 }
 
-// --- Game Panel Implementation ---
+// --- Social Arcade Implementation ---
 
-void MainWindow::setupGamePanel(QVBoxLayout *parentLayout) {
-  m_gamePanelFrame = new QFrame(this);
-  m_gamePanelFrame->setStyleSheet(R"(
-        background-color: rgba(255, 255, 255, 40);
-        border: 1px solid rgba(200, 230, 255, 150);
-        border-radius: 12px;
-    )");
-
-  QVBoxLayout *panelLayout = new QVBoxLayout(m_gamePanelFrame);
-  panelLayout->setContentsMargins(12, 10, 12, 10);
-  panelLayout->setSpacing(8);
-
-  QLabel *titleLabel = new QLabel("SELECT A GAME TO PLAY", m_gamePanelFrame);
-  titleLabel->setStyleSheet("font-size: 11px; font-weight: 800; color: "
-                            "#4a5568; background: transparent; "
-                            "letter-spacing: 1px; text-transform: uppercase;");
-  titleLabel->setAlignment(Qt::AlignCenter);
-  panelLayout->addWidget(titleLabel);
-
-  // Horizontal layout for game icons
-  m_gamesLayout = new QHBoxLayout();
-  m_gamesLayout->setSpacing(15);
-  m_gamesLayout->addStretch();
-
-  QString tileTwisterDir = GameLauncher::resolveWorkingDir("TileTwister");
-  QString tileTwisterIcon =
-      QDir(tileTwisterDir).absoluteFilePath("assets/logo.png");
-
-  QString brickBreakerDir = GameLauncher::resolveWorkingDir("BrickBreaker");
-  QString brickBreakerIcon =
-      QDir(brickBreakerDir).absoluteFilePath("assets/logo.png");
-
-  // Placeholder for where games will be added
-  addGameIcon("TileTwister", tileTwisterIcon);
-  addGameIcon("BrickBreaker", brickBreakerIcon);
-
-  m_gamesLayout->addStretch();
-  panelLayout->addLayout(m_gamesLayout);
-
-  parentLayout->addWidget(m_gamePanelFrame);
-}
-
-void MainWindow::addGameIcon(const QString &name, const QString &iconPath) {
-  if (!m_gamesLayout)
-    return;
-
-  // Create Launch Button
-  QPushButton *gameBtn = new QPushButton(m_gamePanelFrame);
-  gameBtn->setFixedSize(64, 64);
-  gameBtn->setCursor(Qt::PointingHandCursor);
-  gameBtn->setToolTip("Play " + name);
-
-  // Install Event Filter for Hover Animation
-  gameBtn->installEventFilter(this);
-
-  // Load Icon
-  QPixmap pix(iconPath);
-  if (!iconPath.isEmpty() && !pix.isNull()) {
-    gameBtn->setIcon(QIcon(pix));
-    gameBtn->setIconSize(QSize(48, 48));
-  } else {
-    // Fallback: Colorful Text Icon
-    gameBtn->setText(name.left(1).toUpper());
-    QFont font = gameBtn->font();
-    font.setPixelSize(32);
-    font.setBold(true);
-    gameBtn->setFont(font);
-  }
-
-  gameBtn->setStyleSheet(R"(
-        QPushButton {
-            background-color: rgba(255, 255, 255, 60);
-            border: 2px solid rgba(200, 230, 255, 150);
-            border-radius: 32px;
-            padding: 0px;
-            color: #2d3748;
-        }
-        QPushButton:hover {
-            background-color: rgba(100, 200, 255, 80);
-            border: 2px solid rgba(100, 200, 255, 200);
-        }
-        QPushButton:pressed {
-            background-color: rgba(80, 180, 255, 120);
-        }
-    )");
-
-  // Connect click to launch
-  connect(gameBtn, &QPushButton::clicked, this,
-          [this, name]() { GameLauncher::launchGame(name, m_username); });
-
-  // Insert before the last stretch
-  m_gamesLayout->insertWidget(m_gamesLayout->count() - 1, gameBtn);
-}
-
-bool MainWindow::eventFilter(QObject *obj, QEvent *event) {
-  if (QPushButton *btn = qobject_cast<QPushButton *>(obj)) {
-    if (event->type() == QEvent::Enter) {
-      // Hover Enter: Scale Up Icon
-      QPropertyAnimation *anim = new QPropertyAnimation(btn, "iconSize");
-      anim->setDuration(150);
-      anim->setStartValue(btn->iconSize());
-      anim->setEndValue(QSize(56, 56));
-      anim->start(QAbstractAnimation::DeleteWhenStopped);
-      return true;
-    } else if (event->type() == QEvent::Leave) {
-      // Hover Leave: Scale Down Icon
-      QPropertyAnimation *anim = new QPropertyAnimation(btn, "iconSize");
-      anim->setDuration(150);
-      anim->setStartValue(btn->iconSize());
-      anim->setEndValue(QSize(48, 48));
-      anim->start(QAbstractAnimation::DeleteWhenStopped);
-      return true;
+void MainWindow::onCategorySelected(
+    const wizz::ui::arcade::ArcadeCategory &category) {
+  // Gather online contacts for the share dialog
+  QList<QString> onlineUsers;
+  for (const auto &contact : m_contacts) {
+    if (contact.status == UserStatus::Online &&
+        contact.username != m_username) {
+      onlineUsers.append(contact.username);
     }
   }
-  return QWidget::eventFilter(obj, event);
+
+  auto *popup =
+      new wizz::ui::arcade::CategoryPopup(category, onlineUsers, this);
+
+  connect(popup,
+          &wizz::ui::arcade::CategoryPopup::broadcastRichPresenceRequested,
+          this,
+          [](const wizz::ui::arcade::ArcadeCategory &cat, const QString &text) {
+            // Assuming type 2 for generic arcade activities
+            NetworkManager::instance().sendRichPresence(2, cat.name, text);
+          });
+
+  connect(popup, &wizz::ui::arcade::CategoryPopup::shareToChatRequested, this,
+          [](const wizz::ui::arcade::ArcadeCategory &cat, const QString &text,
+             const QString &targetUser) {
+            // Send a rich card message
+            QString richMsg = QString("{\"type\":\"arcade_share\",\"category\":"
+                                      "\"%1\",\"text\":\"%2\"}")
+                                  .arg(cat.name)
+                                  .arg(text);
+            NetworkManager::instance().sendEncryptedMessage(targetUser,
+                                                            richMsg);
+          });
+
+  // Center popup over main window
+  popup->move(geometry().center() - popup->rect().center());
+  popup->exec();
 }
 
-void MainWindow::onLocalGameStatusChanged(bool isPlaying, const QString& gameName, uint32_t score) {
-  NetworkManager::instance().sendGameStatus(isPlaying ? gameName : "", score);
+void MainWindow::onLocalGameStatusChanged(bool isPlaying,
+                                          const QString &gameName,
+                                          uint32_t score) {
+  if (isPlaying) {
+    NetworkManager::instance().sendRichPresence(
+        1, gameName, QString("Score: %1").arg(score));
+  } else {
+    NetworkManager::instance().sendRichPresence(0, "", "");
+  }
+
   if (m_statusMessageInput) {
     if (isPlaying) {
-      m_statusMessageInput->setText(QString("🎮 Playing %1 (Score: %2)").arg(gameName).arg(score));
+      m_statusMessageInput->setText(
+          QString("🎮 Playing %1 (Score: %2)").arg(gameName).arg(score));
       m_statusMessageInput->setReadOnly(true);
     } else {
       m_statusMessageInput->setText("");
       m_statusMessageInput->setReadOnly(false);
-      m_statusMessageInput->setPlaceholderText("Share a quick thought...");
+      m_statusMessageInput->setPlaceholderText("Broadcast a thought...");
     }
   }
 }
 
-void MainWindow::onLocalMoveMade(const QString& roomId, uint8_t cellIndex) {
+void MainWindow::onLocalMoveMade(const QString &roomId, uint8_t cellIndex) {
   NetworkManager::instance().sendGameMove(roomId, cellIndex);
 }
 
@@ -1017,4 +1049,192 @@ void MainWindow::onTicTacToeFinished() {
     m_statusMessageInput->setPlaceholderText("Share a quick thought...");
   }
   populateContactList();
+}
+
+// ── System Tray & Badges ──────────────────────────────────────────────────
+
+void MainWindow::setupSystemTray() {
+  if (!QSystemTrayIcon::isSystemTrayAvailable())
+    return;
+
+  m_trayIcon = new QSystemTrayIcon(this);
+  m_trayIcon->setIcon(QIcon(":/assets/butterfly.png"));
+  m_trayIcon->setToolTip("WizzMania Pro");
+
+  connect(m_trayIcon, &QSystemTrayIcon::activated, this,
+          [this](QSystemTrayIcon::ActivationReason reason) {
+            if (reason == QSystemTrayIcon::Trigger ||
+                reason == QSystemTrayIcon::DoubleClick) {
+              this->showNormal();
+              this->activateWindow();
+            }
+          });
+
+  m_trayIcon->show();
+}
+
+void MainWindow::updateGlobalUnreadCount() {
+  int totalUnread = 0;
+  for (const auto &contact : m_contacts) {
+    totalUnread += contact.unreadCount;
+  }
+
+  if (m_trayIcon) {
+    if (totalUnread > 0) {
+      m_trayIcon->setToolTip(
+          QString("WizzMania Pro (%1 Unread)").arg(totalUnread));
+      // Optionally show a macOS notification
+      // m_trayIcon->showMessage("New Messages", QString("You have %1 unread
+      // messages").arg(totalUnread), QSystemTrayIcon::Information, 3000);
+    } else {
+      m_trayIcon->setToolTip("WizzMania Pro");
+    }
+  }
+
+  // Also update the TitleBar if we want
+  // auto* titleBar = findChild<TitleBar*>();
+  // if (titleBar) {
+  //   titleBar->setTitle(totalUnread > 0 ? QString("WizzMania Pro
+  //   (%1)").arg(totalUnread) : "WizzMania Pro");
+  // }
+}
+
+// ── Frameless Resize Implementation ─────────────────────────────────────────
+
+MainWindow::ResizeEdge MainWindow::edgeAtPoint(const QPoint &p) const {
+  const int r = RESIZE_MARGIN;
+  const int w = width();
+  const int h = height();
+
+  bool left = p.x() <= r;
+  bool right = p.x() >= w - r;
+  bool top = p.y() <= r;
+  bool bottom = p.y() >= h - r;
+
+  if (top && left)
+    return ResizeEdge::TopLeft;
+  if (top && right)
+    return ResizeEdge::TopRight;
+  if (bottom && left)
+    return ResizeEdge::BottomLeft;
+  if (bottom && right)
+    return ResizeEdge::BottomRight;
+  if (left)
+    return ResizeEdge::Left;
+  if (right)
+    return ResizeEdge::Right;
+  if (top)
+    return ResizeEdge::Top;
+  if (bottom)
+    return ResizeEdge::Bottom;
+
+  return ResizeEdge::None;
+}
+
+void MainWindow::applyCursorForEdge(ResizeEdge edge) {
+  switch (edge) {
+  case ResizeEdge::Left:
+  case ResizeEdge::Right:
+    setCursor(Qt::SizeHorCursor);
+    break;
+  case ResizeEdge::Top:
+  case ResizeEdge::Bottom:
+    setCursor(Qt::SizeVerCursor);
+    break;
+  case ResizeEdge::TopLeft:
+  case ResizeEdge::BottomRight:
+    setCursor(Qt::SizeFDiagCursor);
+    break;
+  case ResizeEdge::TopRight:
+  case ResizeEdge::BottomLeft:
+    setCursor(Qt::SizeBDiagCursor);
+    break;
+  case ResizeEdge::None:
+    unsetCursor();
+    break;
+  }
+}
+
+void MainWindow::mousePressEvent(QMouseEvent *event) {
+  if (event->button() == Qt::LeftButton) {
+    m_resizeEdge = edgeAtPoint(event->pos());
+    if (m_resizeEdge != ResizeEdge::None) {
+      m_resizing = true;
+      m_resizeStart = event->globalPosition().toPoint();
+      m_resizeStartGeom = geometry();
+      event->accept();
+      return;
+    }
+  }
+  QWidget::mousePressEvent(event);
+}
+
+void MainWindow::mouseMoveEvent(QMouseEvent *event) {
+  if (m_resizing) {
+    QPoint diff = event->globalPosition().toPoint() - m_resizeStart;
+    QRect newGeom = m_resizeStartGeom;
+
+    switch (m_resizeEdge) {
+    case ResizeEdge::Left:
+      newGeom.setLeft(
+          qMin(newGeom.right() - minimumWidth(), newGeom.left() + diff.x()));
+      break;
+    case ResizeEdge::Right:
+      newGeom.setRight(
+          qMax(newGeom.left() + minimumWidth(), newGeom.right() + diff.x()));
+      break;
+    case ResizeEdge::Top:
+      newGeom.setTop(
+          qMin(newGeom.bottom() - minimumHeight(), newGeom.top() + diff.y()));
+      break;
+    case ResizeEdge::Bottom:
+      newGeom.setBottom(
+          qMax(newGeom.top() + minimumHeight(), newGeom.bottom() + diff.y()));
+      break;
+    case ResizeEdge::TopLeft:
+      newGeom.setLeft(
+          qMin(newGeom.right() - minimumWidth(), newGeom.left() + diff.x()));
+      newGeom.setTop(
+          qMin(newGeom.bottom() - minimumHeight(), newGeom.top() + diff.y()));
+      break;
+    case ResizeEdge::TopRight:
+      newGeom.setRight(
+          qMax(newGeom.left() + minimumWidth(), newGeom.right() + diff.x()));
+      newGeom.setTop(
+          qMin(newGeom.bottom() - minimumHeight(), newGeom.top() + diff.y()));
+      break;
+    case ResizeEdge::BottomLeft:
+      newGeom.setLeft(
+          qMin(newGeom.right() - minimumWidth(), newGeom.left() + diff.x()));
+      newGeom.setBottom(
+          qMax(newGeom.top() + minimumHeight(), newGeom.bottom() + diff.y()));
+      break;
+    case ResizeEdge::BottomRight:
+      newGeom.setRight(
+          qMax(newGeom.left() + minimumWidth(), newGeom.right() + diff.x()));
+      newGeom.setBottom(
+          qMax(newGeom.top() + minimumHeight(), newGeom.bottom() + diff.y()));
+      break;
+    case ResizeEdge::None:
+      break;
+    }
+    setGeometry(newGeom);
+    event->accept();
+    return;
+  }
+
+  // Not resizing, update cursor on hover
+  applyCursorForEdge(edgeAtPoint(event->pos()));
+  QWidget::mouseMoveEvent(event);
+}
+
+void MainWindow::mouseReleaseEvent(QMouseEvent *event) {
+  if (m_resizing && event->button() == Qt::LeftButton) {
+    m_resizing = false;
+    m_resizeEdge = ResizeEdge::None;
+    applyCursorForEdge(edgeAtPoint(event->pos()));
+    event->accept();
+    return;
+  }
+  QWidget::mouseReleaseEvent(event);
 }

@@ -20,4 +20,11 @@ struct PreKeyBundle {
     std::string oneTimeKey; // empty if exhausted
 };
 
+struct RichPresence {
+    int type = 0; // 0=None, 1=Gaming, 2=Music, 3=Thinking
+    std::string activityName;
+    std::string activityDetail;
+    int64_t startTime = 0;
+};
+
 } // namespace wizz
