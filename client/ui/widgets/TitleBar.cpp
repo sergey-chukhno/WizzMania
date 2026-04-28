@@ -102,7 +102,7 @@ void TitleBar::buildLayout() {
     // Connect to signals AND to exact macOS behavior
     connect(m_btnClose, &QPushButton::clicked, this, [this] {
         emit closeClicked();
-        QApplication::quit();              // red = quit the app (exact macOS)
+        if (window()) window()->close(); // Standard behavior: close the window, let Qt handle app exit if last window.
     });
     connect(m_btnMinimize, &QPushButton::clicked, this, [this] {
         emit minimizeClicked();

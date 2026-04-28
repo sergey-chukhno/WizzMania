@@ -41,6 +41,8 @@ set(CLIENT_SOURCES
     ui/arcade/CategoryPopup.h
     ui/arcade/SocialArcade.cpp
     ui/arcade/SocialArcade.h
+    ui/arcade/GameSelectionPopup.cpp
+    ui/arcade/GameSelectionPopup.h
     logic/GameLauncher.cpp
     logic/GameLauncher.h
     logic/GameBridge.cpp

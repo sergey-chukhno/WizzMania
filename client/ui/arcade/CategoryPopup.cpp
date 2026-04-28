@@ -6,7 +6,10 @@
 #include <QPushButton>
 #include <QLabel>
 #include <QPainter>
+#include <QPainterPath>
+#include <QImage>
 #include <QComboBox>
+#include <QLineEdit>
 
 namespace wizz::ui::arcade {
 
@@ -19,7 +22,7 @@ CategoryPopup::CategoryPopup(const ArcadeCategory& category, const QList<QString
 {
     setWindowFlags(Qt::FramelessWindowHint | Qt::Dialog);
     setAttribute(Qt::WA_TranslucentBackground);
-    setFixedSize(360, 260);
+    setFixedSize(380, 240);
 
     setupUI();
 }
@@ -29,11 +32,32 @@ void CategoryPopup::setupUI() {
     mainLayout->setContentsMargins(0, 0, 0, 0);
     mainLayout->setSpacing(0);
 
-    // Header
-    auto* titleBar = new TitleBar(m_category.name, this);
-    // Don't want maximize/minimize for this small dialog
-    titleBar->setStyleSheet("background: transparent;"); // Keep it minimal
-    mainLayout->addWidget(titleBar);
+    // Sleek minimalist header instead of full title bar
+    auto* headerLayout = new QHBoxLayout();
+    headerLayout->setContentsMargins(24, 16, 24, 0);
+    
+    auto* headerTitle = new QLabel(QString("SHARE %1 ACTIVITY").arg(m_category.name.toUpper()));
+    headerTitle->setStyleSheet(QString("color: rgba(255, 255, 255, 180); font-weight: 900; letter-spacing: 3px; font-size: 11px;"));
+    
+    auto* closeBtn = new QPushButton("✕");
+    closeBtn->setFixedSize(24, 24);
+    closeBtn->setCursor(Qt::PointingHandCursor);
+    closeBtn->setStyleSheet(R"(
+        QPushButton {
+            background: rgba(255, 255, 255, 15);
+            color: white;
+            border-radius: 12px;
+            font-weight: bold;
+        }
+        QPushButton:hover { background: rgba(255, 255, 255, 30); }
+    )");
+    connect(closeBtn, &QPushButton::clicked, this, &QDialog::reject);
+
+    headerLayout->addWidget(headerTitle);
+    headerLayout->addStretch();
+    headerLayout->addWidget(closeBtn);
+    
+    mainLayout->addLayout(headerLayout);
 
     auto* contentLayout = new QVBoxLayout();
     contentLayout->setContentsMargins(20, 20, 20, 20);
@@ -41,12 +65,27 @@ void CategoryPopup::setupUI() {
 
     // Icon & Title
     auto* titleRow = new QHBoxLayout();
-    auto* iconLbl = new QLabel(m_category.icon);
-    iconLbl->setStyleSheet("font-size: 32px; background: transparent;");
+    auto* iconLbl = new QLabel();
+    if (m_category.icon.startsWith(":/")) {
+        QPixmap pix(m_category.icon);
+        QImage img = pix.toImage().convertToFormat(QImage::Format_ARGB32);
+        for (int y = 0; y < img.height(); ++y) {
+            for (int x = 0; x < img.width(); ++x) {
+                QRgb pixel = img.pixel(x, y);
+                if (qRed(pixel) < 30 && qGreen(pixel) < 30 && qBlue(pixel) < 30) {
+                    img.setPixel(x, y, qRgba(0, 0, 0, 0));
+                }
+            }
+        }
+        iconLbl->setPixmap(QPixmap::fromImage(img).scaled(48, 48, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+    } else {
+        iconLbl->setText(m_category.icon);
+        iconLbl->setStyleSheet("font-size: 32px; background: transparent;");
+    }
     
     auto* titleLbl = new QLabel(QString("Share %1 Activity").arg(m_category.name));
     titleLbl->setFont(TE::fontTitle());
-    titleLbl->setStyleSheet(QString("color: %1; background: transparent;").arg(TE::onSurface().name()));
+    titleLbl->setStyleSheet("color: #FFFFFF; background: transparent; font-weight: 800;");
     
     titleRow->addWidget(iconLbl);
     titleRow->addWidget(titleLbl);
@@ -56,41 +95,24 @@ void CategoryPopup::setupUI() {
     // Input
     m_inputField = new QLineEdit();
     m_inputField->setPlaceholderText("What are you currently doing?");
-    m_inputField->setFixedHeight(40);
+    m_inputField->setFixedHeight(44);
     m_inputField->setStyleSheet(QString(R"(
         QLineEdit {
-            background-color: rgba(0,0,0,30);
-            border: 1px solid rgba(255,255,255,20);
+            background-color: rgba(0,0,0,50);
+            border: 2px solid rgba(255,255,255,20);
             border-radius: %1px;
             padding: 0 12px;
-            color: %2;
+            color: #FFFFFF;
             font-size: 14px;
         }
         QLineEdit:focus {
-            border: 1px solid %3;
-            background-color: rgba(0,0,0,50);
+            border: 2px solid %2;
+            background-color: rgba(0,0,0,70);
         }
-    )").arg(TE::rMd).arg(TE::onSurface().name()).arg(m_category.colorHex));
+    )").arg(TE::rMd).arg(m_category.colorHex));
     contentLayout->addWidget(m_inputField);
 
-    // Recipient selection (if sharing to chat)
-    auto* targetCombo = new QComboBox();
-    targetCombo->setFixedHeight(36);
-    targetCombo->addItem("Broadcast to Profile (Rich Presence)");
-    targetCombo->insertSeparator(1);
-    for (const auto& contact : m_onlineContacts) {
-        targetCombo->addItem(QString("Share with %1").arg(contact), contact); // Data is username
-    }
-    targetCombo->setStyleSheet(QString(R"(
-        QComboBox {
-            background-color: rgba(0,0,0,30);
-            border: 1px solid rgba(255,255,255,20);
-            border-radius: %1px;
-            padding: 0 12px;
-            color: %2;
-        }
-    )").arg(TE::rSm).arg(TE::onSurface().name()));
-    contentLayout->addWidget(targetCombo);
+    contentLayout->addStretch();
 
     contentLayout->addStretch();
 
@@ -110,8 +132,9 @@ void CategoryPopup::setupUI() {
     )").arg(TE::onSurface2().name()).arg(TE::rSm));
     connect(cancelBtn, &QPushButton::clicked, this, &QDialog::reject);
 
-    auto* shareBtn = new QPushButton("Share");
-    shareBtn->setFixedSize(100, 32);
+    auto* shareBtn = new QPushButton("Share Activity");
+    shareBtn->setFixedSize(140, 36);
+    shareBtn->setCursor(Qt::PointingHandCursor);
     shareBtn->setStyleSheet(QString(R"(
         QPushButton {
             background-color: %1;
@@ -119,22 +142,16 @@ void CategoryPopup::setupUI() {
             border: none;
             border-radius: %2px;
             font-weight: bold;
+            font-size: 13px;
         }
         QPushButton:hover { background-color: %3; }
     )").arg(m_category.colorHex)
        .arg(TE::rSm)
        .arg(QColor(m_category.colorHex).lighter(115).name()));
     
-    connect(shareBtn, &QPushButton::clicked, this, [this, targetCombo]() {
+    connect(shareBtn, &QPushButton::clicked, this, [this]() {
         if (m_inputField->text().trimmed().isEmpty()) return;
-        
-        int idx = targetCombo->currentIndex();
-        if (idx == 0) { // Broadcast
-            emit broadcastRichPresenceRequested(m_category, m_inputField->text());
-        } else { // Share
-            QString targetUser = targetCombo->itemData(idx).toString();
-            emit shareToChatRequested(m_category, m_inputField->text(), targetUser);
-        }
+        emit broadcastRichPresenceRequested(m_category, m_inputField->text());
         accept();
     });
 
@@ -149,13 +166,16 @@ void CategoryPopup::paintEvent(QPaintEvent*) {
     QPainter p(this);
     p.setRenderHint(QPainter::Antialiasing);
 
-    // Draw rounded background
     QPainterPath path;
-    path.addRoundedRect(rect().adjusted(1, 1, -1, -1), TE::rLg, TE::rLg);
+    path.addRoundedRect(rect().adjusted(1, 1, -1, -1), 24, 24);
 
-    p.fillPath(path, TE::surfaceHigh());
+    // Unify with GameSelectionPopup gradient
+    QLinearGradient grad(0, 0, 0, height());
+    grad.setColorAt(0, QColor(40, 45, 60, 245));
+    grad.setColorAt(1, QColor(20, 25, 35, 245));
+    p.fillPath(path, grad);
     
-    p.setPen(QPen(QColor(255,255,255,30), 1));
+    p.setPen(QPen(QColor(255, 255, 255, 40), 1));
     p.drawPath(path);
 }
 

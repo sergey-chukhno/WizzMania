@@ -19,11 +19,11 @@ struct ArcadeCategory {
 
 inline QList<ArcadeCategory> getDefaultCategories() {
     return {
-        {"music", "Music", "🎵", "#1DB954", "Share Spotify/Apple Music activity"},
-        {"video", "Video", "🎬", "#E50914", "Share Netflix/YouTube activity"},
-        {"books", "Books", "📚", "#FF9900", "Share Kindle/Audible activity"},
-        {"travel", "Travel", "✈️", "#00AEEF", "Share flight/travel status"},
-        {"events", "Events", "🎟️", "#FF4500", "Share concert/event tickets"}
+        {"music",  "Music",   ":/assets/arcade/music.png",  "#A855F7", "Share Spotify/Apple Music activity"},
+        {"video",  "Video",   ":/assets/arcade/video.png",  "#F97316", "Share Netflix/YouTube activity"},
+        {"books",  "Books",   ":/assets/arcade/books.png",  "#22C55E", "Share Kindle/Audible activity"},
+        {"travel", "Travels", ":/assets/arcade/travel.png", "#3B82F6", "Share flight/travel status"},
+        {"games",  "Games",   ":/assets/arcade/games.png",  "#EC4899", "Play Arcade Games"}
     };
 }
 

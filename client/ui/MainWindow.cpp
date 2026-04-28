@@ -8,6 +8,7 @@
 #include "AddFriendDialog.h"
 #include "ChatWindow.h"
 #include "arcade/CategoryPopup.h"
+#include "arcade/GameSelectionPopup.h"
 #include "theme/ThemeEngine.h"
 #include "widgets/ContactDelegate.h"
 #include "widgets/SearchBar.h"
@@ -977,6 +978,17 @@ void MainWindow::onAvatarClicked() {
 
 void MainWindow::onCategorySelected(
     const wizz::ui::arcade::ArcadeCategory &category) {
+  
+  if (category.id == "games") {
+    auto* popup = new wizz::ui::arcade::GameSelectionPopup(category, this);
+    connect(popup, &wizz::ui::arcade::GameSelectionPopup::gameSelected, this, [this](const QString& gameId) {
+        GameLauncher::launchGame(gameId, m_username);
+        NetworkManager::instance().sendRichPresence(1, gameId, "Playing " + gameId);
+    });
+    popup->show();
+    return;
+  }
+
   // Gather online contacts for the share dialog
   QList<QString> onlineUsers;
   for (const auto &contact : m_contacts) {

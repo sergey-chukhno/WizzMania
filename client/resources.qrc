@@ -16,5 +16,12 @@
         <file>assets/icon_send_nudge.png</file>
         <file>assets/icon_invite_game.png</file>
         <file>assets/icon_remove_contact.png</file>
+        <file>assets/brickbreaker_logo.png</file>
+        <file>assets/tiletwister_logo.png</file>
+        <file>assets/arcade/music.png</file>
+        <file>assets/arcade/video.png</file>
+        <file>assets/arcade/books.png</file>
+        <file>assets/arcade/travel.png</file>
+        <file>assets/arcade/games.png</file>
     </qresource>
 </RCC>
