@@ -59,7 +59,7 @@ private slots:
 
 private:
   void setupUI();
-  QWidget *createMessageBubble(const QString &text, const QString &time,
+  QWidget *createMessageBubble(const QString &sender, const QString &text, const QString &time,
                                bool isSelf);
   QWidget *createVoiceBubble(uint16_t duration,
                              const std::vector<uint8_t> &data,
@@ -77,6 +77,9 @@ private:
   QPushButton *m_micBtn;
   QPixmap m_background;
   wizz::ui::TypingBubble *m_typingBubble;
+  QWidget *m_typingContainer;
+  QLabel *m_typingLabel;
+  QLabel *m_headerAvatar;
 
   // Typing Logic
   bool m_isTyping = false;

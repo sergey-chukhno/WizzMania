@@ -119,12 +119,18 @@ void TitleBar::buildLayout() {
 
     root->addWidget(tlArea);
 
-    // ── Left slot (optional icon / back button) ──
+    // ── Left slot (Logo) ──
     m_leftSlot = new QWidget(this);
     auto* leftLayout = new QHBoxLayout(m_leftSlot);
-    leftLayout->setContentsMargins(0, 0, 0, 0);
+    leftLayout->setContentsMargins(15, 0, 0, 0);
     leftLayout->setSpacing(0);
-    m_leftSlot->setVisible(false);
+    
+    QLabel* logoLabel = new QLabel(this);
+    logoLabel->setFixedSize(20, 20);
+    logoLabel->setPixmap(QPixmap(":/assets/butterfly.png").scaled(20, 20, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+    leftLayout->addWidget(logoLabel);
+    
+    m_leftSlot->setVisible(true);
     root->addWidget(m_leftSlot);
 
     // ── Center title (expands to fill remaining space) ──

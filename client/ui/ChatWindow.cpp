@@ -1,5 +1,6 @@
 #include "ChatWindow.h"
 #include "../network/NetworkManager.h"
+#include "../logic/AvatarManager.h"
 #include "theme/ThemeEngine.h"
 #include "widgets/TitleBar.h"
 #include <QApplication>
@@ -105,6 +106,7 @@ ChatWindow::ChatWindow(const QString &partnerName, const QPoint &initialPos,
   connect(&NetworkManager::instance(), &NetworkManager::userTyping, this,
           [this](const QString &sender, bool isTyping) {
             if (sender == m_partnerName) {
+              m_typingContainer->setVisible(isTyping);
               if (isTyping) {
                 m_typingBubble->startAnimation();
               } else {
@@ -112,6 +114,40 @@ ChatWindow::ChatWindow(const QString &partnerName, const QPoint &initialPos,
               }
             }
           });
+
+  // Dynamic Avatar Updates
+  connect(&::AvatarManager::instance(), &::AvatarManager::avatarUpdated, this,
+          [this](const QString &user, const QPixmap &avatar) {
+            if (user == m_partnerName && m_headerAvatar) {
+                m_headerAvatar->setPixmap(avatar.scaled(32, 32, Qt::KeepAspectRatioByExpanding, Qt::SmoothTransformation));
+                
+                // Circle Mask
+                QPixmap circular(32, 32);
+                circular.fill(Qt::transparent);
+                QPainter painter(&circular);
+                painter.setRenderHint(QPainter::Antialiasing);
+                QPainterPath path;
+                path.addEllipse(0, 0, 32, 32);
+                painter.setClipPath(path);
+                painter.drawPixmap(0, 0, avatar.scaled(32, 32, Qt::KeepAspectRatioByExpanding, Qt::SmoothTransformation));
+                m_headerAvatar->setPixmap(circular);
+            }
+          });
+  
+  // Initial Avatar Fetch & Immediate Apply
+  QPixmap cachedAvatar = ::AvatarManager::instance().getAvatar(m_partnerName, 32);
+  if (!cachedAvatar.isNull() && m_headerAvatar) {
+      // Circle Mask
+      QPixmap circular(32, 32);
+      circular.fill(Qt::transparent);
+      QPainter painter(&circular);
+      painter.setRenderHint(QPainter::Antialiasing);
+      QPainterPath path;
+      path.addEllipse(0, 0, 32, 32);
+      painter.setClipPath(path);
+      painter.drawPixmap(0, 0, cachedAvatar.scaled(32, 32, Qt::KeepAspectRatioByExpanding, Qt::SmoothTransformation));
+      m_headerAvatar->setPixmap(circular);
+  }
 }
 
 ChatWindow::~ChatWindow() {}
@@ -127,31 +163,25 @@ void ChatWindow::paintEvent(QPaintEvent *event) {
   QPainter painter(this);
   painter.setRenderHint(QPainter::Antialiasing);
 
-  const int shadowMargin = 10;
-  QRect windowRect = rect().adjusted(shadowMargin, shadowMargin, -shadowMargin, -shadowMargin);
-
-  // 1. Draw Manual Soft Shadow
-  for (int i = 0; i < shadowMargin; ++i) {
-    QPainterPath shadowPath;
-    shadowPath.addRoundedRect(rect().adjusted(i, i, -i, -i), 30, 30);
-    painter.setPen(QPen(QColor(0, 0, 0, (shadowMargin - i) * 15), 1));
-    painter.drawPath(shadowPath);
-  }
-
+  // Rounded clip matching MainWindow
   QPainterPath path;
-  path.addRoundedRect(windowRect, 30, 30); // ThemeEngine::rLg
+  path.addRoundedRect(rect(), 30, 30);
+  painter.setClipPath(path);
 
-  // Use ThemeEngine surface as background
-  painter.fillPath(path, wizz::ui::ThemeEngine::surface());
-
-  // Subtle border
-  painter.setPen(QPen(QColor(255, 255, 255, 20), 1));
+  // 1. Draw Unified Background Pixmap
+  if (!m_background.isNull()) {
+    painter.drawPixmap(rect(), m_background.scaled(
+                                   size(), Qt::KeepAspectRatioByExpanding,
+                                   Qt::SmoothTransformation));
+  }
+  
+  // 2. Subtle glass border
+  painter.setPen(QPen(QColor(255, 255, 255, 40), 1));
   painter.drawPath(path);
 
   // Flash Overlay
   if (m_overlayColor.alpha() > 0) {
-    painter.setClipPath(path);
-    painter.fillRect(windowRect, m_overlayColor);
+    painter.fillRect(rect(), m_overlayColor);
   }
 }
 
@@ -339,9 +369,9 @@ void ChatWindow::addRichMessage(const QString &sender, const QString &category, 
 
 void ChatWindow::addMessage(const QString &sender, const QString &text,
                             bool isSelf) {
-  Q_UNUSED(sender);
   QString time = QDateTime::currentDateTime().toString("HH:mm");
-  QWidget *bubble = createMessageBubble(text, time, isSelf);
+  QString displayName = isSelf ? "You" : sender;
+  QWidget *bubble = createMessageBubble(displayName, text, time, isSelf);
   m_chatLayout->addWidget(bubble);
 
   // Auto-scroll to bottom
@@ -473,7 +503,7 @@ void ChatWindow::onMicClicked() {
   }
 }
 
-QWidget *ChatWindow::createMessageBubble(const QString &text,
+QWidget *ChatWindow::createMessageBubble(const QString &sender, const QString &text,
                                          const QString &time, bool isSelf) {
   QWidget *container = new QWidget();
   QHBoxLayout *layout = new QHBoxLayout(container);
@@ -484,52 +514,52 @@ QWidget *ChatWindow::createMessageBubble(const QString &text,
   contentLayout->setContentsMargins(0, 0, 0, 0);
   contentLayout->setSpacing(2);
 
+  // Sender Attribution ("Bob said:")
+  QLabel *attribution = new QLabel(QString("%1 said:").arg(sender));
+  attribution->setStyleSheet("color: rgba(255, 255, 255, 150); font-size: 10px; font-weight: 600; margin-bottom: 2px;");
+
   QLabel *bubble = new QLabel(text);
   bubble->setWordWrap(true);
   bubble->setTextInteractionFlags(Qt::TextSelectableByMouse);
-  bubble->setMaximumWidth(250); // Max width of bubble
+  bubble->setMaximumWidth(250);
 
   QLabel *timeLabel = new QLabel(time);
-  timeLabel->setStyleSheet("color: #718096; font-size: 10px;");
+  timeLabel->setStyleSheet("color: rgba(255, 255, 255, 120); font-size: 10px;");
 
-  // Style based on sender
   if (isSelf) {
     layout->addStretch();
     layout->addWidget(contentWidget);
-
+    contentLayout->addWidget(attribution, 0, Qt::AlignRight);
     contentLayout->addWidget(bubble, 0, Qt::AlignRight);
     contentLayout->addWidget(timeLabel, 0, Qt::AlignRight);
 
     bubble->setStyleSheet(QString(R"(
         QLabel {
             background-color: %1;
-            color: %2;
-            border-radius: 15px;
-            padding: 10px;
+            color: white;
+            border-radius: 18px;
+            padding: 10px 14px;
             font-size: 13px;
         }
-    )").arg(wizz::ui::ThemeEngine::accent().name())
-       .arg(wizz::ui::ThemeEngine::surface().name()));
+    )").arg(wizz::ui::ThemeEngine::accent().name()));
   } else {
-    // Received
     layout->addWidget(contentWidget);
     layout->addStretch();
-
+    contentLayout->addWidget(attribution, 0, Qt::AlignLeft);
     contentLayout->addWidget(bubble, 0, Qt::AlignLeft);
     contentLayout->addWidget(timeLabel, 0, Qt::AlignLeft);
 
-    bubble->setStyleSheet(QString(R"(
+    bubble->setStyleSheet(R"(
         QLabel {
-            background-color: %1;
-            color: %2;
-            border-radius: 15px;
-            padding: 10px;
+            background-color: rgba(255, 255, 255, 30);
+            border: 1px solid rgba(255, 255, 255, 20);
+            color: white;
+            border-radius: 18px;
+            padding: 10px 14px;
             font-size: 13px;
         }
-    )").arg(wizz::ui::ThemeEngine::surfaceHigh().name())
-       .arg(wizz::ui::ThemeEngine::onSurface().name()));
+    )");
   }
-
   return container;
 }
 
@@ -703,7 +733,7 @@ QWidget *ChatWindow::createInviteBubble(const QString &sender,
 void ChatWindow::resizeEvent(QResizeEvent *event) {
   QWidget::resizeEvent(event);
   
-  // Apply Rounded Mask to remove black corners
+  // Apply Rounded Mask (Sync with paintEvent)
   QPainterPath path;
   path.addRoundedRect(rect(), 30, 30);
   this->setMask(path.toFillPolygon().toPolygon());
@@ -714,18 +744,65 @@ void ChatWindow::setupUI() {
   setMinimumSize(320, 450);
 
   QVBoxLayout *mainLayout = new QVBoxLayout(this);
-  mainLayout->setContentsMargins(0, 0, 0, 0); // No margins for frameless
+  mainLayout->setContentsMargins(0, 0, 0, 0);
   mainLayout->setSpacing(0);
 
-  // Header -> TitleBar
-  auto *titleBar = new TitleBar(m_partnerName, this);
-  mainLayout->addWidget(titleBar);
+  // Premium Integrated Header
+  auto* headerWidget = new QWidget(this);
+  headerWidget->setFixedHeight(60);
+  auto* headerLayout = new QHBoxLayout(headerWidget);
+  headerLayout->setContentsMargins(20, 10, 20, 0);
+  
+  m_headerAvatar = new QLabel();
+  m_headerAvatar->setFixedSize(32, 32);
+  m_headerAvatar->setStyleSheet("background: rgba(255,255,255,10); border-radius: 16px;");
+  
+  auto* nameLabel = new QLabel(m_partnerName);
+  nameLabel->setStyleSheet("color: white; font-size: 15px; font-weight: 800;");
+  
+  // WizzMania Pro Branding (Right-aligned next to name)
+  auto* brandContainer = new QWidget();
+  auto* brandLayout = new QHBoxLayout(brandContainer);
+  brandLayout->setContentsMargins(0, 0, 0, 0);
+  brandLayout->setSpacing(6);
+  
+  QLabel* logoLabel = new QLabel();
+  logoLabel->setFixedSize(16, 16);
+  logoLabel->setPixmap(QPixmap(":/assets/butterfly.png").scaled(16, 16, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+  
+  QLabel* proLabel = new QLabel("WizzMania Pro");
+  proLabel->setStyleSheet("color: rgba(255, 255, 255, 120); font-size: 10px; font-weight: 700; letter-spacing: 1px;");
+  
+  brandLayout->addWidget(logoLabel);
+  brandLayout->addWidget(proLabel);
+  
+  auto* closeBtn = new QPushButton("✕");
+  closeBtn->setFixedSize(28, 28);
+  closeBtn->setCursor(Qt::PointingHandCursor);
+  closeBtn->setStyleSheet(R"(
+      QPushButton {
+          background: rgba(255, 255, 255, 15);
+          color: white;
+          border-radius: 14px;
+          font-weight: bold;
+      }
+      QPushButton:hover { background: rgba(255, 255, 255, 30); }
+  )");
+  connect(closeBtn, &QPushButton::clicked, this, &QWidget::close);
+
+  headerLayout->addWidget(m_headerAvatar);
+  headerLayout->addWidget(nameLabel);
+  headerLayout->addStretch();
+  headerLayout->addWidget(brandContainer);
+  headerLayout->addSpacing(15);
+  headerLayout->addWidget(closeBtn);
+  mainLayout->addWidget(headerWidget);
 
   // Content Area
   QWidget *contentWidget = new QWidget(this);
   QVBoxLayout *contentLayout = new QVBoxLayout(contentWidget);
-  contentLayout->setContentsMargins(15, 15, 15, 15);
-  contentLayout->setSpacing(10);
+  contentLayout->setContentsMargins(16, 0, 16, 12);
+  contentLayout->setSpacing(0);
   mainLayout->addWidget(contentWidget, 1);
 
   // Chat Area
@@ -742,6 +819,24 @@ void ChatWindow::setupUI() {
 
   m_chatArea->setWidget(m_chatContainer);
   contentLayout->addWidget(m_chatArea);
+
+  // Sticky Typing Indicator (In-Chat)
+  m_typingContainer = new QWidget(this);
+  auto* typingLayout = new QHBoxLayout(m_typingContainer);
+  typingLayout->setContentsMargins(15, 5, 15, 5);
+  typingLayout->setSpacing(8);
+  
+  m_typingBubble = new wizz::ui::TypingBubble(this);
+  m_typingBubble->setFixedSize(45, 25);
+  
+  m_typingLabel = new QLabel(QString("%1 is typing...").arg(m_partnerName));
+  m_typingLabel->setStyleSheet("color: rgba(255, 255, 255, 180); font-size: 11px; font-style: italic;");
+  
+  typingLayout->addWidget(m_typingBubble);
+  typingLayout->addWidget(m_typingLabel);
+  typingLayout->addStretch();
+  m_typingContainer->hide(); // Hidden by default
+  contentLayout->addWidget(m_typingContainer);
 
   // Input Area
   QWidget *inputContainer = new QWidget(this);
@@ -871,18 +966,5 @@ void ChatWindow::setupUI() {
   inputLayout->addWidget(wizzBtn);
   inputLayout->addWidget(sendBtn);
 
-  QVBoxLayout *bottomLayout = new QVBoxLayout();
-  bottomLayout->addWidget(inputContainer);
-
-  // Typing Bubble (Hidden by default)
-  m_typingBubble = new wizz::ui::TypingBubble(this);
-  m_typingBubble->hide();
-  
-  QHBoxLayout* typingLayout = new QHBoxLayout();
-  typingLayout->addWidget(m_typingBubble);
-  typingLayout->addStretch();
-  
-  bottomLayout->addLayout(typingLayout);
-
-  contentLayout->addLayout(bottomLayout);
+  contentLayout->addWidget(inputContainer);
 }

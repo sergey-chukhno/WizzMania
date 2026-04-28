@@ -22,6 +22,13 @@ AddFriendDialog::AddFriendDialog(QWidget *parent) : QDialog(parent) {
   connect(m_watchdog, &QTimer::timeout, this, &AddFriendDialog::onWatchdogTimeout);
 
   setupUI();
+  
+  // Deep shadow for depth separation (scrim effect)
+  auto* shadow = new QGraphicsDropShadowEffect(this);
+  shadow->setBlurRadius(40);
+  shadow->setColor(QColor(0, 0, 0, 180));
+  shadow->setOffset(0, 0);
+  setGraphicsEffect(shadow);
 }
 
 QString AddFriendDialog::getUsername() const { return m_usernameInput->text(); }
@@ -70,11 +77,18 @@ void AddFriendDialog::paintEvent(QPaintEvent* event) {
   QPainter painter(this);
   painter.setRenderHint(QPainter::Antialiasing);
 
+  QRectF baseRect = rect().adjusted(1, 1, -1, -1);
   QPainterPath path;
-  path.addRoundedRect(rect(), TE::rLg, TE::rLg);
+  path.addRoundedRect(baseRect, 24, 24);
 
-  painter.fillPath(path, TE::surfaceHigh());
-  painter.setPen(QPen(QColor(255, 255, 255, 20), 1));
+  // Unified Arcade Style Gradient
+  QLinearGradient grad(0, 0, 0, height());
+  grad.setColorAt(0, QColor(40, 45, 60, 245));
+  grad.setColorAt(1, QColor(20, 25, 35, 245));
+  painter.fillPath(path, grad);
+
+  // Consistent thin border
+  painter.setPen(QPen(QColor(255, 255, 255, 40), 1));
   painter.drawPath(path);
 }
 
@@ -83,8 +97,31 @@ void AddFriendDialog::setupUI() {
   mainLayout->setContentsMargins(0, 0, 0, 0);
   mainLayout->setSpacing(0);
 
-  auto *titleBar = new TitleBar("Add Friend", this);
-  mainLayout->addWidget(titleBar);
+  // Sleek minimalist header (Unifies with Arcade modals)
+  auto* headerLayout = new QHBoxLayout();
+  headerLayout->setContentsMargins(24, 16, 24, 0);
+  
+  auto* headerTitle = new QLabel("FIND CITIZENS");
+  headerTitle->setStyleSheet("color: rgba(255, 255, 255, 150); font-weight: 900; letter-spacing: 3px; font-size: 10px;");
+  
+  auto* closeBtn = new QPushButton("✕");
+  closeBtn->setFixedSize(24, 24);
+  closeBtn->setCursor(Qt::PointingHandCursor);
+  closeBtn->setStyleSheet(R"(
+      QPushButton {
+          background: rgba(255, 255, 255, 15);
+          color: white;
+          border-radius: 12px;
+          font-weight: bold;
+      }
+      QPushButton:hover { background: rgba(255, 255, 255, 30); }
+  )");
+  connect(closeBtn, &QPushButton::clicked, this, &QDialog::reject);
+
+  headerLayout->addWidget(headerTitle);
+  headerLayout->addStretch();
+  headerLayout->addWidget(closeBtn);
+  mainLayout->addLayout(headerLayout);
 
   QWidget *contentWidget = new QWidget(this);
   QVBoxLayout *contentLayout = new QVBoxLayout(contentWidget);
@@ -92,11 +129,21 @@ void AddFriendDialog::setupUI() {
   contentLayout->setSpacing(15);
   mainLayout->addWidget(contentWidget);
 
-  // Icon / Header
+  // Icon & Title Row
+  auto* titleRow = new QHBoxLayout();
+  titleRow->setSpacing(12);
+
   QLabel *iconLabel = new QLabel("👤", contentWidget);
-  iconLabel->setStyleSheet("font-size: 40px; background: transparent;");
+  iconLabel->setStyleSheet(QString("font-size: 28px; color: %1; background: transparent;").arg(TE::accent().name()));
   iconLabel->setAlignment(Qt::AlignCenter);
-  contentLayout->addWidget(iconLabel);
+  
+  auto* titleText = new QLabel("Add a New Friend", contentWidget);
+  titleText->setStyleSheet(QString("color: white; font-size: 16px; font-weight: 800;"));
+  
+  titleRow->addWidget(iconLabel);
+  titleRow->addWidget(titleText);
+  titleRow->addStretch();
+  contentLayout->addLayout(titleRow);
 
   // Error Label
   m_errorLabel = new QLabel("", contentWidget);
@@ -107,26 +154,25 @@ void AddFriendDialog::setupUI() {
 
   // Input
   m_usernameInput = new QLineEdit(contentWidget);
-  m_usernameInput->setPlaceholderText("Enter username");
+  m_usernameInput->setPlaceholderText("Target Username");
   m_usernameInput->setAttribute(Qt::WA_MacShowFocusRect, false);
   
   auto updateInputStyle = [this](bool isValid, bool isFocused) {
-      QString borderColor = isFocused ? TE::accent().name() : "rgba(255, 255, 255, 15)";
+      QString borderColor = isFocused ? TE::accent().name() : "rgba(255, 255, 255, 20)";
       if (!m_usernameInput->text().isEmpty()) {
           borderColor = isValid ? TE::success().name() : TE::danger().name();
       }
       
       m_usernameInput->setStyleSheet(QString(R"(
           QLineEdit {
-              background-color: %1;
-              border: 1px solid %2;
-              border-bottom: 2px solid %2;
-              border-radius: %3px;
+              background-color: rgba(0, 0, 0, 100);
+              border: 1px solid %1;
+              border-radius: %2px;
               padding: 10px 15px;
               font-size: 14px;
-              color: %4;
+              color: white;
           }
-      )").arg(TE::surface().name()).arg(borderColor).arg(TE::rMd).arg(TE::onSurface().name()));
+      )").arg(borderColor).arg(TE::rMd));
   };
   
   updateInputStyle(true, false);

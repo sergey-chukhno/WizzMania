@@ -42,8 +42,8 @@ void TypingBubble::paintEvent(QPaintEvent*) {
     p.setPen(Qt::NoPen);
     p.setBrush(ThemeEngine::onSurface2());
 
-    int dotRadius = 4;
-    int spacing = 12;
+    int dotRadius = 3;
+    int spacing = 8;
     int startX = (width() - (3 * dotRadius * 2 + 2 * spacing)) / 2;
     int baseY = height() / 2;
 
