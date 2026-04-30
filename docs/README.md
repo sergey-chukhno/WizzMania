@@ -30,12 +30,6 @@ The vision and rules governing the project.
 
 ---
 
-## 🏛️ [Archive](./archive/)
-For historical reference, including initial audits and mentorship Q&A sessions.
-- [Historical Audits & QA](./archive/)
-
----
-
 ## 🚀 Getting Started
 To build the full project including all games and the test suite:
 ```bash

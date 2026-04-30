@@ -35,3 +35,9 @@ test_logs.txt
 # database (local only)
 wizzmania.db
 test_client.py
+
+# Internal Agent Data
+.gemini/
+
+# Legacy Documentation
+docs/Archive/

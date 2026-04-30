@@ -539,11 +539,16 @@ void MainWindow::setupUI() {
 
   m_contactList = new QListWidget(scrollContainer);
   m_contactList->setFrameShape(QFrame::NoFrame);
+  m_contactList->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
+  m_contactList->setSpacing(8);
   m_contactList->setItemDelegate(new wizz::ui::ContactDelegate(m_contactList));
+  m_contactList->setContextMenuPolicy(Qt::CustomContextMenu);
   m_contactList->setStyleSheet("background: transparent; border: none;");
+  
   connect(m_contactList, &QListWidget::itemDoubleClicked, this, [this](QListWidgetItem *item) {
       onContactDoubleClicked(item->data(Qt::UserRole).toString());
   });
+  connect(m_contactList, &QListWidget::customContextMenuRequested, this, &MainWindow::showContactContextMenu);
   scrollLayout->addWidget(m_contactList, 1);
 
   m_socialArcade = new wizz::ui::arcade::SocialArcade(scrollContainer);
