@@ -374,13 +374,7 @@ void MainWindow::setupUI() {
   contentLayout->setSpacing(12);
   mainLayout->addWidget(contentWidget, 1);
 
-  // Re-point mainLayout for all code below this point
-  // (all child widgets will be added to contentLayout)
-  QVBoxLayout *&innerLayout = contentLayout;
-  Q_UNUSED(innerLayout) // used as alias below
-
   // ── Profile card ──────────────────────────────────────────────────────────
-  // --- User Profile Section (Subtle Glass) ---
   QFrame *profileFrame = new QFrame(this);
   profileFrame->setObjectName("userProfileFrame");
   profileFrame->setStyleSheet(R"(
@@ -398,7 +392,6 @@ void MainWindow::setupUI() {
   profileLayout->setContentsMargins(15, 15, 15, 15);
   profileLayout->setSpacing(18);
 
-  // Avatar 2.0
   m_avatarLabel = new QLabel(profileFrame);
   m_avatarLabel->setFixedSize(80, 80);
   m_avatarLabel->setStyleSheet("background: transparent;");
@@ -409,13 +402,12 @@ void MainWindow::setupUI() {
   avatarGlow->setOffset(0, 0);
   m_avatarLabel->setGraphicsEffect(avatarGlow);
 
-  // Pulse Animation
   QPropertyAnimation *pulse = new QPropertyAnimation(avatarGlow, "blurRadius", this);
   pulse->setDuration(2000);
   pulse->setStartValue(15.0);
   pulse->setEndValue(35.0);
   pulse->setEasingCurve(QEasingCurve::InOutSine);
-  pulse->setLoopCount(-1); // Infinite
+  pulse->setLoopCount(-1);
   pulse->start();
 
   QPushButton *avatarBtn = new QPushButton(m_avatarLabel);
@@ -424,7 +416,6 @@ void MainWindow::setupUI() {
   avatarBtn->setCursor(Qt::PointingHandCursor);
   connect(avatarBtn, &QPushButton::clicked, this, &MainWindow::onAvatarClicked);
 
-  // User info
   QVBoxLayout *userInfoLayout = new QVBoxLayout();
   userInfoLayout->setSpacing(6);
 
@@ -435,7 +426,6 @@ void MainWindow::setupUI() {
               "transparent;")
           .arg(wizz::ui::ThemeEngine::onSurface().name()));
 
-  // SOVEREIGN BADGE — use emoji instead of PNG to avoid black background artifact
   QLabel *sovereignBadge = new QLabel("🔒", profileFrame);
   sovereignBadge->setToolTip("Sovereign Identity Verified (Ed25519)");
   sovereignBadge->setStyleSheet(
@@ -445,21 +435,15 @@ void MainWindow::setupUI() {
   nameRow->addWidget(sovereignBadge);
   nameRow->addStretch();
 
-  // Status dropdown
   m_statusCombo = new QComboBox(profileFrame);
   m_statusCombo->addItem("🟢 Online");
   m_statusCombo->addItem("🟠 Away");
   m_statusCombo->addItem("🔴 Busy");
   m_statusCombo->addItem("⚫ Offline");
   m_statusCombo->setFixedWidth(150);
-  // Use a dark glass palette for the popup so Qt doesn't override with system white
   QPalette comboPalette = m_statusCombo->palette();
-  comboPalette.setColor(QPalette::Base, QColor(30, 35, 50, 220));     // dark glass
+  comboPalette.setColor(QPalette::Base, QColor(30, 35, 50, 220));
   comboPalette.setColor(QPalette::Text, Qt::white);
-  comboPalette.setColor(QPalette::ButtonText, Qt::white);
-  comboPalette.setColor(QPalette::WindowText, Qt::white);
-  comboPalette.setColor(QPalette::Highlight, wizz::ui::ThemeEngine::accent());
-  comboPalette.setColor(QPalette::HighlightedText, Qt::white);
   m_statusCombo->setPalette(comboPalette);
   m_statusCombo->setStyleSheet(R"(
       QComboBox {
@@ -468,17 +452,6 @@ void MainWindow::setupUI() {
           border-radius: 8px;
           padding: 4px 10px;
           color: white;
-          font-weight: 600;
-      }
-      QComboBox::drop-down { border: none; }
-      QComboBox QAbstractItemView {
-          background-color: rgba(30, 35, 50, 220);
-          border: 1px solid rgba(255, 255, 255, 20);
-          outline: none;
-          color: white;
-          selection-background-color: rgba(64, 153, 255, 180);
-          selection-color: white;
-          padding: 4px;
       }
   )");
   connect(m_statusCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
@@ -487,7 +460,6 @@ void MainWindow::setupUI() {
   m_statusMessageInput = new QLineEdit(profileFrame);
   m_statusMessageInput->setPlaceholderText("Broadcast a thought...");
   m_statusMessageInput->setFixedWidth(200);
-  m_statusMessageInput->setAttribute(Qt::WA_MacShowFocusRect, false);
   m_statusMessageInput->setStyleSheet(QString(R"(
       QLineEdit {
           background-color: rgba(255, 255, 255, 8);
@@ -495,13 +467,8 @@ void MainWindow::setupUI() {
           border-radius: 6px;
           padding: 6px 10px;
           color: %1;
-          font-size: 11px;
       }
-      QLineEdit:focus {
-          border: 1px solid %2;
-          background-color: rgba(255, 255, 255, 15);
-      }
-  )").arg(wizz::ui::ThemeEngine::onSurface().name()).arg(wizz::ui::ThemeEngine::accent().name()));
+  )").arg(wizz::ui::ThemeEngine::onSurface().name()));
   connect(m_statusMessageInput, &QLineEdit::returnPressed, this,
           &MainWindow::onStatusMessageSubmitted);
 
@@ -515,77 +482,122 @@ void MainWindow::setupUI() {
 
   contentLayout->addWidget(profileFrame);
 
-  // --- Friends Section Header ---
-  QHBoxLayout *friendHeaderLayout = new QHBoxLayout();
-  friendHeaderLayout->setContentsMargins(5, 5, 5, 0);
-
-  QLabel *friendsLabel = new QLabel("CITIZENS", this);
-  friendsLabel->setStyleSheet(
-      QString(
-          "font-size: 11px; font-weight: 800; color: %1; letter-spacing: 2px;")
-          .arg(wizz::ui::ThemeEngine::onSurface3().name()));
+  // --- Section Header ---
+  QHBoxLayout *sectionHeaderLayout = new QHBoxLayout();
+  QLabel *sectionLabel = new QLabel("CITIZENS", this);
+  sectionLabel->setStyleSheet("font-size: 11px; font-weight: 800; color: rgba(255,255,255,100); letter-spacing: 2px;");
 
   QPushButton *addFriendBtn = new QPushButton("+", this);
   addFriendBtn->setFixedSize(28, 28);
   addFriendBtn->setCursor(Qt::PointingHandCursor);
   addFriendBtn->setStyleSheet(QString(R"(
-        QPushButton {
-            background-color: transparent;
-            border: 1px solid rgba(255, 255, 255, 30);
-            border-radius: 14px;
-            color: %1;
-            font-weight: bold;
-            font-size: 16px;
-        }
-        QPushButton:hover {
-            background-color: rgba(0, 0, 0, 80);
-            border: 1px solid %1;
-        }
-    )")
-                                  .arg(wizz::ui::ThemeEngine::accent().name()));
-  connect(addFriendBtn, &QPushButton::clicked, this,
-          &MainWindow::onAddFriendClicked);
+      QPushButton {
+          background: rgba(255, 255, 255, 25);
+          color: white;
+          border: 1px solid rgba(255, 255, 255, 40);
+          border-radius: 14px;
+          font-weight: bold;
+          font-size: 14px;
+      }
+      QPushButton:hover {
+          background: rgba(255, 255, 255, 45);
+          border: 1px solid %1;
+      }
+  )").arg(wizz::ui::ThemeEngine::accent().name()));
+  connect(addFriendBtn, &QPushButton::clicked, this, &MainWindow::onAddFriendClicked);
 
-  friendHeaderLayout->addWidget(friendsLabel);
-  friendHeaderLayout->addStretch();
-  friendHeaderLayout->addWidget(addFriendBtn);
-  contentLayout->addLayout(friendHeaderLayout);
+  sectionHeaderLayout->addWidget(sectionLabel);
+  sectionHeaderLayout->addStretch();
+  sectionHeaderLayout->addWidget(addFriendBtn);
+  contentLayout->addLayout(sectionHeaderLayout);
 
-  // --- Search Bar ---
-  m_searchBar = new wizz::ui::SearchBar(this);
-  connect(m_searchBar, &wizz::ui::SearchBar::textChanged, this,
-          &MainWindow::onSearchTextChanged);
-  contentLayout->addWidget(m_searchBar);
+  // ── Context View Stack ──
+  m_viewStack = new QStackedWidget(this);
+  m_viewStack->setStyleSheet("background: transparent;");
 
-  // --- Contact List ---
-  m_contactList = new QListWidget(this);
-  m_contactList->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
-  m_contactList->setSpacing(8);
-  m_contactList->setItemDelegate(new wizz::ui::ContactDelegate(m_contactList));
-  m_contactList->setContextMenuPolicy(Qt::CustomContextMenu);
-  m_contactList->setStyleSheet("background: transparent !important; border: none;");
-  m_contactList->viewport()->setStyleSheet("background: transparent !important;");
+  // Page 1: Messenger
+  m_messengerPage = new QWidget();
+  QVBoxLayout *messengerLayout = new QVBoxLayout(m_messengerPage);
+  messengerLayout->setContentsMargins(12, 0, 12, 0);
+  messengerLayout->setSpacing(10);
+
+  m_searchBar = new wizz::ui::SearchBar(m_messengerPage);
+  connect(m_searchBar, &wizz::ui::SearchBar::textChanged, this, &MainWindow::onSearchTextChanged);
+  messengerLayout->addWidget(m_searchBar);
+
+  QScrollArea* scrollArea = new QScrollArea(m_messengerPage);
+  scrollArea->setWidgetResizable(true);
+  scrollArea->setFrameShape(QFrame::NoFrame);
+  scrollArea->setStyleSheet("background: transparent;");
+  scrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+  
+  QWidget* scrollContainer = new QWidget();
+  scrollContainer->setStyleSheet("background: transparent;");
+  QVBoxLayout* scrollLayout = new QVBoxLayout(scrollContainer);
+  scrollLayout->setContentsMargins(0, 0, 0, 10);
+  scrollLayout->setSpacing(10);
+
+  m_contactList = new QListWidget(scrollContainer);
   m_contactList->setFrameShape(QFrame::NoFrame);
-  m_contactList->setAttribute(Qt::WA_MacShowFocusRect, false);
-  m_contactList->setAttribute(Qt::WA_OpaquePaintEvent, false);
-  m_contactList->setAttribute(Qt::WA_NoSystemBackground, true);
+  m_contactList->setItemDelegate(new wizz::ui::ContactDelegate(m_contactList));
+  m_contactList->setStyleSheet("background: transparent; border: none;");
+  connect(m_contactList, &QListWidget::itemDoubleClicked, this, [this](QListWidgetItem *item) {
+      onContactDoubleClicked(item->data(Qt::UserRole).toString());
+  });
+  scrollLayout->addWidget(m_contactList, 1);
 
-  connect(m_contactList, &QListWidget::itemDoubleClicked, this,
-          [this](QListWidgetItem *item) {
-            onContactDoubleClicked(item->data(Qt::UserRole).toString());
-          });
-  connect(m_contactList, &QListWidget::customContextMenuRequested, this,
-          &MainWindow::showContactContextMenu);
+  m_socialArcade = new wizz::ui::arcade::SocialArcade(scrollContainer);
+  m_socialArcade->setMinimumHeight(340);
+  m_socialArcade->setMaximumHeight(340);
+  connect(m_socialArcade, &wizz::ui::arcade::SocialArcade::categorySelected, this, &MainWindow::onCategorySelected);
+  scrollLayout->addWidget(m_socialArcade, 0);
 
-  contentLayout->addWidget(m_contactList, 1);
+  scrollArea->setWidget(scrollContainer);
+  messengerLayout->addWidget(scrollArea, 1);
 
-  // --- Social Arcade ---
-  m_socialArcade = new wizz::ui::arcade::SocialArcade(this);
-  connect(m_socialArcade, &wizz::ui::arcade::SocialArcade::categorySelected,
-          this, &MainWindow::onCategorySelected);
-  contentLayout->addWidget(m_socialArcade);
+  // Page 2: Groups
+  m_groupsPage = new QWidget();
+  auto* groupsLayout = new QVBoxLayout(m_groupsPage);
+  auto* groupsLabel = new QLabel("👥 GROUPS & CHANNELS\n(WizzMania Pro v2)");
+  groupsLabel->setAlignment(Qt::AlignCenter);
+  groupsLabel->setStyleSheet("color: rgba(255,255,255,80); font-weight: bold;");
+  groupsLayout->addStretch();
+  groupsLayout->addWidget(groupsLabel);
+  groupsLayout->addStretch();
 
-  // --- System Tray ---
+  // Page 3: Calls
+  m_callsPage = new QWidget();
+  auto* callsLayout = new QVBoxLayout(m_callsPage);
+  auto* callsLabel = new QLabel("📞 VOICE & VIDEO\n(WizzMania Pro v2)");
+  callsLabel->setAlignment(Qt::AlignCenter);
+  callsLabel->setStyleSheet("color: rgba(255,255,255,80); font-weight: bold;");
+  callsLayout->addStretch();
+  callsLayout->addWidget(callsLabel);
+  callsLayout->addStretch();
+
+  // Page 4: Settings
+  m_settingsPage = new QWidget();
+  auto* settingsLayout = new QVBoxLayout(m_settingsPage);
+  auto* settingsLabel = new QLabel("⚙️ SETTINGS\n(WizzMania Pro v2)");
+  settingsLabel->setAlignment(Qt::AlignCenter);
+  settingsLabel->setStyleSheet("color: rgba(255,255,255,80); font-weight: bold;");
+  settingsLayout->addStretch();
+  settingsLayout->addWidget(settingsLabel);
+  settingsLayout->addStretch();
+
+  m_viewStack->addWidget(m_messengerPage);
+  m_viewStack->addWidget(m_groupsPage);
+  m_viewStack->addWidget(m_callsPage);
+  m_viewStack->addWidget(m_settingsPage);
+
+  contentLayout->addWidget(m_viewStack, 1);
+
+  // ── Navigation Hub ──
+  m_navHub = new wizz::ui::NavigationHub(this);
+  m_navHub->setFixedHeight(140); // Optimized footprint
+  connect(m_navHub, &wizz::ui::NavigationHub::contextRequested, this, &MainWindow::onContextRequested);
+  contentLayout->addWidget(m_navHub);
+
   setupSystemTray();
 }
 
@@ -651,6 +663,7 @@ void MainWindow::populateContactList() {
     void *ptr =
         static_cast<void *>(const_cast<ContactInfo *>(&m_contacts[realIndex]));
     item->setData(Qt::UserRole + 1, QVariant::fromValue(ptr));
+    item->setSizeHint(QSize(0, 64)); // Match ContactDelegate height
   }
 }
 
@@ -1249,4 +1262,13 @@ void MainWindow::mouseReleaseEvent(QMouseEvent *event) {
     return;
   }
   QWidget::mouseReleaseEvent(event);
+}
+
+void MainWindow::onContextRequested(wizz::ui::AppContext context) {
+    switch (context) {
+        case wizz::ui::AppContext::Messenger: m_viewStack->setCurrentIndex(0); break;
+        case wizz::ui::AppContext::Groups:    m_viewStack->setCurrentIndex(1); break;
+        case wizz::ui::AppContext::Calls:     m_viewStack->setCurrentIndex(2); break;
+        case wizz::ui::AppContext::Settings:  m_viewStack->setCurrentIndex(3); break;
+    }
 }

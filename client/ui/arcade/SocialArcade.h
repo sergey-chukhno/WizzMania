@@ -24,7 +24,7 @@ private slots:
     void toggleCollapse();
 
 private:
-    QScrollArea* m_scrollArea;
+    QWidget* m_contentContainer;
     QPushButton* m_toggleBtn;
     bool m_isCollapsed;
     void setupTiles(QWidget* container);

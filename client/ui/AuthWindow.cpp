@@ -186,10 +186,8 @@ QFrame *AuthWindow::createLoginCard() {
 
   // Username Input
   QHBoxLayout *userRow = new QHBoxLayout();
-  QLabel *userIcon = new QLabel(innerFrame);
-  userIcon->setPixmap(processTransparentImage(":/assets/icon_user.png", 24));
-  userIcon->setFixedSize(24, 24);
-  userIcon->setStyleSheet("background: transparent;");
+  QLabel *userIcon = new QLabel("👤", innerFrame);
+  userIcon->setStyleSheet("font-size: 18px; background: transparent;");
 
   m_loginUsername = new QLineEdit(innerFrame);
   m_loginUsername->setPlaceholderText("Username");
@@ -208,10 +206,8 @@ QFrame *AuthWindow::createLoginCard() {
 
   // Password Input
   QHBoxLayout *passRow = new QHBoxLayout();
-  QLabel *lockIcon = new QLabel(innerFrame);
-  lockIcon->setPixmap(processTransparentImage(":/assets/icon_lock.png", 24));
-  lockIcon->setFixedSize(24, 24);
-  lockIcon->setStyleSheet("background: transparent;");
+  QLabel *lockIcon = new QLabel("🔒", innerFrame);
+  lockIcon->setStyleSheet("font-size: 18px; background: transparent;");
 
   m_loginPassword = new QLineEdit(innerFrame);
   m_loginPassword->setPlaceholderText("Password");
@@ -381,10 +377,8 @@ QFrame *AuthWindow::createRegisterCard() {
 
   // Username
   QHBoxLayout *userRow = new QHBoxLayout();
-  QLabel *userIcon = new QLabel(innerFrame);
-  userIcon->setPixmap(processTransparentImage(":/assets/icon_user.png", 24));
-  userIcon->setFixedSize(24, 24);
-  userIcon->setStyleSheet("background: transparent;");
+  QLabel *userIcon = new QLabel("👤", innerFrame);
+  userIcon->setStyleSheet("font-size: 18px; background: transparent;");
 
   m_regUsername = new QLineEdit(innerFrame);
   m_regUsername->setPlaceholderText("Username");
@@ -396,10 +390,8 @@ QFrame *AuthWindow::createRegisterCard() {
 
   // Password
   QHBoxLayout *passRow = new QHBoxLayout();
-  QLabel *lockIcon = new QLabel(innerFrame);
-  lockIcon->setPixmap(processTransparentImage(":/assets/icon_lock.png", 24));
-  lockIcon->setFixedSize(24, 24);
-  lockIcon->setStyleSheet("background: transparent;");
+  QLabel *lockIcon = new QLabel("🔒", innerFrame);
+  lockIcon->setStyleSheet("font-size: 18px; background: transparent;");
 
   m_regPassword = new QLineEdit(innerFrame);
   m_regPassword->setPlaceholderText("Password");
@@ -412,10 +404,8 @@ QFrame *AuthWindow::createRegisterCard() {
 
   // Confirm Password
   QHBoxLayout *confirmRow = new QHBoxLayout();
-  QLabel *confirmIcon = new QLabel(innerFrame);
-  confirmIcon->setPixmap(processTransparentImage(":/assets/icon_lock.png", 24));
-  confirmIcon->setFixedSize(24, 24);
-  confirmIcon->setStyleSheet("background: transparent;");
+  QLabel *confirmIcon = new QLabel("🔒", innerFrame);
+  confirmIcon->setStyleSheet("font-size: 18px; background: transparent;");
 
   m_regConfirmPassword = new QLineEdit(innerFrame);
   m_regConfirmPassword->setPlaceholderText("Confirm Password");
@@ -457,7 +447,7 @@ QFrame *AuthWindow::createRegisterCard() {
                 painter.setClipPath(path);
                 painter.drawPixmap(0, 0, scaled);
                 m_avatarPreview->setPixmap(circular);
-
+ 
                 // Save data for later upload
                 QByteArray bytes;
                 QBuffer buffer(&bytes);

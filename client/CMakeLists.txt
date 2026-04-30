@@ -26,6 +26,9 @@ set(CLIENT_SOURCES
     ui/ChatWindow.h
     ui/MainWindow.cpp
     ui/MainWindow.h
+    ui/AppContext.h
+    ui/widgets/NavigationHub.cpp
+    ui/widgets/NavigationHub.h
     ui/widgets/TitleBar.cpp
     ui/widgets/TitleBar.h
     ui/widgets/ContactDelegate.cpp

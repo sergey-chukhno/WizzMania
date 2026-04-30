@@ -22,6 +22,9 @@
 #include <QTimer>
 #include <QVBoxLayout>
 #include <QWidget>
+#include <QStackedWidget>
+#include "AppContext.h"
+#include "widgets/NavigationHub.h"
 
 // User status enum
 enum class UserStatus { Online = 0, Away, Busy, Offline };
@@ -89,6 +92,7 @@ private slots:
   void onSearchTextChanged(const QString &text);
   void showContactContextMenu(const QPoint &pos);
   void onCategorySelected(const wizz::ui::arcade::ArcadeCategory& category);
+  void onContextRequested(wizz::ui::AppContext context);
 
   // Avatar Slots
   void onAvatarClicked();
@@ -122,6 +126,16 @@ private:
   wizz::ui::SearchBar *m_searchBar;
   QListWidget *m_contactList;
   wizz::ui::arcade::SocialArcade *m_socialArcade;
+
+  // Multi-Context Architecture
+  QStackedWidget *m_viewStack;
+  wizz::ui::NavigationHub *m_navHub;
+  
+  // Pages
+  QWidget *m_messengerPage;
+  QWidget *m_groupsPage;
+  QWidget *m_callsPage;
+  QWidget *m_settingsPage;
 
   // Dialogs
   AddFriendDialog *m_addFriendDialog = nullptr;
