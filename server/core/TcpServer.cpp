@@ -69,6 +69,7 @@ TcpServer::TcpServer(int port, const std::string& dbPath)
   m_packetRouter.registerHandler(PacketType::GetAvatar, std::make_unique<GetAvatarHandler>());
   m_packetRouter.registerHandler(PacketType::AddContact, std::make_unique<AddContactHandler>());
   m_packetRouter.registerHandler(PacketType::RemoveContact, std::make_unique<RemoveContactHandler>());
+  m_packetRouter.registerHandler(PacketType::RichStatusUpdate, std::make_unique<RichStatusUpdateHandler>());
   m_packetRouter.registerHandler(PacketType::GameStatus, std::make_unique<GameStatusHandler>());
   m_packetRouter.registerHandler(PacketType::GameInvite, std::make_unique<GameInviteHandler>());
   m_packetRouter.registerHandler(PacketType::GameInviteResponse, std::make_unique<GameInviteResponseHandler>());

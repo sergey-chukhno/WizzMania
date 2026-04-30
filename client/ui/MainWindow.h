@@ -3,19 +3,28 @@
 #include "../../common/NativeSharedMemory.h"
 #include "../../common/Packet.h"
 #include "../../common/TicTacToeIPC.h"
+#include "widgets/SearchBar.h"
+#include "arcade/SocialArcade.h"
 #include <QComboBox>
 #include <QFrame>
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
+#include <QMouseEvent>
 #include <QPainter>
 #include <QPointer>
 #include <QProcess>
 #include <QPushButton>
+#include <QRect>
 #include <QScrollArea>
+#include <QSizeGrip>
+#include <QSystemTrayIcon>
 #include <QTimer>
 #include <QVBoxLayout>
 #include <QWidget>
+#include <QStackedWidget>
+#include "AppContext.h"
+#include "widgets/NavigationHub.h"
 
 // User status enum
 enum class UserStatus { Online = 0, Away, Busy, Offline };
@@ -31,6 +40,9 @@ struct ContactInfo {
   bool isPlayingGame = false;
   QString currentGameName;
   uint32_t currentGameScore = 0;
+
+  // Notification state
+  int unreadCount = 0;
 };
 
 class AddFriendDialog; // Forward declaration
@@ -62,11 +74,12 @@ signals:
   void statusChanged(UserStatus status, const QString &statusMessage);
 
 protected:
-  // Paint Event for background
   void paintEvent(QPaintEvent *event) override;
-
-  // Event Filter for hover effects
-  bool eventFilter(QObject *obj, QEvent *event) override;
+  void resizeEvent(QResizeEvent *event) override;
+  // Frameless resize
+  void mousePressEvent(QMouseEvent *event) override;
+  void mouseMoveEvent(QMouseEvent *event) override;
+  void mouseReleaseEvent(QMouseEvent *event) override;
 
 private slots:
   void onStatusChanged(int index);
@@ -76,6 +89,10 @@ private slots:
   void onRemoveFriendClicked();
   void onChatWindowClosed(const QString &partnerName);
   void onContactDoubleClicked(const QString &username);
+  void onSearchTextChanged(const QString &text);
+  void showContactContextMenu(const QPoint &pos);
+  void onCategorySelected(const wizz::ui::arcade::ArcadeCategory& category);
+  void onContextRequested(wizz::ui::AppContext context);
 
   // Avatar Slots
   void onAvatarClicked();
@@ -92,6 +109,9 @@ private:
   QString getStatusText(UserStatus status);
   ChatWindow *openChatWindow(const QString &username);
 
+  void setupSystemTray();
+  void updateGlobalUnreadCount();
+
   QString m_username;
   UserStatus m_currentStatus = UserStatus::Online;
   QList<ContactInfo> m_contacts;
@@ -103,13 +123,19 @@ private:
   QLabel *m_usernameLabel;
   QComboBox *m_statusCombo;
   QLineEdit *m_statusMessageInput;
+  wizz::ui::SearchBar *m_searchBar;
   QListWidget *m_contactList;
+  wizz::ui::arcade::SocialArcade *m_socialArcade;
 
-  // Game Panel
-  QFrame *m_gamePanelFrame;
-  QHBoxLayout *m_gamesLayout;
-  void setupGamePanel(QVBoxLayout *parentLayout);
-  void addGameIcon(const QString &name, const QString &iconPath);
+  // Multi-Context Architecture
+  QStackedWidget *m_viewStack;
+  wizz::ui::NavigationHub *m_navHub;
+  
+  // Pages
+  QWidget *m_messengerPage;
+  QWidget *m_groupsPage;
+  QWidget *m_callsPage;
+  QWidget *m_settingsPage;
 
   // Dialogs
   AddFriendDialog *m_addFriendDialog = nullptr;
@@ -118,4 +144,21 @@ private:
   QMap<QString, ChatWindow *> m_openChats;
 
   class GameBridge* m_gameBridge = nullptr;
+
+  // System Tray
+  QSystemTrayIcon *m_trayIcon = nullptr;
+
+  // ── Frameless resize state ────────────────────────────────────────────────
+  enum class ResizeEdge {
+    None, Left, Right, Top, Bottom,
+    TopLeft, TopRight, BottomLeft, BottomRight
+  };
+  static constexpr int RESIZE_MARGIN = 6; // px from edge that triggers resize
+  ResizeEdge m_resizeEdge   = ResizeEdge::None;
+  bool       m_resizing     = false;
+  QPoint     m_resizeStart;
+  QRect      m_resizeStartGeom;
+
+  ResizeEdge edgeAtPoint(const QPoint& p) const;
+  void       applyCursorForEdge(ResizeEdge edge);
 };

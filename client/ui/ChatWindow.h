@@ -15,6 +15,8 @@
 #include <QtWidgets/QVBoxLayout>
 #include <QtWidgets/QWidget>
 
+#include "widgets/TitleBar.h"
+#include "widgets/TypingBubble.h"
 #include "../audio/AudioManager.h"
 
 class ChatWindow : public QWidget {
@@ -28,6 +30,7 @@ public:
   void addVoiceMessage(const QString &sender, uint16_t duration,
                        const std::vector<uint8_t> &data, bool isSelf);
   void addGameInvite(const QString &sender, const QString &gameName);
+  void addRichMessage(const QString &sender, const QString &category, const QString &text, bool isSelf);
   void flash(const QColor &color);
   void shake();
   QString getPartnerName() const { return m_partnerName; }
@@ -41,8 +44,12 @@ signals:
 protected:
   void closeEvent(QCloseEvent *event) override;
   void paintEvent(QPaintEvent *event) override;
+  void resizeEvent(QResizeEvent *event) override;
+  
+  // Frameless resize support
   void mousePressEvent(QMouseEvent *event) override;
   void mouseMoveEvent(QMouseEvent *event) override;
+  void mouseReleaseEvent(QMouseEvent *event) override;
 
 private slots:
   void onSendClicked();
@@ -52,7 +59,7 @@ private slots:
 
 private:
   void setupUI();
-  QWidget *createMessageBubble(const QString &text, const QString &time,
+  QWidget *createMessageBubble(const QString &sender, const QString &text, const QString &time,
                                bool isSelf);
   QWidget *createVoiceBubble(uint16_t duration,
                              const std::vector<uint8_t> &data,
@@ -69,7 +76,10 @@ private:
   QLineEdit *m_messageInput;
   QPushButton *m_micBtn;
   QPixmap m_background;
+  wizz::ui::TypingBubble *m_typingBubble;
+  QWidget *m_typingContainer;
   QLabel *m_typingLabel;
+  QLabel *m_headerAvatar;
 
   // Typing Logic
   bool m_isTyping = false;
@@ -92,6 +102,19 @@ private:
   QTimer *m_vibrationTimer;
   int m_vibrationSteps;
   QPoint m_originalPos;
+
+  // ── Frameless resize state ────────────────────────────────────────────────
+  enum class ResizeEdge {
+    None, Left, Right, Top, Bottom,
+    TopLeft, TopRight, BottomLeft, BottomRight
+  };
+  bool m_isResizing = false;
+  ResizeEdge m_currentEdge = ResizeEdge::None;
+  QPoint m_resizeStartPos;
+  QRect m_resizeStartGeometry;
+
+  ResizeEdge edgeAtPoint(const QPoint& p) const;
+  void updateCursor(const QPoint& p);
 };
 
 #endif // CHATWINDOW_H

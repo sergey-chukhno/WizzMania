@@ -6,6 +6,7 @@
 #include <unordered_map>
 #include <vector>
 #include "../common/Packet.h"
+#include "../data/DatabaseTypes.h"
 
 namespace wizz {
 
@@ -35,6 +36,9 @@ public:
   void updateCustomStatus(const std::string& username, const std::string& customStatus);
   std::string getCustomStatus(const std::string& username) const;
 
+  void updateRichPresence(const std::string& username, const RichPresence& presence);
+  RichPresence getRichPresence(const std::string& username) const;
+
   // Utilities for broadcasting
   std::vector<ClientSession*> getAllOnlineSessions() const;
   std::vector<std::string> getAllOnlineUsernames() const;
@@ -48,6 +52,7 @@ private:
   std::unordered_map<std::string, ClientSession*> m_onlineUsers;
   std::unordered_map<std::string, UserStatus> m_userStatuses;
   std::unordered_map<std::string, std::string> m_customStatuses;
+  std::unordered_map<std::string, RichPresence> m_richPresences;
 };
 
 } // namespace wizz

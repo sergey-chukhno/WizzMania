@@ -131,4 +131,19 @@ std::vector<std::string> SessionManager::getAllOnlineUsernames() const {
   return names;
 }
 
+void SessionManager::updateRichPresence(const std::string& username, const RichPresence& presence) {
+  std::lock_guard<std::mutex> lock(m_mutex);
+  std::string normalized = normalize(username);
+  if (m_onlineUsers.find(normalized) != m_onlineUsers.end()) {
+    m_richPresences[normalized] = presence;
+  }
+}
+
+RichPresence SessionManager::getRichPresence(const std::string& username) const {
+  std::lock_guard<std::mutex> lock(m_mutex);
+  std::string normalized = normalize(username);
+  auto it = m_richPresences.find(normalized);
+  return (it != m_richPresences.end()) ? it->second : RichPresence{};
+}
+
 } // namespace wizz

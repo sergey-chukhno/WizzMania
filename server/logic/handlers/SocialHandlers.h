@@ -13,5 +13,6 @@ class UpdateAvatarHandler : public IPacketHandler { public: void handle(ClientSe
 class GetAvatarHandler : public IPacketHandler { public: void handle(ClientSession* session, Packet& packet) override; };
 class AddContactHandler : public IPacketHandler { public: void handle(ClientSession* session, Packet& packet) override; };
 class RemoveContactHandler : public IPacketHandler { public: void handle(ClientSession* session, Packet& packet) override; };
+class RichStatusUpdateHandler : public IPacketHandler { public: void handle(ClientSession* session, Packet& packet) override; };
 
 }

@@ -21,25 +21,23 @@ We utilize Qt's meta-object system for cross-thread communication, ensuring that
 
 ---
 
-## 2. Long-Term Innovation Roadmap
+## 2. Long-Term Innovation Roadmap: WizzMania Pro
 
-### Phase 1: Security Hardening (Current)
-- **Zero-Knowledge Relay**: Fully implemented E2EE system.
-- **Sentinel Observability**: Real-time monitoring and rate limiting.
+### Pillar 1: The Shield (Advanced Security & Privacy)
+- **Double Ratchet Integration**: Transitioning from static pairwise pre-keys to a dynamic Double Ratchet system for per-message Perfect Forward Secrecy.
+- **Sovereign Identity (Web3-Linked)**: Utilizing Ed25519 cryptographic keys as the primary user identity. The chat identity key doubles as a **Web3 Wallet Key**, enabling native, peer-to-peer tipping.
+- **Traffic Padding**: Masking communication metadata with dummy packet injection to prevent traffic pattern analysis.
 
-### Phase 2: Social & Arcades (The "Hub" Phase)
-- **ARCADE-HUB**: Centralized matchmaking for TicTacToe, Chess, and more.
-- **LivePresence**: Rich status synchronization (e.g., what game or music is playing).
+### Pillar 2: The Neural (Functional Local AI)
+- **WizzNeural Node**: Native `llama.cpp` integration within an asynchronous Actor-model worker.
+- **Unified Insight Engine**: Local processing for both **Real-time Summarization** (catching up on threads) and **Semantic Search** (Vector-indexed history).
 
-### Phase 3: Intelligence & Privacy (The "Brain" Phase)
-- **Local Client AI**: Integrating `llama.cpp` for local, private conversation summarization and smart replies.
-- **ShadowChats**: Implementation of disappearing messages with zero disk persistence.
-- **Mesh Resilience**: Peer-to-Peer connectivity via BLE/Wi-Fi Direct for off-grid messaging.
+### Pillar 3: The Ghost (Resilience & Scale)
+- **BLE Mesh FIRST**: Implementing Bluetooth Low Energy (BLE) as the primary off-grid transport layer for internet-free peer discovery and relaying.
+- **Zero-Copy Protocol**: Refactoring the Asio/Packet layer for absolute O(1) serialization performance and zero heap fragmentation.
 
-### Phase 4: Extreme Sovereignty (The "Ghost" Phase)
-- **Multi-Device Sync**: Federated Key Chain to securely synchronize E2EE sessions across multiple devices while maintaining Zero-Knowledge.
-- **Sovereign Identity**: Utilizing cryptographic keys (Ed25519) instead of phone numbers for identity.
-- **Traffic Padding**: Masking communication patterns with dummy packets to prevent traffic analysis.
+### Pillar 4: The Shell (Premium UX)
+- **Futuristic Glassmorphism Overhaul**: A professional, translucent UI theme with micro-animations and custom high-DPI SVG iconography.
 
 ---
 

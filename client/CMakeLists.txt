@@ -26,6 +26,26 @@ set(CLIENT_SOURCES
     ui/ChatWindow.h
     ui/MainWindow.cpp
     ui/MainWindow.h
+    ui/AppContext.h
+    ui/widgets/NavigationHub.cpp
+    ui/widgets/NavigationHub.h
+    ui/widgets/TitleBar.cpp
+    ui/widgets/TitleBar.h
+    ui/widgets/ContactDelegate.cpp
+    ui/widgets/ContactDelegate.h
+    ui/widgets/TypingBubble.cpp
+    ui/widgets/TypingBubble.h
+    ui/widgets/SearchBar.cpp
+    ui/widgets/SearchBar.h
+    ui/arcade/ArcadeCategory.h
+    ui/arcade/ArcadeTile.cpp
+    ui/arcade/ArcadeTile.h
+    ui/arcade/CategoryPopup.cpp
+    ui/arcade/CategoryPopup.h
+    ui/arcade/SocialArcade.cpp
+    ui/arcade/SocialArcade.h
+    ui/arcade/GameSelectionPopup.cpp
+    ui/arcade/GameSelectionPopup.h
     logic/GameLauncher.cpp
     logic/GameLauncher.h
     logic/GameBridge.cpp
