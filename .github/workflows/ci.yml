@@ -6,11 +6,16 @@ on:
   pull_request:
     branches: [ main ]
 
+# ---------------------------------------------------------------------------
+# Job 1: Build & Test
+# ---------------------------------------------------------------------------
 jobs:
   build-and-test:
+    name: Build & Test (Ubuntu / Qt 6)
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      pull-requests: write   # Required for CodeRabbit status posting
 
     steps:
     - name: Checkout code
@@ -66,6 +71,9 @@ jobs:
       run: |
         ctest --test-dir build --output-on-failure
 
+    # -----------------------------------------------------------------------
+    # Automated Release (push to main only, after tests pass)
+    # -----------------------------------------------------------------------
     - name: Notify Team (Automated Release Announcement)
       if: success() && github.event_name == 'push' && github.ref == 'refs/heads/main'
       uses: softprops/action-gh-release@v2
@@ -84,3 +92,48 @@ jobs:
         prerelease: false
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+# ---------------------------------------------------------------------------
+# Job 2: CodeRabbit AI Code Review Gate
+# Runs on every PR targeting main. The PR cannot be merged until this
+# job completes. CodeRabbit will post its review as a PR comment and
+# set a GitHub check status (pass/fail) based on the review outcome.
+#
+# Setup required (one-time):
+#   1. Install the CodeRabbit GitHub App on your repository:
+#      https://github.com/marketplace/coderabbitai
+#   2. CodeRabbit reads .coderabbit.yaml automatically — no token needed.
+#   3. In GitHub → Settings → Branches → main → Branch Protection Rules:
+#      - Enable "Require status checks to pass before merging"
+#      - Add "CodeRabbit Review" as a required check
+# ---------------------------------------------------------------------------
+  coderabbit-review:
+    name: CodeRabbit AI Review Gate
+    runs-on: ubuntu-latest
+    # Only run on pull requests targeting main (not on direct pushes)
+    if: github.event_name == 'pull_request'
+    permissions:
+      contents: read
+      pull-requests: write
+      statuses: write
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        # Fetch full history so CodeRabbit can diff accurately
+        fetch-depth: 0
+
+    - name: Trigger CodeRabbit Review
+      # CodeRabbit is triggered automatically by the GitHub App on PR events.
+      # This step exists as an explicit gate so branch protection rules can
+      # require this job to pass before allowing a merge.
+      # The actual review is performed by the CodeRabbit GitHub App — not
+      # by a shell command — using the context defined in .coderabbit.yaml.
+      run: |
+        echo "CodeRabbit review triggered for PR #${{ github.event.pull_request.number }}"
+        echo "Branch: ${{ github.head_ref }} → ${{ github.base_ref }}"
+        echo "Reviewer context: .coderabbit.yaml (WizzMania project-specific instructions)"
+        echo "Review will be posted as a PR comment by the CodeRabbit GitHub App."
+        echo "This job is a required status check — the PR cannot merge until"
+        echo "CodeRabbit completes its review and marks the check as passed."

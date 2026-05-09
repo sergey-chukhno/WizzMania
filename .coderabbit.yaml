@@ -1,0 +1,169 @@
+# CodeRabbit Configuration for WizzMania
+# Docs: https://docs.coderabbit.ai/configuration
+
+language: "en-US"
+
+# ---------------------------------------------------------------------------
+# Review Settings
+# ---------------------------------------------------------------------------
+reviews:
+  # Require explicit approval — no auto-approvals
+  auto_review:
+    enabled: true
+    auto_incremental_review: true
+    # Only block merges on high-severity issues
+    drafts: false
+
+  # Collapse low-signal, nit-level comments by default
+  collapse_walkthrough: false
+  poem_in_walkthrough: false
+
+  # ---------------------------------------------------------------------------
+  # Project-Specific Instructions for CodeRabbit
+  # ---------------------------------------------------------------------------
+  instructions: |
+    ## WizzMania — Project Context for Code Review
+
+    WizzMania is a **production-grade, privacy-first Super App** built in C++17 with Qt 6.
+    It combines a Signal-Protocol E2EE messenger with a Social Arcade (Games, VoIP, Channels).
+    All reviews MUST be evaluated against the engineering principles and architecture below.
+    Generic style comments without project context are not useful — skip them.
+
+    ---
+
+    ### 1. Project Architecture (Non-Negotiable)
+
+    **Threading Model (CRITICAL — flag any violation)**
+    - The GUI thread is sacred. It must ONLY paint widgets, handle mouse events, and update stylesheets.
+    - All network I/O, cryptography, and heavy parsing MUST run on the Network Thread.
+    - Cross-thread communication MUST use `Qt::QueuedConnection` signals or `QMetaObject::invokeMethod`.
+    - Flag any blocking call (network, disk, crypto) directly on the GUI thread as a CRITICAL issue.
+
+    **Clean Architecture (flag violations)**
+    - UI classes (`MainWindow`, `ChatWindow`, `SocialArcade`) must NOT contain business logic or SQL.
+    - `NetworkManager` must NOT render widgets or call Qt UI methods directly.
+    - DAOs (`AuthDAO`, `SocialDAO`, `CryptoDAO`, `GroupDAO`, `ChannelDAO`) must be the ONLY classes touching SQLite.
+    - New features must register through the Mini-App manifest system — not as hardcoded entries in `SocialArcade`.
+
+    **Server Architecture**
+    - All server I/O uses standalone Asio (`asio::io_context`). Blocking calls are forbidden.
+    - Session state is managed via `std::shared_ptr<ClientSession>` with `enable_shared_from_this`.
+    - New packet handlers must be routed via the existing `PacketRouter`, not added as `if/else` chains.
+    - Group/channel fan-out MUST use `RoomManager::fanOut()` via `asio::post()` — never a synchronous loop on the I/O thread.
+
+    ---
+
+    ### 2. C++17 Standards (flag any violation)
+
+    **Memory Management**
+    - Raw `new`/`delete` and `malloc`/`free` are FORBIDDEN. Flag as CRITICAL.
+    - Use `std::unique_ptr` for exclusive ownership, `std::shared_ptr` for shared ownership.
+    - Every resource (socket, file, thread) must be owned by an RAII object.
+
+    **Correctness**
+    - `const` correctness: methods that do not mutate state must be declared `const`.
+    - Mark functions `[[nodiscard]]` where ignoring the return value is a bug.
+    - Prefer `std::string_view` over `const std::string&` for read-only string parameters.
+    - Prefer structured bindings (`auto [key, val] = ...`) over `.first`/`.second`.
+    - Flag any `reinterpret_cast` or `static_cast` used to bypass type safety.
+
+    **Concurrency**
+    - Flag any shared mutable state accessed from multiple threads without synchronization.
+    - Prefer message passing (Asio `post`, Qt signals) over shared memory + mutex.
+    - Flag `std::thread` usage — prefer Asio strands or Qt's Worker Object Pattern.
+
+    ---
+
+    ### 3. Security & Cryptography (CRITICAL — zero tolerance)
+
+    **E2EE Integrity**
+    - E2EE messages (`PacketType::E2EMessage`, `GROUP_MESSAGE_RELAY`) must NEVER be decrypted server-side.
+    - The server is a blind relay for E2EE payloads — it routes by recipient ID only.
+    - Flag any code that accesses or logs the `ciphertext` field of an E2EE packet as a CRITICAL security issue.
+
+    **Protocol Safety**
+    - Every `readInt()` / `readString()` call on an incoming packet MUST be preceded by bounds checking.
+    - The `magic` number (`0xCAFEBABE`) must be verified before any packet is processed.
+    - Packets claiming `body_length > 10MB` must be rejected immediately (DoS prevention).
+    - Flag any unbounded `std::vector::resize()` based on a client-supplied length as CRITICAL.
+
+    **Input Validation**
+    - All usernames, group names, and channel names must be sanitized before SQL insertion (parameterized queries only — no string concatenation into SQL).
+    - Flag any raw SQL string building as CRITICAL (SQL injection vector).
+
+    **Sender Key Protocol**
+    - `SENDER_KEY_DISTRIBUTION` packets must only be accepted from existing group members.
+    - Sender Key rotation must be triggered on EVERY member removal — flag if this check is missing.
+
+    **Mini-App Registry**
+    - Manifests fetched from the server MUST be verified against the bundled Ed25519 public key before use.
+    - `Process`-mode Mini-App binaries MUST have their SHA-256 hash verified against the manifest before launch.
+    - Flag any manifest consumption without signature verification as CRITICAL.
+
+    ---
+
+    ### 4. Qt-Specific Patterns
+
+    - `QObject` subclasses must NOT be copyable — flag missing `Q_DISABLE_COPY` or missing deleted copy constructor/assignment.
+    - Connections using raw pointers in lambdas risk dangling references — prefer `QPointer` or sender-context lambda captures.
+    - `QListWidget` and `QScrollArea` sizes must be set via `setSizePolicy` and `setFixedHeight` — never via magic numbers in paintEvent.
+    - Custom delegates (`ContactDelegate`) must call `QApplication::style()->drawControl()` for correct platform styling.
+
+    ---
+
+    ### 5. Code Quality Principles
+
+    **DRY**: Flag duplicate stylesheet strings, repeated packet-building boilerplate, or copy-pasted SQL queries. These should be extracted to a shared utility.
+
+    **SRP**: Flag any class with more than one reason to change. A class that builds packets AND renders UI AND manages a timer is a God Object — flag and suggest decomposition.
+
+    **KISS**: Flag over-engineered solutions. If a `std::map` with a custom comparator is used where a `std::unordered_map` would suffice, note it. Complexity must earn its place.
+
+    **Documentation**: Any new public method, class, or packet opcode added without a corresponding Doxygen comment or documentation update in `docs/02_Features/` should be flagged as incomplete.
+
+    ---
+
+    ### 6. What NOT to Flag
+
+    - Do NOT comment on `.md` file prose style or grammar — focus on technical accuracy only.
+    - Do NOT suggest switching from Qt to another framework.
+    - Do NOT suggest adding `std::cout` debug prints — we use Qt's logging (`qDebug`, `qWarning`).
+    - Do NOT flag Qt's `Q_OBJECT` macro or `moc`-generated code as style issues.
+    - Do NOT suggest refactoring that is already tracked in `docs/01_Architecture/Client.md` under "Known Architectural Debt".
+
+# ---------------------------------------------------------------------------
+# Path-Specific Overrides
+# ---------------------------------------------------------------------------
+path_instructions:
+  - path: "client/crypto/**"
+    instructions: |
+      This is the cryptographic core (Signal Protocol, OpenSSL bridge).
+      Apply MAXIMUM scrutiny. Every function must be reviewed for:
+      - Correct key lifecycle (generation, storage, deletion)
+      - No key material leaking into logs
+      - Correct use of libsignal-protocol-c APIs (session vs pre-key messages)
+      Flag anything uncertain as a blocking issue — cryptographic bugs are catastrophic.
+
+  - path: "server/**"
+    instructions: |
+      Review for Asio correctness: no blocking calls, correct use of shared_ptr lifetime
+      in async callbacks, and correct strand usage for shared state.
+      All new packet handlers must integrate with the PacketRouter, not bypass it.
+
+  - path: "docs/**"
+    instructions: |
+      For documentation files, only flag: (1) technical inaccuracies against the codebase,
+      (2) contradictions with decisions in Roadmap_&_Standards.md, or (3) missing entries
+      in the Architectural Decisions Log tables. Do NOT flag prose style.
+
+  - path: "games/**"
+    instructions: |
+      Games run as sandboxed child processes. Review for correct use of the IPC contract
+      defined in GameIPC.h. Flag any direct socket or file I/O from game code — games
+      must communicate exclusively through the shared memory IPC layer.
+
+  - path: ".github/workflows/**"
+    instructions: |
+      Review CI workflows for: pinned action versions (no floating @main or @latest tags),
+      correct secret usage (no hardcoded tokens), and that all jobs run on ubuntu-latest
+      consistently. Flag any step that could exfiltrate secrets.
