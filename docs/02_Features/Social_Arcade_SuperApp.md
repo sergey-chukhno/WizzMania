@@ -140,7 +140,7 @@ Games use the existing Native Shared Memory IPC (`GameIPC.h`). This is formalize
 
 **Polls**
 - Create binary or multiple-choice polls visible to all friends or a specific group.
-- Live vote count updates in real time via `POLL_VOTE_UPDATE` broadcasts.
+- Live vote count updates in real time via `POLL_RESULT_UPDATE` broadcasts.
 - **Poll results stored permanently on the server** (indefinite retention).
 - Opcodes: `POLL_CREATE`, `POLL_VOTE`, `POLL_RESULT_UPDATE`.
 

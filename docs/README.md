@@ -2,7 +2,7 @@
 
 Welcome to the central technical documentation for WizzMania. This is the **single source of truth** for all architectural decisions, feature specifications, and engineering standards. All code changes must be traceable to a document in this hub.
 
-**Last Updated**: 2026-05-01 (Post "Pro Shell" — Super App documentation sync)
+**Last Updated**: 2026-05-09 (Super App specification — Groups, VoIP, Social Arcade, CodeRabbit CI gate)
 
 ---
 

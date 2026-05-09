@@ -157,7 +157,9 @@ New `RoomManager` service required:
 **Why not full E2EE private channels now?** Channels have unbounded, high-churn membership. Sender Key distribution becomes O(N × M) per membership change for N members and M Sender Keys. MLS solves this with O(log N) tree updates, but no production C++ MLS library exists. The symmetric-at-rest model is an explicit, documented trade-off — not an oversight.
 
 ### 2.3 History Retention
-**Decision**: Indefinite retention. Offline subscribers receive all missed posts upon reconnection. As subscriber counts grow, this will require a cursor-based pagination solution to remain scalable (planned as a Phase 2 optimization).
+**Decision**: Indefinite retention. Offline subscribers receive all missed posts pushed on reconnect (no cursor limit in Phase 1). As subscriber counts grow, cursor-based pagination will be added to the offline delivery path — this is a **Phase 2 optimization**.
+
+**Clarification on `CHANNEL_HISTORY_REQUEST`**: This opcode exists for **on-demand history browsing** (e.g., scrolling back through a channel feed), which uses cursor-based pagination from day one. It is distinct from the offline catch-up push (which delivers all posts linearly in Phase 1 and switches to paginated delivery in Phase 2).
 
 ### 2.4 Protocol Extensions
 
@@ -179,7 +181,7 @@ New `RoomManager` service required:
 
 - **`GroupDAO` / `ChannelDAO`**: New DAOs in the server's modular database layer.
 - **`RoomManager`**: Server-side service mapping rooms to active sessions with fan-out.
-- **Paginated History**: Cursor-based pagination for both entities from day one.
+- **Paginated History**: Cursor-based pagination for **Groups** from day one (`GROUP_HISTORY_REQUEST`). For **Channels**, on-demand browsing (`CHANNEL_HISTORY_REQUEST`) is paginated from day one; offline catch-up delivery pagination is Phase 2.
 - **Notification Service**: Server-side dispatch aware of per-user per-room preferences.
 
 ---
